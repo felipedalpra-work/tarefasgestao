@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-o2-green: #6BF169;
+  --color-o2-green-bright: #7fff7d;
+  --color-o2-gray: #494949;
+  --color-bg: #111111;
+  --color-bg-deep: #0d0d0d;
+  --color-panel: #161616;
+  --color-surface: #1a1a1a;
+  --color-skeleton: #1e1e1e;
+  --color-surface-2: #222222;
+  --color-surface-3: #2a2a2a;
+  --color-border: #333333;
+  --color-ink: #f0f0f0;
+  --color-ink-soft: #cccccc;
+  --color-ink-mid: #888888;
+  --color-ink-dim: #666666;
+  --color-ink-faint: #555555;
+  --color-ink-ghost: #444444;
+  --color-green-wash: #0f1a0f;
+  --color-text: #f0f0f0;
+  --color-text-muted: #888888;
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-in-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-in-right { animation: slide-in-right 0.22s cubic-bezier(0.32, 0.72, 0.28, 1); }
+.animate-slide-in-up { animation: slide-in-up 0.18s ease-out; }
+.animate-fade-in { animation: fade-in 0.15s ease-out; }
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #111111;
+  color: #f0f0f0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6BF169;
+}

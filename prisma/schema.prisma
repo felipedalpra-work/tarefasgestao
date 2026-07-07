@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  accounts      Account[]
+  sessions      Session[]
+  tasks         Task[]         @relation("AssignedTasks")
+  createdTasks  Task[]         @relation("CreatedTasks")
+  comments      TaskComment[]
+  passwordResetTokens PasswordResetToken[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("todo")
+  priority    String    @default("medium")
+  dueDate     DateTime?
+  assigneeId  String?
+  createdById String
+  source      String    @default("manual")
+  sourceRef   String?
+  client      String?
+  deliverTo   String?
+  sortOrder   Float     @default(0)
+  recurrence  String?   // "weekly" | "biweekly" | "monthly"
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  assignee    User?          @relation("AssignedTasks", fields: [assigneeId], references: [id])
+  createdBy   User           @relation("CreatedTasks", fields: [createdById], references: [id])
+  comments    TaskComment[]
+  subtasks    Subtask[]
+  activities  TaskActivity[]
+  links       TaskLink[]
+
+  @@index([assigneeId])
+  @@index([status])
+  @@index([client])
+  @@index([updatedAt])
+}
+
+model Subtask {
+  id        String   @id @default(cuid())
+  taskId    String
+  title     String
+  done      Boolean  @default(false)
+  sortOrder Float    @default(0)
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TaskActivity {
+  id        String   @id @default(cuid())
+  taskId    String
+  userName  String?
+  type      String // "created" | "status" | "assignee" | "due_date" | "priority" | "title" | "recurrence"
+  detail    String?
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TaskLink {
+  id        String   @id @default(cuid())
+  taskId    String
+  url       String
+  label     String?
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String // "assigned" | "mention" | "comment" | "recap"
+  message   String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+model ClientNote {
+  id        String   @id @default(cuid())
+  client    String   @unique
+  notes     String?
+  contacts  String?
+  updatedAt DateTime @updatedAt
+}
+
+model MeetRecap {
+  id             String    @id @default(cuid())
+  subject        String
+  body           String
+  gmailId        String    @unique
+  client         String?
+  processedAt    DateTime?
+  suggestedTasks String?
+  createdAt      DateTime  @default(now())
+
+  @@index([processedAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model PlatformLog {
+  id        String   @id @default(cuid())
+  level     String   @default("info")
+  category  String
+  message   String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([category])
+  @@index([level])
+}
+
+model CalendarEvent {
+  id           String   @id @default(cuid())
+  googleId     String   @unique
+  title        String
+  client       String
+  startAt      DateTime
+  endAt        DateTime
+  briefingSent Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([startAt])
+  @@index([client])
+}
