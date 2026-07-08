@@ -2,7 +2,11 @@ import { prisma } from "./prisma";
 import Groq from "groq-sdk";
 import { log } from "./logger";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groq: Groq | null = null;
+function getGroq() {
+  if (!groq) groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return groq;
+}
 
 export async function processRecap(recapId: string): Promise<number> {
   const recap = await prisma.meetRecap.findUnique({ where: { id: recapId } });
@@ -45,7 +49,7 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
 }`;
 
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await getGroq().chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,

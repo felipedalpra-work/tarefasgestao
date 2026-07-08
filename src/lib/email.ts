@@ -1,6 +1,10 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend: Resend | null = null;
+function getResend() {
+  if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
+  return resend;
+}
 const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
 
 function baseTemplate(content: string) {
@@ -131,7 +135,7 @@ export async function sendNewTaskEmail({
     </table>
   `);
 
-  return resend.emails.send({ from: FROM, to, subject: `[O2 Squad] Nova tarefa: ${taskTitle}`, html });
+  return getResend().emails.send({ from: FROM, to, subject: `[O2 Squad] Nova tarefa: ${taskTitle}`, html });
 }
 
 export async function sendDeadlineAlertEmail({
@@ -210,7 +214,7 @@ export async function sendDeadlineAlertEmail({
     </table>
   `);
 
-  return resend.emails.send({ from: FROM, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
+  return getResend().emails.send({ from: FROM, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
 }
 
 export async function sendPasswordResetEmail({
@@ -262,5 +266,5 @@ export async function sendPasswordResetEmail({
     </table>
   `);
 
-  return resend.emails.send({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
+  return getResend().emails.send({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
 }

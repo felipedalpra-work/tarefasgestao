@@ -4,7 +4,11 @@ import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
 import { getBaseUrl } from "./base-url";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend: Resend | null = null;
+function getResend() {
+  if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
+  return resend;
+}
 const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
 
 function briefingTemplate(client: string, meetingDate: string, o2Tasks: any[], clientTasks: any[]) {
@@ -139,7 +143,7 @@ export async function sendMeetingBriefings(): Promise<void> {
     for (const user of users) {
       if (!user.email) continue;
       try {
-        await resend.emails.send({
+        await getResend().emails.send({
           from: FROM,
           to: user.email,
           subject: `[O2 Squad] Reunião amanhã: O2 Inc & ${client}`,
