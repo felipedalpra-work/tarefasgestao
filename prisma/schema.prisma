@@ -140,16 +140,24 @@ model Notification {
 }
 
 model ClientNote {
-  id             String    @id @default(cuid())
-  client         String    @unique
-  notes          String?
-  contacts       String?
-  status         String    @default("ativo") // "ativo" | "pausado" | "encerrado"
-  oxyStage       String    @default("nao_iniciado") // "nao_iniciado" | "em_implantacao" | "ativo" | "com_pendencia"
-  importType     String? // "manual" | "automatica"
-  lastDataUpdate DateTime?
-  oxyPendencies  String?
-  updatedAt      DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  client            String    @unique
+  notes             String?
+  contacts          String?
+  status            String    @default("ativo") // "ativo" | "pausado" | "encerrado"
+  oxyStage          String    @default("nao_iniciado") // "nao_iniciado" | "em_validacao" | "em_implantacao" | "implantacao_interrompida" | "ativo"
+  importType        String? // "manual" | "automatica" | "automatica_manual"
+  lastDataUpdate    DateTime?
+  oxyPendencies     String? // "o que" da pendência
+  pendencyWho       String? // "quem" é responsável pela pendência
+  erp               String? // nome do ERP usado pelo cliente
+  accessMode        String? // modo de acesso ao ERP/Oxy
+  updateFrequency   String? // frequência de atualização dos dados (ex: "toda quarta")
+  updateResponsible String? // responsável por manter os dados atualizados
+  routineWhat       String? // rotina recorrente com o cliente: o que é feito
+  routineWho        String? // rotina recorrente: quem faz
+  routineWhen       String? // rotina recorrente: quando
+  updatedAt         DateTime  @updatedAt
 
   @@index([status])
   @@index([oxyStage])

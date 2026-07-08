@@ -23,9 +23,9 @@ export default async function ClientePage({ params }: Props) {
 
   if (!session?.user?.id) notFound();
 
-  const { events, recaps, tasks } = data;
+  const { events, recaps, tasks, clientNote } = data;
 
-  if (events.length === 0 && recaps.length === 0 && tasks.length === 0) {
+  if (events.length === 0 && recaps.length === 0 && tasks.length === 0 && !clientNote) {
     notFound();
   }
 

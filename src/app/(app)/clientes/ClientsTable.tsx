@@ -17,6 +17,7 @@ export type ClientRow = {
   importType: string | null;
   lastDataUpdate: string | Date | null;
   oxyPendencies: string | null;
+  erp: string | null;
 };
 
 const STATUS_OPTIONS = [
@@ -27,15 +28,17 @@ const STATUS_OPTIONS = [
 
 const OXY_STAGE_OPTIONS = [
   { value: "nao_iniciado", label: "Não iniciado", className: "bg-surface-3 text-ink-faint" },
+  { value: "em_validacao", label: "Em validação", className: "bg-blue-400/10 text-blue-400" },
   { value: "em_implantacao", label: "Em implantação", className: "bg-yellow-400/10 text-yellow-400" },
+  { value: "implantacao_interrompida", label: "Implantação interrompida", className: "bg-red-400/10 text-red-400" },
   { value: "ativo", label: "Ativo", className: "bg-o2-green/10 text-o2-green" },
-  { value: "com_pendencia", label: "Com pendência", className: "bg-red-400/10 text-red-400" },
 ];
 
 const IMPORT_TYPE_OPTIONS = [
   { value: "", label: "—" },
   { value: "manual", label: "Manual" },
   { value: "automatica", label: "Automática" },
+  { value: "automatica_manual", label: "Automática/Manual" },
 ];
 
 function toDateInputValue(v: string | Date | null) {
@@ -77,6 +80,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
         <thead className="bg-surface-2 text-ink-dim text-xs uppercase tracking-wide">
           <tr>
             <th className="text-left px-4 py-3 font-medium">Cliente</th>
+            <th className="text-left px-4 py-3 font-medium">ERP</th>
             <th className="text-left px-4 py-3 font-medium">Status</th>
             <th className="text-left px-4 py-3 font-medium">Implantação Oxy</th>
             <th className="text-left px-4 py-3 font-medium">Importação</th>
@@ -99,6 +103,17 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                   <span className="font-medium truncate max-w-[200px]">{c.name}</span>
                   <ChevronRight size={14} className="text-ink-ghost group-hover:text-o2-green transition-colors shrink-0" />
                 </Link>
+              </td>
+              <td className="px-4 py-2.5 min-w-[160px]">
+                <input
+                  type="text"
+                  defaultValue={c.erp ?? ""}
+                  placeholder="Ex: Omie"
+                  onBlur={(e) => {
+                    if (e.target.value !== (c.erp ?? "")) handleChange(c.name, "erp", e.target.value);
+                  }}
+                  className="w-full bg-transparent border border-transparent hover:border-surface-3 focus:border-o2-green/50 rounded-lg px-2 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none transition-colors"
+                />
               </td>
               <td className="px-4 py-2.5">
                 <Select

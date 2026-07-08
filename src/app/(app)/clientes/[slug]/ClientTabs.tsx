@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check } from "lucide-react";
+import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 
@@ -46,13 +46,38 @@ const STATUS_LABEL: Record<string, string> = { todo: "A fazer", in_progress: "Em
 const PRIORITY_COLOR: Record<string, string> = { high: "text-red-400", medium: "text-yellow-400", low: "text-o2-green" };
 const PRIORITY_LABEL: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
 
+type OxyFields = {
+  accessMode: string;
+  updateFrequency: string;
+  updateResponsible: string;
+  routineWhat: string;
+  routineWho: string;
+  routineWhen: string;
+  oxyPendencies: string;
+  pendencyWho: string;
+};
+
+const EMPTY_OXY: OxyFields = {
+  accessMode: "",
+  updateFrequency: "",
+  updateResponsible: "",
+  routineWhat: "",
+  routineWho: "",
+  routineWhen: "",
+  oxyPendencies: "",
+  pendencyWho: "",
+};
+
 export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Props) {
-  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "notes">("meetings");
+  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
   const [notes, setNotes] = useState("");
   const [contacts, setContacts] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
+  const [oxy, setOxy] = useState<OxyFields>(EMPTY_OXY);
+  const [oxyLoaded, setOxyLoaded] = useState(false);
+  const [savingOxy, setSavingOxy] = useState(false);
 
   const myTasks = tasks.filter((t) => t.assignee?.id === currentUserId);
   const shownTasks = taskFilter === "mine" ? myTasks : tasks;
@@ -68,7 +93,25 @@ export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Pro
         })
         .catch(() => setNotesLoaded(true));
     }
-  }, [tab, notesLoaded, client]);
+    if (tab === "oxy" && !oxyLoaded) {
+      fetch(`/api/clients/${encodeURIComponent(client)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setOxy({
+            accessMode: data.accessMode ?? "",
+            updateFrequency: data.updateFrequency ?? "",
+            updateResponsible: data.updateResponsible ?? "",
+            routineWhat: data.routineWhat ?? "",
+            routineWho: data.routineWho ?? "",
+            routineWhen: data.routineWhen ?? "",
+            oxyPendencies: data.oxyPendencies ?? "",
+            pendencyWho: data.pendencyWho ?? "",
+          });
+          setOxyLoaded(true);
+        })
+        .catch(() => setOxyLoaded(true));
+    }
+  }, [tab, notesLoaded, oxyLoaded, client]);
 
   async function saveNotes() {
     setSavingNotes(true);
@@ -82,10 +125,32 @@ export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Pro
     else toast("Erro ao salvar as notas", "error");
   }
 
+  async function saveOxy() {
+    setSavingOxy(true);
+    const res = await fetch(`/api/clients/${encodeURIComponent(client)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessMode: oxy.accessMode || null,
+        updateFrequency: oxy.updateFrequency || null,
+        updateResponsible: oxy.updateResponsible || null,
+        routineWhat: oxy.routineWhat || null,
+        routineWho: oxy.routineWho || null,
+        routineWhen: oxy.routineWhen || null,
+        oxyPendencies: oxy.oxyPendencies || null,
+        pendencyWho: oxy.pendencyWho || null,
+      }),
+    });
+    setSavingOxy(false);
+    if (res.ok) toast("Dados da Oxy salvos", "success");
+    else toast("Erro ao salvar", "error");
+  }
+
   const tabs = [
     { key: "meetings", label: "Reuniões", icon: CalendarDays, count: events.length },
     { key: "recaps", label: "Meet Recaps", icon: FileText, count: recaps.length },
     { key: "tasks", label: "Tarefas", icon: CheckSquare, count: tasks.length },
+    { key: "oxy", label: "Oxy", icon: Database, count: null },
     { key: "notes", label: "Notas", icon: StickyNote, count: null },
   ] as const;
 
@@ -236,6 +301,122 @@ export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Pro
               </Link>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Oxy */}
+      {tab === "oxy" && (
+        <div className="space-y-4">
+          {!oxyLoaded ? (
+            <p className="text-xs text-ink-faint text-center py-8">Carregando…</p>
+          ) : (
+            <>
+              <div>
+                <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Modo de acesso</label>
+                <input
+                  type="text"
+                  value={oxy.accessMode}
+                  onChange={(e) => setOxy((o) => ({ ...o, accessMode: e.target.value }))}
+                  placeholder="Ex: login e senha compartilhados, API, acesso remoto…"
+                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Frequência de atualização</label>
+                  <input
+                    type="text"
+                    value={oxy.updateFrequency}
+                    onChange={(e) => setOxy((o) => ({ ...o, updateFrequency: e.target.value }))}
+                    placeholder="Ex: toda quarta-feira"
+                    className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Responsável pela atualização</label>
+                  <input
+                    type="text"
+                    value={oxy.updateResponsible}
+                    onChange={(e) => setOxy((o) => ({ ...o, updateResponsible: e.target.value }))}
+                    placeholder="Nome de quem mantém os dados atualizados"
+                    className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-surface-3 pt-4">
+                <p className="text-xs font-medium text-ink-mid uppercase tracking-wide mb-3">Rotina com o cliente</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs text-ink-faint block mb-1.5">O que</label>
+                    <input
+                      type="text"
+                      value={oxy.routineWhat}
+                      onChange={(e) => setOxy((o) => ({ ...o, routineWhat: e.target.value }))}
+                      placeholder="Ex: Fluxo de Caixa + DRE"
+                      className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-faint block mb-1.5">Quem</label>
+                    <input
+                      type="text"
+                      value={oxy.routineWho}
+                      onChange={(e) => setOxy((o) => ({ ...o, routineWho: e.target.value }))}
+                      placeholder="Responsável"
+                      className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-faint block mb-1.5">Quando</label>
+                    <input
+                      type="text"
+                      value={oxy.routineWhen}
+                      onChange={(e) => setOxy((o) => ({ ...o, routineWhen: e.target.value }))}
+                      placeholder="Ex: toda 6ª antes do almoço"
+                      className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-surface-3 pt-4">
+                <p className="text-xs font-medium text-ink-mid uppercase tracking-wide mb-3">Pendência com o cliente</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-ink-faint block mb-1.5">O que</label>
+                    <input
+                      type="text"
+                      value={oxy.oxyPendencies}
+                      onChange={(e) => setOxy((o) => ({ ...o, oxyPendencies: e.target.value }))}
+                      placeholder="Ex: acesso ao ERP pendente"
+                      className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-faint block mb-1.5">Quem</label>
+                    <input
+                      type="text"
+                      value={oxy.pendencyWho}
+                      onChange={(e) => setOxy((o) => ({ ...o, pendencyWho: e.target.value }))}
+                      placeholder="Responsável"
+                      className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={saveOxy}
+                disabled={savingOxy}
+                className="flex items-center gap-2 bg-o2-green text-bg px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-o2-green-bright transition-all disabled:opacity-50"
+              >
+                <Check size={14} />
+                {savingOxy ? "Salvando…" : "Salvar"}
+              </button>
+            </>
+          )}
         </div>
       )}
 

@@ -103,21 +103,40 @@ export const getClientsTable = unstable_cache(
     const [overview, notes] = await Promise.all([
       getClientsOverview(),
       prisma.clientNote.findMany({
-        select: { client: true, status: true, oxyStage: true, importType: true, lastDataUpdate: true, oxyPendencies: true },
+        select: {
+          client: true,
+          status: true,
+          oxyStage: true,
+          importType: true,
+          lastDataUpdate: true,
+          oxyPendencies: true,
+          erp: true,
+        },
       }),
     ]);
 
+    const overviewByClient = new Map(overview.map((c) => [c.name, c]));
     const notesByClient = new Map(notes.map((n) => [n.client, n]));
 
-    return overview.map((c) => {
-      const n = notesByClient.get(c.name);
+    // a carteira de clientes (ClientNote) é a fonte de verdade de quais clientes existem;
+    // reuniões/recaps/tarefas só complementam com estatísticas quando houver
+    const allNames = new Set([...overviewByClient.keys(), ...notesByClient.keys()]);
+
+    return [...allNames].sort((a, b) => a.localeCompare(b)).map((name) => {
+      const c = overviewByClient.get(name);
+      const n = notesByClient.get(name);
       return {
-        ...c,
+        name,
+        meetings: c?.meetings ?? 0,
+        recaps: c?.recaps ?? 0,
+        tasks: c?.tasks ?? 0,
+        openTasks: c?.openTasks ?? 0,
         status: n?.status ?? "ativo",
         oxyStage: n?.oxyStage ?? "nao_iniciado",
         importType: n?.importType ?? null,
         lastDataUpdate: n?.lastDataUpdate ?? null,
         oxyPendencies: n?.oxyPendencies ?? null,
+        erp: n?.erp ?? null,
       };
     });
   },
@@ -128,7 +147,7 @@ export const getClientsTable = unstable_cache(
 // Cached: dados completos de um cliente
 export const getClientDetail = unstable_cache(
   async (client: string) => {
-    const [events, recaps, tasks] = await Promise.all([
+    const [events, recaps, tasks, clientNote] = await Promise.all([
       prisma.calendarEvent.findMany({
         where: { client },
         orderBy: { startAt: "desc" },
@@ -143,9 +162,10 @@ export const getClientDetail = unstable_cache(
         include: { assignee: { select: { id: true, name: true, image: true } } },
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
       }),
+      prisma.clientNote.findUnique({ where: { client } }),
     ]);
-    return { events, recaps, tasks };
+    return { events, recaps, tasks, clientNote };
   },
   ["client-detail"],
-  { tags: ["calendar", "recaps", "tasks"], revalidate: 30 }
+  { tags: ["calendar", "recaps", "tasks", "clients"], revalidate: 30 }
 );
