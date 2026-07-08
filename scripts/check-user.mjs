@@ -1,11 +1,17 @@
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaNeon } from "@prisma/adapter-neon";
+import { neonConfig } from "@neondatabase/serverless";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import ws from "ws";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const adapter = new PrismaBetterSqlite3({ url: path.resolve(__dirname, "../dev.db") });
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
+
+neonConfig.webSocketConstructor = ws;
+const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 const user = await prisma.user.findUnique({ where: { email: "felipe.dalpra@o2inc.com.br" } });
