@@ -97,6 +97,34 @@ export const getClientsOverview = unstable_cache(
   { tags: ["calendar", "recaps", "tasks"], revalidate: 60 }
 );
 
+// Cached: clientes com status geral + situação na Oxy, para a tabela de clientes
+export const getClientsTable = unstable_cache(
+  async () => {
+    const [overview, notes] = await Promise.all([
+      getClientsOverview(),
+      prisma.clientNote.findMany({
+        select: { client: true, status: true, oxyStage: true, importType: true, lastDataUpdate: true, oxyPendencies: true },
+      }),
+    ]);
+
+    const notesByClient = new Map(notes.map((n) => [n.client, n]));
+
+    return overview.map((c) => {
+      const n = notesByClient.get(c.name);
+      return {
+        ...c,
+        status: n?.status ?? "ativo",
+        oxyStage: n?.oxyStage ?? "nao_iniciado",
+        importType: n?.importType ?? null,
+        lastDataUpdate: n?.lastDataUpdate ?? null,
+        oxyPendencies: n?.oxyPendencies ?? null,
+      };
+    });
+  },
+  ["clients-table"],
+  { tags: ["calendar", "recaps", "tasks", "clients"], revalidate: 60 }
+);
+
 // Cached: dados completos de um cliente
 export const getClientDetail = unstable_cache(
   async (client: string) => {

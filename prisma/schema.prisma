@@ -140,11 +140,19 @@ model Notification {
 }
 
 model ClientNote {
-  id        String   @id @default(cuid())
-  client    String   @unique
-  notes     String?
-  contacts  String?
-  updatedAt DateTime @updatedAt
+  id             String    @id @default(cuid())
+  client         String    @unique
+  notes          String?
+  contacts       String?
+  status         String    @default("ativo") // "ativo" | "pausado" | "encerrado"
+  oxyStage       String    @default("nao_iniciado") // "nao_iniciado" | "em_implantacao" | "ativo" | "com_pendencia"
+  importType     String? // "manual" | "automatica"
+  lastDataUpdate DateTime?
+  oxyPendencies  String?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([oxyStage])
 }
 
 model MeetRecap {
