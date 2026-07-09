@@ -8,6 +8,12 @@ export async function GET() {
 
   const recaps = await prisma.meetRecap.findMany({
     orderBy: { createdAt: "desc" },
+    include: {
+      suggestions: {
+        where: { status: { not: "superseded" } },
+        orderBy: { index: "asc" },
+      },
+    },
   });
 
   return NextResponse.json(recaps);

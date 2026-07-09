@@ -4,6 +4,19 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-09 (recaps)
+
+**Corrige duplicação de tarefas dos Meet Recaps + histórico de acerto da IA:**
+- **Bug real corrigido:** `processRecap` (`src/lib/process-recap.ts`) criava as tarefas no Kanban automaticamente assim que um recap era sincronizado/processado — mesmo a tela dizendo "revise antes de adicionar". Combinado com o botão "Adicionar" (que também cria tarefa), isso gerava duplicatas. Reprocessar um recap já processado apagava tudo (`processedAt`/`suggestedTasks` resetados pra null) e recriava do zero, duplicando de novo se já tinha sido adicionado antes.
+- **Correção:** `processRecap` agora só grava sugestões (nunca cria `Task`). A tarefa só nasce quando o usuário clica "Adicionar" (já existente) — decisão confirmada com o usuário, já que muda o comportamento de "aparece sozinho no Kanban" pra "só depois de revisar".
+- Novo model `RecapSuggestion` (por sugestão individual: título, descrição, responsável, prioridade, prazo, status `pending|accepted|edited|rejected|superseded`, `taskId` vinculado). Reprocessar um recap agora **preserva o histórico** — só marca como `superseded` as sugestões que ainda estavam pendentes da leva anterior; aceitas/editadas/rejeitadas nunca são apagadas.
+- Novo botão **"Descartar"** por sugestão (com "desfazer" pra quem descartou por engano) — antes não existia nenhuma forma de rejeitar uma sugestão ruim.
+- Painel de **taxa de acerto da IA** no topo de `/recaps` (`GET /api/recaps/accuracy`): % de sugestões aceitas/editadas vs rejeitadas, calculado sobre o que já foi avaliado (ignora pendentes e sugestões substituídas por reprocessamento).
+- O prompt da IA (`process-recap.ts`) agora inclui como few-shot as últimas tarefas aceitas (mostrando como o título sugerido virou o título final, quando editado) e as últimas sugestões rejeitadas (pra evitar repetir o mesmo tipo de erro) — não é fine-tuning real (o modelo da Groq é hospedado, sem essa opção), mas usa o histórico pra melhorar a extração ao longo do tempo.
+- Página `/recaps` ganhou filtro **Pendentes de revisão / Todas** — por padrão só mostra recaps com sugestão ainda não avaliada.
+- Scripts `scripts/process-all-recaps.mjs` e `scripts/reset-recap-tasks.mjs` atualizados pro mesmo modelo (o primeiro também parou de criar Task direto; o segundo agora limpa `RecapSuggestion` também).
+- Testado ponta a ponta: extração sem criar task automaticamente, aceitar sugestão (vincula `taskId` + status `accepted`), rejeitar sugestão, reprocessar preservando aceita/rejeitada e substituindo só as pendentes, cálculo da taxa de acerto. Dados de teste removidos depois.
+
 ## 2026-07-09 (fix)
 
 **Bug no parser de título do calendário:**

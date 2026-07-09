@@ -9,19 +9,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
 
-  // permite reprocessar mesmo se já foi processado
-  await prisma.meetRecap.update({
-    where: { id },
-    data: { processedAt: null, suggestedTasks: null },
+  // força reprocessar mesmo se já foi processado antes — preserva o histórico de sugestões
+  // já aceitas/editadas/rejeitadas, só marca as pendentes antigas como "superseded"
+  const count = await processRecap(id, { force: true });
+
+  const suggestions = await prisma.recapSuggestion.findMany({
+    where: { recapId: id, status: { not: "superseded" } },
+    orderBy: { index: "asc" },
   });
 
-  const created = await processRecap(id);
-  const recap = await prisma.meetRecap.findUnique({ where: { id } });
-  const tasks = recap?.suggestedTasks ? JSON.parse(recap.suggestedTasks) : [];
-
-  if (tasks.length === 0 && created === 0) {
-    return NextResponse.json({ error: "Nenhuma tarefa identificada na transcrição.", tasks: [] }, { status: 200 });
+  if (suggestions.length === 0 && count === 0) {
+    return NextResponse.json({ error: "Nenhuma tarefa identificada na transcrição.", suggestions: [] }, { status: 200 });
   }
 
-  return NextResponse.json({ tasks, created });
+  return NextResponse.json({ suggestions, count });
 }

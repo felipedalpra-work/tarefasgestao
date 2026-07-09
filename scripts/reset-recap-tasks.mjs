@@ -13,6 +13,10 @@ neonConfig.webSocketConstructor = ws;
 const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
+// deleta as sugestões (senão ficam com taskId apontando pra uma task apagada)
+const deletedSuggestions = await prisma.recapSuggestion.deleteMany({});
+console.log(`${deletedSuggestions.count} sugestão(ões) deletada(s)`);
+
 // deleta tarefas criadas por meet_recap
 const deleted = await prisma.task.deleteMany({ where: { source: "meet_recap" } });
 console.log(`${deleted.count} tarefa(s) de meet_recap deletada(s)`);

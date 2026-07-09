@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  if (body.recapSuggestionId) {
+    await prisma.recapSuggestion.update({
+      where: { id: body.recapSuggestionId },
+      data: { status: body.suggestionEdited ? "edited" : "accepted", taskId: task.id },
+    }).catch((e) => console.error("[recap-suggestion] erro ao vincular:", e));
+  }
+
   // notificação in-app quando atribuída a outra pessoa
   if (task.assigneeId && task.assigneeId !== session.user.id) {
     await prisma.notification.create({

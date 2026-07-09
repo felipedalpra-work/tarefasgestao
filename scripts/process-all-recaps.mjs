@@ -28,7 +28,7 @@ const recaps = await prisma.meetRecap.findMany({
 });
 console.log(`${recaps.length} recap(s) para processar\n`);
 
-let totalTasks = 0;
+let totalSuggestions = 0;
 
 for (const recap of recaps) {
   console.log(`--- "${recap.subject}" (${recap.body?.length || 0} chars) ---`);
@@ -80,7 +80,6 @@ Retorne APENAS JSON válido sem markdown:
     });
 
     const raw = completion.choices[0]?.message?.content || "{}";
-    // strip markdown code blocks
     const text = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -97,61 +96,31 @@ Retorne APENAS JSON válido sem markdown:
     const tasks = result.tasks || [];
     const client = result.client || null;
 
-    console.log(`  client: ${client} | ${tasks.length} tarefa(s)`);
+    console.log(`  client: ${client} | ${tasks.length} sugestão(ões)`);
 
     await prisma.meetRecap.update({
       where: { id: recap.id },
       data: { suggestedTasks: JSON.stringify(tasks), processedAt: new Date(), client },
     });
 
-    let created = 0;
-    for (const task of tasks) {
-      if (!task.title?.trim()) continue;
-
-      let assigneeId = null;
-      if (task.assignee?.trim()) {
-        const nameLower = task.assignee.toLowerCase().trim();
-        const match = users.find((u) => {
-          const userName = (u.name || "").toLowerCase();
-          const userFirstName = userName.split(" ")[0];
-          return (
-            userName.includes(nameLower) ||
-            nameLower.includes(userName) ||
-            nameLower.includes(userFirstName) ||
-            userFirstName.includes(nameLower) ||
-            u.email.toLowerCase().includes(nameLower) ||
-            nameLower.includes(u.email.split("@")[0].toLowerCase())
-          );
-        });
-        if (match) {
-          assigneeId = match.id;
-          console.log(`    ✓ "${task.title}" → ${match.name}`);
-        } else {
-          console.log(`    ✗ "${task.title}" → sem match para "${task.assignee}"`);
-        }
-      } else {
-        console.log(`    ? "${task.title}" → sem responsável`);
-      }
-
-      await prisma.task.create({
-        data: {
-          title: task.title.slice(0, 255),
-          description: task.description || null,
-          priority: ["high", "medium", "low"].includes(task.priority) ? task.priority : "medium",
-          status: "todo",
-          assigneeId,
-          createdById: users[0].id,
-          source: "meet_recap",
-          sourceRef: recap.id,
-          dueDate: task.dueDate ? new Date(task.dueDate) : null,
-          client,
-          deliverTo: task.deliverTo || "internal",
-        },
+    // NUNCA cria Task aqui — só grava a sugestão. A tarefa só nasce quando
+    // alguém clica "Adicionar" na tela de Recaps (evita duplicação).
+    const validTasks = tasks.filter((t) => t.title?.trim());
+    if (validTasks.length > 0) {
+      await prisma.recapSuggestion.createMany({
+        data: validTasks.map((t, index) => ({
+          recapId: recap.id,
+          index,
+          title: t.title.slice(0, 255),
+          description: t.description || null,
+          assignee: t.assignee || null,
+          priority: ["high", "medium", "low"].includes(t.priority) ? t.priority : "medium",
+          dueDate: t.dueDate ? new Date(t.dueDate) : null,
+        })),
       });
-      created++;
-      totalTasks++;
     }
-    console.log(`  → ${created} criada(s)\n`);
+    totalSuggestions += validTasks.length;
+    console.log(`  → ${validTasks.length} sugestão(ões) gravada(s)\n`);
   } catch (err) {
     console.error(`  ❌ Erro: ${err.message}\n`);
     await prisma.meetRecap.update({
@@ -161,5 +130,5 @@ Retorne APENAS JSON válido sem markdown:
   }
 }
 
-console.log(`\n✓ TOTAL: ${totalTasks} tarefa(s) criada(s)`);
+console.log(`\n✓ TOTAL: ${totalSuggestions} sugestão(ões) de tarefa gravada(s) — revise em /recaps antes de adicionar ao Kanban`);
 await prisma.$disconnect();

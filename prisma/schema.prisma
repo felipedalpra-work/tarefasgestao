@@ -86,6 +86,7 @@ model Task {
   subtasks    Subtask[]
   activities  TaskActivity[]
   links       TaskLink[]
+  recapSuggestion RecapSuggestion?
 
   @@index([assigneeId])
   @@index([status])
@@ -229,9 +230,31 @@ model MeetRecap {
   client         String?
   processedAt    DateTime?
   suggestedTasks String?
+  suggestions    RecapSuggestion[]
   createdAt      DateTime  @default(now())
 
   @@index([processedAt])
+}
+
+model RecapSuggestion {
+  id          String    @id @default(cuid())
+  recapId     String
+  index       Int // ordem de exibição dentro da leva de sugestões
+  title       String // como a IA sugeriu originalmente (referência pra medir edição)
+  description String?
+  assignee    String?
+  priority    String?
+  dueDate     DateTime?
+  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "superseded"
+  taskId      String?   @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  recap MeetRecap @relation(fields: [recapId], references: [id], onDelete: Cascade)
+  task  Task?     @relation(fields: [taskId], references: [id])
+
+  @@index([recapId])
+  @@index([status])
 }
 
 model Setting {

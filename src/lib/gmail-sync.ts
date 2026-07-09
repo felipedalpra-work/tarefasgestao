@@ -33,12 +33,12 @@ function extractTextFromParts(parts: any[]): string {
   return text;
 }
 
-export async function syncUserGmail(userId: string): Promise<{ synced: number; tasksCreated: number }> {
+export async function syncUserGmail(userId: string): Promise<{ synced: number; suggestionsExtracted: number }> {
   const account = await prisma.account.findFirst({
     where: { userId, provider: "google" },
   });
 
-  if (!account?.access_token) return { synced: 0, tasksCreated: 0 };
+  if (!account?.access_token) return { synced: 0, suggestionsExtracted: 0 };
 
   try {
     const oauth2 = new google.auth.OAuth2(
@@ -60,7 +60,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; t
 
     const messages = listRes.data.messages || [];
     let synced = 0;
-    let tasksCreated = 0;
+    let suggestionsExtracted = 0;
     const newRecapIds: string[] = [];
 
     for (const msg of messages) {
@@ -91,23 +91,23 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; t
     }
 
     for (const recapId of newRecapIds) {
-      const created = await processRecap(recapId);
-      tasksCreated += created;
+      const count = await processRecap(recapId);
+      suggestionsExtracted += count;
     }
 
     if (synced > 0) {
       await log("gmail-sync", `${synced} novo(s) Meet Recap sincronizado(s)`, {
-        detail: `${tasksCreated} tarefa(s) criada(s) via IA`,
+        detail: `${suggestionsExtracted} sugestão(ões) de tarefa identificada(s) via IA`,
       });
     }
-    return { synced, tasksCreated };
+    return { synced, suggestionsExtracted };
   } catch (err) {
     await log("gmail-sync", "Erro ao sincronizar Gmail", {
       level: "error",
       detail: String(err),
     });
     console.error(`[gmail-sync] erro userId=${userId}:`, err);
-    return { synced: 0, tasksCreated: 0 };
+    return { synced: 0, suggestionsExtracted: 0 };
   }
 }
 
@@ -121,9 +121,9 @@ export async function syncAllUsers(): Promise<void> {
   console.log(`[cron] sincronizando ${accounts.length} usuário(s)...`);
 
   for (const { userId } of accounts) {
-    const { synced, tasksCreated } = await syncUserGmail(userId);
+    const { synced, suggestionsExtracted } = await syncUserGmail(userId);
     if (synced > 0) {
-      console.log(`[cron] userId=${userId}: ${synced} recap(s), ${tasksCreated} tarefa(s) criada(s)`);
+      console.log(`[cron] userId=${userId}: ${synced} recap(s), ${suggestionsExtracted} sugestão(ões) extraída(s)`);
     }
   }
 }

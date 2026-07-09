@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { RefreshCw, Sparkles, ChevronDown, ChevronUp, Plus, Check, Pencil, X } from "lucide-react";
+import { RefreshCw, Sparkles, ChevronDown, ChevronUp, Plus, Pencil, X, ThumbsUp, XCircle, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
+import { cn } from "@/lib/utils";
 
-type SuggestedTask = {
+type EditForm = {
   title: string;
   description: string;
   assignee: string;
@@ -15,37 +16,59 @@ type SuggestedTask = {
   dueDate?: string | null;
 };
 
+type Suggestion = {
+  id: string;
+  index: number;
+  title: string;
+  description: string | null;
+  assignee: string | null;
+  priority: string | null;
+  dueDate: string | null;
+  status: "pending" | "accepted" | "edited" | "rejected";
+  taskId: string | null;
+};
+
 type Recap = {
   id: string;
   subject: string;
   createdAt: string;
   processedAt?: string | null;
-  suggestedTasks?: string | null;
   client?: string | null;
+  suggestions: Suggestion[];
 };
 
 type User = { id: string; name?: string | null; email: string };
+
+type Accuracy = { pending: number; accepted: number; edited: number; rejected: number; evaluated: number; accuracyPct: number | null };
+
+const FILTERS = [
+  { key: "pendentes", label: "Pendentes de revisão" },
+  { key: "todas", label: "Todas" },
+] as const;
 
 function RecapsPageInner() {
   const searchParams = useSearchParams();
   const [recaps, setRecaps] = useState<Recap[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [accuracy, setAccuracy] = useState<Accuracy | null>(null);
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("pendentes");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [added, setAdded] = useState<Record<string, boolean>>({});
-  const [addingKey, setAddingKey] = useState<string | null>(null);
+  const [actingKey, setActingKey] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<SuggestedTask>({ title: "", description: "", assignee: "", priority: "medium" });
+  const [editForm, setEditForm] = useState<EditForm>({ title: "", description: "", assignee: "", priority: "medium" });
 
   async function load() {
-    const [recapsRes, usersRes] = await Promise.all([
+    const [recapsRes, usersRes, accuracyRes] = await Promise.all([
       fetch("/api/recaps"),
       fetch("/api/users"),
+      fetch("/api/recaps/accuracy"),
     ]);
     setRecaps(await recapsRes.json());
     const u = await usersRes.json();
     if (Array.isArray(u)) setUsers(u);
+    setAccuracy(await accuracyRes.json());
   }
 
   useEffect(() => { load(); }, []);
@@ -65,7 +88,7 @@ function RecapsPageInner() {
     } else if (data.synced === 0) {
       toast("Nenhuma transcrição nova encontrada.", "info");
     } else {
-      toast(`${data.synced} transcrição(ões) sincronizada(s). ${data.tasksCreated} tarefa(s) criada(s) no Kanban.`, "success");
+      toast(`${data.synced} transcrição(ões) sincronizada(s). ${data.suggestionsExtracted} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`, "success");
     }
     await load();
     setSyncing(false);
@@ -75,17 +98,17 @@ function RecapsPageInner() {
     setLoading(true);
     const res = await fetch(`/api/recaps/${id}/process`, { method: "POST" });
     const data = await res.json();
-    if (data.error && !data.tasks?.length) {
+    if (data.error && !data.suggestions?.length) {
       toast(data.error, "error");
-    } else if (data.created > 0) {
-      toast(`${data.created} tarefa(s) criada(s) automaticamente no Kanban.`, "success");
+    } else if (data.count > 0) {
+      toast(`${data.count} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`, "success");
     }
     await load();
     setLoading(false);
     setExpanded(id);
   }
 
-  function matchAssigneeId(name: string): string | null {
+  function matchAssigneeId(name: string | null): string | null {
     if (!name) return null;
     const lower = name.toLowerCase();
     const found = users.find((u) =>
@@ -94,37 +117,70 @@ function RecapsPageInner() {
     return found?.id ?? null;
   }
 
-  async function addTask(recapId: string, task: SuggestedTask, idx: number) {
-    const key = `${recapId}-${idx}`;
-    setAddingKey(key);
+  function updateSuggestion(recapId: string, updated: Suggestion) {
+    setRecaps((prev) =>
+      prev.map((r) => (r.id !== recapId ? r : { ...r, suggestions: r.suggestions.map((s) => (s.id === updated.id ? updated : s)) }))
+    );
+  }
+
+  async function addTask(recap: Recap, suggestion: Suggestion, form: EditForm, edited: boolean) {
+    const key = suggestion.id;
+    setActingKey(key);
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: task.title,
-        description: task.description,
-        priority: task.priority || "medium",
-        assigneeId: matchAssigneeId(task.assignee),
-        dueDate: task.dueDate || null,
+        title: form.title,
+        description: form.description,
+        priority: form.priority || "medium",
+        assigneeId: matchAssigneeId(form.assignee),
+        dueDate: form.dueDate || null,
         source: "meet_recap",
-        sourceRef: recapId,
-        client: recaps.find((r) => r.id === recapId)?.client ?? null,
+        sourceRef: recap.id,
+        client: recap.client ?? null,
+        recapSuggestionId: suggestion.id,
+        suggestionEdited: edited,
       }),
     });
-    setAddingKey(null);
+    setActingKey(null);
     if (res.ok) {
-      setAdded((a) => ({ ...a, [key]: true }));
+      const task = await res.json();
+      updateSuggestion(recap.id, { ...suggestion, status: edited ? "edited" : "accepted", taskId: task.id });
       setEditingKey(null);
       toast("Tarefa adicionada ao Kanban", "success");
+      fetch("/api/recaps/accuracy").then((r) => r.json()).then(setAccuracy);
     } else {
       toast("Erro ao adicionar a tarefa", "error");
     }
   }
 
-  function startEdit(key: string, task: SuggestedTask) {
-    setEditingKey(key);
-    setEditForm({ ...task });
+  async function rejectSuggestion(recapId: string, suggestion: Suggestion) {
+    const key = suggestion.id;
+    setActingKey(key);
+    const nextStatus = suggestion.status === "rejected" ? "pending" : "rejected";
+    const res = await fetch(`/api/recaps/${recapId}/suggestions/${suggestion.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    setActingKey(null);
+    if (res.ok) {
+      updateSuggestion(recapId, { ...suggestion, status: nextStatus });
+      fetch("/api/recaps/accuracy").then((r) => r.json()).then(setAccuracy);
+    } else {
+      toast("Erro ao salvar", "error");
+    }
   }
+
+  function startEdit(key: string, s: Suggestion) {
+    setEditingKey(key);
+    setEditForm({ title: s.title, description: s.description ?? "", assignee: s.assignee ?? "", priority: s.priority ?? "medium", dueDate: s.dueDate });
+  }
+
+  const shownRecaps = recaps.filter((r) => {
+    if (filter === "todas") return true;
+    return !r.processedAt || r.suggestions.some((s) => s.status === "pending");
+  });
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
@@ -143,10 +199,35 @@ function RecapsPageInner() {
         </button>
       </div>
 
+      {accuracy && accuracy.evaluated > 0 && (
+        <div className="flex items-center gap-4 bg-surface border border-surface-3 rounded-xl px-4 py-3 mb-4 text-xs text-ink-dim">
+          <span className="font-semibold text-ink">Taxa de acerto da IA: {accuracy.accuracyPct}%</span>
+          <span>{accuracy.accepted + accuracy.edited} aceitas ({accuracy.edited} editadas)</span>
+          <span>{accuracy.rejected} rejeitadas</span>
+          {accuracy.pending > 0 && <span className="ml-auto text-ink-faint">{accuracy.pending} aguardando revisão</span>}
+        </div>
+      )}
+
+      <div className="flex gap-1 bg-surface border border-surface-3 rounded-xl p-1 mb-4">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={cn(
+              "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+              filter === f.key ? "bg-o2-green/10 text-o2-green" : "text-ink-dim hover:text-ink hover:bg-surface-2"
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-3">
-        {recaps.map((recap) => {
-          const tasks: SuggestedTask[] = recap.suggestedTasks ? JSON.parse(recap.suggestedTasks) : [];
+        {shownRecaps.map((recap) => {
+          const suggestions = recap.suggestions;
           const isExpanded = expanded === recap.id;
+          const pendingCount = suggestions.filter((s) => s.status === "pending").length;
 
           return (
             <div key={recap.id} id={`recap-${recap.id}`} className="bg-surface border border-surface-3 rounded-xl overflow-hidden">
@@ -172,10 +253,20 @@ function RecapsPageInner() {
                       {loading ? "Processando..." : "Extrair tarefas"}
                     </button>
                   )}
-                  {recap.processedAt && tasks.length > 0 && (
+                  {recap.processedAt && suggestions.length > 0 && (
                     <span className="text-xs text-o2-green bg-o2-green/10 px-2 py-1 rounded-lg font-medium">
-                      {tasks.length} tarefas
+                      {pendingCount > 0 ? `${pendingCount} pendente(s)` : `${suggestions.length} tarefas`}
                     </span>
+                  )}
+                  {recap.processedAt && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); process(recap.id); }}
+                      disabled={loading}
+                      className="text-xs text-ink-faint hover:text-o2-green transition-colors"
+                      title="Reprocessar com a IA de novo"
+                    >
+                      <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+                    </button>
                   )}
                   {isExpanded ? (
                     <ChevronUp size={15} className="text-ink-faint" />
@@ -185,20 +276,20 @@ function RecapsPageInner() {
                 </div>
               </div>
 
-              {isExpanded && tasks.length > 0 && (
+              {isExpanded && suggestions.length > 0 && (
                 <div className="border-t border-surface-3 p-5">
                   <p className="text-xs font-semibold text-ink-mid uppercase tracking-wide mb-3">
                     Tarefas sugeridas pela IA — revise antes de adicionar
                   </p>
                   <div className="space-y-3">
-                    {tasks.map((task, idx) => {
-                      const key = `${recap.id}-${idx}`;
-                      const done = added[key] === true;
+                    {suggestions.map((s) => {
+                      const key = s.id;
                       const isEditing = editingKey === key;
+                      const acting = actingKey === key;
 
                       if (isEditing) {
                         return (
-                          <div key={idx} className="bg-surface-2 rounded-lg p-3 space-y-2 border border-o2-green/20">
+                          <div key={key} className="bg-surface-2 rounded-lg p-3 space-y-2 border border-o2-green/20">
                             <input
                               value={editForm.title}
                               onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
@@ -239,12 +330,12 @@ function RecapsPageInner() {
                               />
                               <div className="ml-auto flex items-center gap-1.5">
                                 <button
-                                  onClick={() => addTask(recap.id, editForm, idx)}
-                                  disabled={addingKey === key || !editForm.title.trim()}
+                                  onClick={() => addTask(recap, s, editForm, true)}
+                                  disabled={acting || !editForm.title.trim()}
                                   className="flex items-center gap-1 text-xs bg-o2-green text-bg font-semibold px-3 py-1.5 rounded-lg hover:bg-o2-green-bright transition-all disabled:opacity-50"
                                 >
                                   <Plus size={12} />
-                                  {addingKey === key ? "Adicionando…" : "Adicionar"}
+                                  {acting ? "Adicionando…" : "Adicionar"}
                                 </button>
                                 <button onClick={() => setEditingKey(null)} className="text-ink-faint hover:text-ink p-1">
                                   <X size={14} />
@@ -256,49 +347,74 @@ function RecapsPageInner() {
                       }
 
                       return (
-                        <div key={idx} className="flex items-start gap-3 bg-surface-2 rounded-lg p-3">
+                        <div key={key} className={cn("flex items-start gap-3 rounded-lg p-3", s.status === "rejected" ? "bg-surface-2/50 opacity-60" : "bg-surface-2")}>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-ink">{task.title}</p>
-                            {task.description && (
-                              <p className="text-xs text-ink-mid mt-1">{task.description}</p>
+                            <p className={cn("text-sm font-medium text-ink", s.status === "rejected" && "line-through")}>{s.title}</p>
+                            {s.description && (
+                              <p className="text-xs text-ink-mid mt-1">{s.description}</p>
                             )}
                             <div className="flex items-center gap-2 mt-2">
-                              {task.assignee && (
-                                <span className="text-xs text-ink-dim">→ {task.assignee}</span>
+                              {s.assignee && (
+                                <span className="text-xs text-ink-dim">→ {s.assignee}</span>
                               )}
                               <span
                                 className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
-                                  task.priority === "high"
+                                  s.priority === "high"
                                     ? "bg-red-500/20 text-red-400"
-                                    : task.priority === "low"
+                                    : s.priority === "low"
                                     ? "bg-green-500/20 text-green-400"
                                     : "bg-yellow-500/20 text-yellow-400"
                                 }`}
                               >
-                                {task.priority || "média"}
+                                {s.priority || "média"}
                               </span>
                             </div>
                           </div>
                           <div className="flex-shrink-0 flex items-center gap-1.5">
-                            {!done && (
+                            {s.status === "pending" && (
+                              <>
+                                <button
+                                  onClick={() => startEdit(key, s)}
+                                  className="text-ink-faint hover:text-o2-green p-1.5 transition-colors"
+                                  title="Editar antes de adicionar"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  onClick={() => rejectSuggestion(recap.id, s)}
+                                  disabled={acting}
+                                  className="text-ink-faint hover:text-red-400 p-1.5 transition-colors disabled:opacity-50"
+                                  title="Descartar sugestão"
+                                >
+                                  <XCircle size={14} />
+                                </button>
+                                <button
+                                  onClick={() => addTask(recap, s, { title: s.title, description: s.description ?? "", assignee: s.assignee ?? "", priority: s.priority ?? "medium", dueDate: s.dueDate }, false)}
+                                  disabled={acting}
+                                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
+                                >
+                                  <Plus size={12} />
+                                  {acting ? "Adicionando…" : "Adicionar"}
+                                </button>
+                              </>
+                            )}
+                            {(s.status === "accepted" || s.status === "edited") && (
+                              <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium bg-o2-green/20 text-o2-green">
+                                <ThumbsUp size={12} />
+                                {s.status === "edited" ? "Editada e adicionada" : "Adicionada"}
+                              </span>
+                            )}
+                            {s.status === "rejected" && (
                               <button
-                                onClick={() => startEdit(key, task)}
-                                className="text-ink-faint hover:text-o2-green p-1.5 transition-colors"
-                                title="Editar antes de adicionar"
+                                onClick={() => rejectSuggestion(recap.id, s)}
+                                disabled={acting}
+                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium text-ink-faint hover:text-ink transition-all disabled:opacity-50"
+                                title="Desfazer descarte"
                               >
-                                <Pencil size={13} />
+                                <Undo2 size={12} />
+                                Descartada
                               </button>
                             )}
-                            <button
-                              onClick={() => addTask(recap.id, task, idx)}
-                              disabled={addingKey === key || done}
-                              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium disabled:opacity-70 ${
-                                done ? "bg-o2-green/20 text-o2-green" : "bg-o2-green/10 text-o2-green hover:bg-o2-green/20"
-                              }`}
-                            >
-                              {done ? <Check size={12} /> : <Plus size={12} />}
-                              {done ? "Adicionada" : addingKey === key ? "Adicionando…" : "Adicionar"}
-                            </button>
                           </div>
                         </div>
                       );
@@ -307,7 +423,7 @@ function RecapsPageInner() {
                 </div>
               )}
 
-              {isExpanded && tasks.length === 0 && recap.processedAt && (
+              {isExpanded && suggestions.length === 0 && recap.processedAt && (
                 <div className="border-t border-surface-3 p-5">
                   <p className="text-sm text-ink-faint">Nenhuma tarefa identificada nesta transcrição.</p>
                 </div>
@@ -316,11 +432,11 @@ function RecapsPageInner() {
           );
         })}
 
-        {recaps.length === 0 && (
+        {shownRecaps.length === 0 && (
           <div className="text-center py-16 text-ink-faint">
             <p className="text-3xl mb-3">📋</p>
-            <p className="text-sm">Nenhuma transcrição encontrada</p>
-            <p className="text-xs mt-1">Sincronize o Gmail para buscar emails com label Meet_Recap</p>
+            <p className="text-sm">{filter === "pendentes" ? "Nenhum recap pendente de revisão." : "Nenhuma transcrição encontrada"}</p>
+            {recaps.length === 0 && <p className="text-xs mt-1">Sincronize o Gmail para buscar emails com label Meet_Recap</p>}
           </div>
         )}
       </div>
