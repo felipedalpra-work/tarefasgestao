@@ -4,6 +4,15 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-09 (cont.)
+
+**Diagnóstico, checklist de reunião e Fechamento Mensal (Playbook CFOaaS):**
+- `ClientNote` ganhou as etapas 0–3 do Diagnóstico (`diagnosticoHandoffAt`, `diagnosticoIntakeAt`, `diagnosticoAnaliseAt`, `diagnosticoValidacaoAt`) e `diagnosticoIntakePendente` (texto livre com os documentos ainda faltando pedir). A etapa 4 (Apresentação final) reaproveita o marco `diagnosticDoneAt` que já existia — não duplica campo. Tudo isso mostrado na aba **Onboarding** do cliente.
+- `CalendarEvent` ganhou o checklist de "toda reunião" do playbook: `nextSteps` (próximos passos validados), `attendanceConfirmed` e `registroConferido` (booleans) — editáveis junto da Temperatura, na aba Reuniões, só para reuniões já realizadas.
+- Novo model `FechamentoMensal` (`@@unique([client, year, month])`): checklist mensal recorrente por cliente — comitê realizado, rebalanceamento de caixa, conciliação OK, CP/CR fechados, pendências anotadas, maturidade do fechamento e data de revisão do status de saúde. Nova aba **Fechamento** no cliente, com navegação entre meses e histórico visual (quantos itens concluídos por mês). API em `/api/clients/[name]/fechamentos`.
+- Decisão consciente: política comercial (CNPJs, formas de pagamento, ativação/cancelamento de contrato) **não** entrou na plataforma — já vive no Pipefy (CRM de vendas), trazer pra cá duplicaria sistema de registro.
+- Testado ponta a ponta: campos de Diagnóstico, checklist de reunião (próximos passos + presença + registro) e criação/consulta de Fechamento Mensal, tudo validado via API antes do push. Dados de teste removidos depois.
+
 ## 2026-07-09
 
 **Fluxos do Playbook CFO as a Service:**

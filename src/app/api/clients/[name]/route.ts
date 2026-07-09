@@ -39,6 +39,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
       setupDoneAt: null,
       diagnosticDoneAt: null,
       oxyIntegratedAt: null,
+      diagnosticoHandoffAt: null,
+      diagnosticoIntakeAt: null,
+      diagnosticoIntakePendente: null,
+      diagnosticoAnaliseAt: null,
+      diagnosticoValidacaoAt: null,
     }
   );
 }
@@ -74,6 +79,7 @@ const FREE_TEXT_FIELDS = [
   "routineWhat",
   "routineWho",
   "routineWhen",
+  "diagnosticoIntakePendente",
 ] as const;
 const DATE_FIELDS = [
   "onboardingStartAt",
@@ -83,6 +89,10 @@ const DATE_FIELDS = [
   "setupDoneAt",
   "diagnosticDoneAt",
   "oxyIntegratedAt",
+  "diagnosticoHandoffAt",
+  "diagnosticoIntakeAt",
+  "diagnosticoAnaliseAt",
+  "diagnosticoValidacaoAt",
 ] as const;
 
 // Atualização parcial da situação geral / situação na Oxy (usado pela tabela e pela aba Oxy do cliente)

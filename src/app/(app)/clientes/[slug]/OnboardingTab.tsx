@@ -12,6 +12,10 @@ type Milestones = {
   setupDoneAt: string;
   diagnosticDoneAt: string;
   oxyIntegratedAt: string;
+  diagnosticoHandoffAt: string;
+  diagnosticoIntakeAt: string;
+  diagnosticoAnaliseAt: string;
+  diagnosticoValidacaoAt: string;
 };
 
 const EMPTY_MILESTONES: Milestones = {
@@ -22,7 +26,18 @@ const EMPTY_MILESTONES: Milestones = {
   setupDoneAt: "",
   diagnosticDoneAt: "",
   oxyIntegratedAt: "",
+  diagnosticoHandoffAt: "",
+  diagnosticoIntakeAt: "",
+  diagnosticoAnaliseAt: "",
+  diagnosticoValidacaoAt: "",
 };
+
+const DIAGNOSTICO_ETAPAS = [
+  { key: "diagnosticoHandoffAt" as const, label: "Etapa 0 · Handoff do Setup", detail: "Plano de contas, categorização e base de CR/CP repassados — sem nova reunião." },
+  { key: "diagnosticoIntakeAt" as const, label: "Etapa 1 · Intake complementar", detail: "Balanço, DFC, endividamento, Serasa, protestos, contrato social, dado de mercado — assíncrono." },
+  { key: "diagnosticoAnaliseAt" as const, label: "Etapa 2 · Análise e montagem", detail: "DRE, DFC, NCG/CDG/Tesouraria, prazos, cenário macro e do segmento — trabalho de mesa." },
+  { key: "diagnosticoValidacaoAt" as const, label: "Etapa 3 · Validação com o cliente", detail: "Confirma premissas e lacunas — dentro da semanal já prevista." },
+];
 
 const MILESTONE_DEFS = [
   { key: "cfoAllocatedAt" as const, label: "CFO alocado", offsetDays: 2 },
@@ -63,6 +78,7 @@ function addDays(base: string, days: number) {
 
 export function OnboardingTab({ client }: { client: string }) {
   const [milestones, setMilestones] = useState<Milestones>(EMPTY_MILESTONES);
+  const [intakePendente, setIntakePendente] = useState("");
   const [meetings, setMeetings] = useState<SetupMeeting[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -80,12 +96,31 @@ export function OnboardingTab({ client }: { client: string }) {
           setupDoneAt: toDateInput(note.setupDoneAt),
           diagnosticDoneAt: toDateInput(note.diagnosticDoneAt),
           oxyIntegratedAt: toDateInput(note.oxyIntegratedAt),
+          diagnosticoHandoffAt: toDateInput(note.diagnosticoHandoffAt),
+          diagnosticoIntakeAt: toDateInput(note.diagnosticoIntakeAt),
+          diagnosticoAnaliseAt: toDateInput(note.diagnosticoAnaliseAt),
+          diagnosticoValidacaoAt: toDateInput(note.diagnosticoValidacaoAt),
         });
+        setIntakePendente(note.diagnosticoIntakePendente ?? "");
         setMeetings(setupMeetings);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
   }, [client]);
+
+  async function updateIntakePendente(value: string) {
+    const prev = intakePendente;
+    setIntakePendente(value);
+    const res = await fetch(`/api/clients/${encodeURIComponent(client)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ diagnosticoIntakePendente: value || null }),
+    });
+    if (!res.ok) {
+      setIntakePendente(prev);
+      toast("Erro ao salvar", "error");
+    }
+  }
 
   async function updateMilestone(key: keyof Milestones, value: string) {
     const prev = milestones;
@@ -170,6 +205,44 @@ export function OnboardingTab({ client }: { client: string }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="border-t border-surface-3 pt-4">
+        <p className="text-xs font-medium text-ink-mid uppercase tracking-wide mb-3">Diagnóstico (etapas 0–3)</p>
+        <div className="space-y-2">
+          {DIAGNOSTICO_ETAPAS.map(({ key, label, detail }) => (
+            <div key={key} className="bg-surface border border-surface-3 rounded-xl p-3.5 flex items-center gap-3">
+              {milestones[key] ? (
+                <CheckCircle2 size={18} className="text-o2-green shrink-0" />
+              ) : (
+                <Clock size={18} className="text-ink-ghost shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink">{label}</p>
+                <p className="text-xs text-ink-faint mt-0.5">{detail}</p>
+              </div>
+              <input
+                type="date"
+                value={milestones[key]}
+                onChange={(e) => updateMilestone(key, e.target.value)}
+                className="bg-surface-2 border border-surface-3 rounded-lg px-2 py-1.5 text-xs text-ink-soft focus:outline-none focus:border-o2-green/50"
+              />
+            </div>
+          ))}
+          <div className="bg-surface border border-surface-3 rounded-xl p-3.5">
+            <label className="text-xs text-ink-faint block mb-1.5">Etapa 1 · Documentos ainda pendentes de pedir</label>
+            <input
+              type="text"
+              defaultValue={intakePendente}
+              placeholder="Ex: Balanço, DFC, Serasa"
+              onBlur={(e) => e.target.value !== intakePendente && updateIntakePendente(e.target.value)}
+              className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+            />
+          </div>
+          <p className="text-xs text-ink-ghost">
+            Etapa 4 (Apresentação final) é a única com reunião nova — acompanhe pelo marco &quot;Diagnóstico + Comitê de Diagnóstico&quot; acima.
+          </p>
+        </div>
       </div>
 
       <div className="border-t border-surface-3 pt-4">

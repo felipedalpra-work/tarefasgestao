@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = await req.json();
 
-  const data: Record<string, string | null> = {};
+  const data: Record<string, string | boolean | null> = {};
 
   if (body.temperature !== undefined) {
     if (body.temperature !== null && !TEMPERATURE_VALUES.includes(body.temperature)) {
@@ -30,6 +30,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     data.meetingType = body.meetingType;
   }
+  if (body.nextSteps !== undefined) data.nextSteps = body.nextSteps || null;
+  if (body.attendanceConfirmed !== undefined) data.attendanceConfirmed = !!body.attendanceConfirmed;
+  if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
 
   const event = await prisma.calendarEvent.update({ where: { id }, data });
 

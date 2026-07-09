@@ -165,8 +165,13 @@ model ClientNote {
   kickoffScheduledAt DateTime? // marco D+3
   kickoffDoneAt     DateTime? // marco D+7
   setupDoneAt       DateTime? // marco D+30 (Setup + Comitê de Estruturação)
-  diagnosticDoneAt  DateTime? // marco D+60 (Diagnóstico + Comitê de Diagnóstico)
+  diagnosticDoneAt  DateTime? // marco D+60 (Diagnóstico + Comitê de Diagnóstico) — mesma data da Etapa 4 (Apresentação final)
   oxyIntegratedAt   DateTime? // marco D+90 (Oxy + início do Comitê Estratégico Mensal)
+  diagnosticoHandoffAt   DateTime? // Diagnóstico Etapa 0: handoff do Setup
+  diagnosticoIntakeAt    DateTime? // Diagnóstico Etapa 1: intake complementar (assíncrono)
+  diagnosticoIntakePendente String? // o que ainda falta pedir (Balanço, DFC, endividamento, Serasa, protestos, contrato social, dado de mercado...)
+  diagnosticoAnaliseAt   DateTime? // Diagnóstico Etapa 2: análise e montagem (DRE, DFC, NCG/CDG/Tesouraria)
+  diagnosticoValidacaoAt DateTime? // Diagnóstico Etapa 3: validação com o cliente (na semanal)
   updatedAt         DateTime  @updatedAt
 
   @@index([status])
@@ -270,9 +275,30 @@ model CalendarEvent {
   briefingSent Boolean  @default(false)
   meetingType  String? // "semanal" | "comite" | "kickoff" | "setup" | "interno" — extraído do título "| <Tipo>"
   temperature  String? // "otimo" | "bom" | "atencao" | "critico" — clima da reunião, preenchido depois
+  nextSteps    String? // próximos passos validados pós-reunião
+  attendanceConfirmed Boolean @default(false) // presença confirmada/corrigida
+  registroConferido   Boolean @default(false) // registro (gravação/transcrição) conferido
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([startAt])
+  @@index([client])
+}
+
+model FechamentoMensal {
+  id                    String   @id @default(cuid())
+  client                String
+  year                  Int
+  month                 Int // 1-12
+  comiteRealizado       Boolean  @default(false)
+  rebalanceamentoFeito  Boolean  @default(false)
+  conciliacaoOk         Boolean  @default(false)
+  cpCrFechados          Boolean  @default(false)
+  pendenciasAnotadas    String?
+  maturidade            String? // avaliação livre da maturidade do fechamento
+  healthReviewedAt      DateTime?
+  updatedAt             DateTime @updatedAt
+
+  @@unique([client, year, month])
   @@index([client])
 }

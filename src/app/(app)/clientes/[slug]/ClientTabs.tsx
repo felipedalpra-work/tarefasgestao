@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert } from "lucide-react";
+import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { OnboardingTab } from "./OnboardingTab";
+import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
 
@@ -17,6 +18,9 @@ type CalendarEvent = {
   briefingSent: boolean;
   meetingType: string | null;
   temperature: string | null;
+  nextSteps: string | null;
+  attendanceConfirmed: boolean;
+  registroConferido: boolean;
 };
 
 type Recap = {
@@ -93,7 +97,7 @@ const EMPTY_OXY: OxyFields = {
 };
 
 export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
-  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "onboarding" | "tratativas" | "oxy" | "notes">("meetings");
+  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "onboarding" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
   const [tratativas, setTratativas] = useState(initialTratativas);
   const [events, setEvents] = useState(initialEvents);
@@ -172,13 +176,14 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     else toast("Erro ao salvar", "error");
   }
 
-  async function updateTemperature(eventId: string, temperature: string) {
+  async function updateEvent(eventId: string, field: keyof CalendarEvent, value: string | boolean) {
     const prevEvents = events;
-    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, temperature: temperature || null } : e)));
+    const normalized = typeof value === "string" ? value || null : value;
+    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, [field]: normalized } : e)));
     const res = await fetch(`/api/calendar/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ temperature: temperature || null }),
+      body: JSON.stringify({ [field]: normalized }),
     });
     if (!res.ok) {
       setEvents(prevEvents);
@@ -192,6 +197,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     { key: "tasks", label: "Tarefas", icon: CheckSquare, count: tasks.length },
     { key: "onboarding", label: "Onboarding", icon: Rocket, count: null },
     { key: "tratativas", label: "Tratativas", icon: ShieldAlert, count: tratativas.length },
+    { key: "fechamento", label: "Fechamento", icon: ClipboardCheck, count: null },
     { key: "oxy", label: "Oxy", icon: Database, count: null },
     { key: "notes", label: "Notas", icon: StickyNote, count: null },
   ] as const;
@@ -258,22 +264,54 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                   </span>
                 </div>
                 {isPast && (
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-surface-3">
-                    <span className="text-xs text-ink-faint">Temperatura:</span>
-                    <select
-                      value={e.temperature ?? ""}
-                      onChange={(ev) => updateTemperature(e.id, ev.target.value)}
-                      className={cn(
-                        "text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:outline-none focus:ring-1 focus:ring-o2-green/50 cursor-pointer appearance-none",
-                        TEMPERATURE_INFO[e.temperature ?? ""]?.className ?? "bg-surface-3 text-ink-faint"
-                      )}
-                    >
-                      <option value="" className="bg-panel text-ink">— não definida —</option>
-                      <option value="otimo" className="bg-panel text-ink">Ótimo</option>
-                      <option value="bom" className="bg-panel text-ink">Bom</option>
-                      <option value="atencao" className="bg-panel text-ink">Atenção</option>
-                      <option value="critico" className="bg-panel text-ink">Crítico</option>
-                    </select>
+                  <div className="mt-3 pt-3 border-t border-surface-3 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-ink-faint w-28 shrink-0">Temperatura:</span>
+                      <select
+                        value={e.temperature ?? ""}
+                        onChange={(ev) => updateEvent(e.id, "temperature", ev.target.value)}
+                        className={cn(
+                          "text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:outline-none focus:ring-1 focus:ring-o2-green/50 cursor-pointer appearance-none",
+                          TEMPERATURE_INFO[e.temperature ?? ""]?.className ?? "bg-surface-3 text-ink-faint"
+                        )}
+                      >
+                        <option value="" className="bg-panel text-ink">— não definida —</option>
+                        <option value="otimo" className="bg-panel text-ink">Ótimo</option>
+                        <option value="bom" className="bg-panel text-ink">Bom</option>
+                        <option value="atencao" className="bg-panel text-ink">Atenção</option>
+                        <option value="critico" className="bg-panel text-ink">Crítico</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-ink-faint w-28 shrink-0">Próximos passos:</span>
+                      <input
+                        type="text"
+                        defaultValue={e.nextSteps ?? ""}
+                        placeholder="Validados na reunião"
+                        onBlur={(ev) => ev.target.value !== (e.nextSteps ?? "") && updateEvent(e.id, "nextSteps", ev.target.value)}
+                        className="flex-1 bg-surface-2 border border-surface-3 rounded-lg px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                      />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-1.5 text-xs text-ink-dim cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={e.attendanceConfirmed}
+                          onChange={(ev) => updateEvent(e.id, "attendanceConfirmed", ev.target.checked)}
+                          className="accent-o2-green"
+                        />
+                        Presença confirmada
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-ink-dim cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={e.registroConferido}
+                          onChange={(ev) => updateEvent(e.id, "registroConferido", ev.target.checked)}
+                          className="accent-o2-green"
+                        />
+                        Registro conferido
+                      </label>
+                    </div>
                   </div>
                 )}
               </div>
@@ -394,6 +432,9 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
           )}
         </div>
       )}
+
+      {/* Fechamento mensal */}
+      {tab === "fechamento" && <FechamentoTab client={client} />}
 
       {/* Oxy */}
       {tab === "oxy" && (
