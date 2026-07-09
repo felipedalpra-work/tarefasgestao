@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database } from "lucide-react";
+import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
+import { OnboardingTab } from "./OnboardingTab";
+import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
+import { NewTratativaForm } from "@/components/NewTratativaForm";
 
 type CalendarEvent = {
   id: string;
@@ -12,6 +15,8 @@ type CalendarEvent = {
   startAt: string | Date;
   endAt: string | Date;
   briefingSent: boolean;
+  meetingType: string | null;
+  temperature: string | null;
 };
 
 type Recap = {
@@ -34,10 +39,14 @@ type Task = {
   assignee: { id: string; name: string | null; image: string | null } | null;
 };
 
+type UserOption = { id: string; name: string | null };
+
 type Props = {
   events: CalendarEvent[];
   recaps: Recap[];
   tasks: Task[];
+  tratativas: TratativaData[];
+  users: UserOption[];
   currentUserId: string;
   client: string;
 };
@@ -45,6 +54,21 @@ type Props = {
 const STATUS_LABEL: Record<string, string> = { todo: "A fazer", in_progress: "Em progresso", done: "Concluída" };
 const PRIORITY_COLOR: Record<string, string> = { high: "text-red-400", medium: "text-yellow-400", low: "text-o2-green" };
 const PRIORITY_LABEL: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
+
+const MEETING_TYPE_INFO: Record<string, { label: string; className: string }> = {
+  semanal: { label: "Semanal", className: "bg-surface-3 text-ink-soft" },
+  comite: { label: "Comitê Estratégico Mensal", className: "bg-o2-green/15 text-o2-green" },
+  kickoff: { label: "Kickoff", className: "bg-blue-400/10 text-blue-400" },
+  setup: { label: "Setup", className: "bg-yellow-400/10 text-yellow-400" },
+  interno: { label: "Interno", className: "bg-surface-3 text-ink-faint" },
+};
+
+const TEMPERATURE_INFO: Record<string, { className: string }> = {
+  otimo: { className: "bg-o2-green/10 text-o2-green" },
+  bom: { className: "bg-blue-400/10 text-blue-400" },
+  atencao: { className: "bg-yellow-400/10 text-yellow-400" },
+  critico: { className: "bg-red-400/10 text-red-400" },
+};
 
 type OxyFields = {
   accessMode: string;
@@ -68,9 +92,11 @@ const EMPTY_OXY: OxyFields = {
   pendencyWho: "",
 };
 
-export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Props) {
-  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "oxy" | "notes">("meetings");
+export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
+  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "onboarding" | "tratativas" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
+  const [tratativas, setTratativas] = useState(initialTratativas);
+  const [events, setEvents] = useState(initialEvents);
   const [notes, setNotes] = useState("");
   const [contacts, setContacts] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
@@ -146,10 +172,26 @@ export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Pro
     else toast("Erro ao salvar", "error");
   }
 
+  async function updateTemperature(eventId: string, temperature: string) {
+    const prevEvents = events;
+    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, temperature: temperature || null } : e)));
+    const res = await fetch(`/api/calendar/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temperature: temperature || null }),
+    });
+    if (!res.ok) {
+      setEvents(prevEvents);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
   const tabs = [
     { key: "meetings", label: "Reuniões", icon: CalendarDays, count: events.length },
     { key: "recaps", label: "Meet Recaps", icon: FileText, count: recaps.length },
     { key: "tasks", label: "Tarefas", icon: CheckSquare, count: tasks.length },
+    { key: "onboarding", label: "Onboarding", icon: Rocket, count: null },
+    { key: "tratativas", label: "Tratativas", icon: ShieldAlert, count: tratativas.length },
     { key: "oxy", label: "Oxy", icon: Database, count: null },
     { key: "notes", label: "Notas", icon: StickyNote, count: null },
   ] as const;
@@ -189,24 +231,51 @@ export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Pro
             const start = new Date(e.startAt);
             const end = new Date(e.endAt);
             const isPast = start < new Date();
+            const typeInfo = MEETING_TYPE_INFO[e.meetingType ?? ""];
             return (
-              <div key={e.id} className="bg-surface border border-surface-3 rounded-xl p-4 flex items-start gap-4">
-                <div className="text-center min-w-[44px]">
-                  <p className="text-xs text-ink-dim">{start.toLocaleDateString("pt-BR", { month: "short" }).toUpperCase()}</p>
-                  <p className="text-xl font-bold text-ink leading-tight">{start.getDate()}</p>
+              <div key={e.id} className="bg-surface border border-surface-3 rounded-xl p-4">
+                <div className="flex items-start gap-4">
+                  <div className="text-center min-w-[44px]">
+                    <p className="text-xs text-ink-dim">{start.toLocaleDateString("pt-BR", { month: "short" }).toUpperCase()}</p>
+                    <p className="text-xl font-bold text-ink leading-tight">{start.getDate()}</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-ink truncate">{e.title}</p>
+                      {typeInfo && (
+                        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", typeInfo.className)}>{typeInfo.label}</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-ink-dim mt-0.5">
+                      {start.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} –{" "}
+                      {end.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      {" · "}
+                      {start.toLocaleDateString("pt-BR", { weekday: "long" })}
+                    </p>
+                  </div>
+                  <span className={cn("text-xs px-2 py-1 rounded-full shrink-0", isPast ? "bg-surface-3 text-ink-faint" : "bg-o2-green/10 text-o2-green")}>
+                    {isPast ? "Realizada" : "Agendada"}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink truncate">{e.title}</p>
-                  <p className="text-xs text-ink-dim mt-0.5">
-                    {start.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} –{" "}
-                    {end.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                    {" · "}
-                    {start.toLocaleDateString("pt-BR", { weekday: "long" })}
-                  </p>
-                </div>
-                <span className={cn("text-xs px-2 py-1 rounded-full shrink-0", isPast ? "bg-surface-3 text-ink-faint" : "bg-o2-green/10 text-o2-green")}>
-                  {isPast ? "Realizada" : "Agendada"}
-                </span>
+                {isPast && (
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-surface-3">
+                    <span className="text-xs text-ink-faint">Temperatura:</span>
+                    <select
+                      value={e.temperature ?? ""}
+                      onChange={(ev) => updateTemperature(e.id, ev.target.value)}
+                      className={cn(
+                        "text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:outline-none focus:ring-1 focus:ring-o2-green/50 cursor-pointer appearance-none",
+                        TEMPERATURE_INFO[e.temperature ?? ""]?.className ?? "bg-surface-3 text-ink-faint"
+                      )}
+                    >
+                      <option value="" className="bg-panel text-ink">— não definida —</option>
+                      <option value="otimo" className="bg-panel text-ink">Ótimo</option>
+                      <option value="bom" className="bg-panel text-ink">Bom</option>
+                      <option value="atencao" className="bg-panel text-ink">Atenção</option>
+                      <option value="critico" className="bg-panel text-ink">Crítico</option>
+                    </select>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -301,6 +370,28 @@ export function ClientTabs({ events, recaps, tasks, currentUserId, client }: Pro
               </Link>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Onboarding */}
+      {tab === "onboarding" && <OnboardingTab client={client} />}
+
+      {/* Tratativas */}
+      {tab === "tratativas" && (
+        <div className="space-y-3">
+          <NewTratativaForm client={client} onCreated={(t) => setTratativas((prev) => [t, ...prev])} />
+          {tratativas.length === 0 ? (
+            <Empty icon={ShieldAlert} text="Nenhuma tratativa aberta para este cliente." />
+          ) : (
+            tratativas.map((t) => (
+              <TratativaCard
+                key={t.id}
+                tratativa={t}
+                users={users}
+                onChange={(updated) => setTratativas((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))}
+              />
+            ))
+          )}
         </div>
       )}
 

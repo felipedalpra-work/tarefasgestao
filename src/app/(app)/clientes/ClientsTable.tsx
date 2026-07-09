@@ -18,7 +18,14 @@ export type ClientRow = {
   lastDataUpdate: string | Date | null;
   oxyPendencies: string | null;
   erp: string | null;
+  healthStatus: string;
 };
+
+const HEALTH_OPTIONS = [
+  { value: "verde", label: "● Saudável", className: "bg-o2-green/10 text-o2-green" },
+  { value: "amarelo", label: "● Atenção", className: "bg-yellow-400/10 text-yellow-400" },
+  { value: "vermelho", label: "● Crítico", className: "bg-red-400/10 text-red-400" },
+];
 
 const STATUS_OPTIONS = [
   { value: "ativo", label: "Ativo", className: "bg-o2-green/10 text-o2-green" },
@@ -80,6 +87,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
         <thead className="bg-surface-2 text-ink-dim text-xs uppercase tracking-wide">
           <tr>
             <th className="text-left px-4 py-3 font-medium">Cliente</th>
+            <th className="text-left px-4 py-3 font-medium">Saúde</th>
             <th className="text-left px-4 py-3 font-medium">ERP</th>
             <th className="text-left px-4 py-3 font-medium">Status</th>
             <th className="text-left px-4 py-3 font-medium">Implantação Oxy</th>
@@ -103,6 +111,13 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                   <span className="font-medium truncate max-w-[200px]">{c.name}</span>
                   <ChevronRight size={14} className="text-ink-ghost group-hover:text-o2-green transition-colors shrink-0" />
                 </Link>
+              </td>
+              <td className="px-4 py-2.5">
+                <Select
+                  value={c.healthStatus}
+                  options={HEALTH_OPTIONS}
+                  onChange={(v) => handleChange(c.name, "healthStatus", v)}
+                />
               </td>
               <td className="px-4 py-2.5 min-w-[160px]">
                 <input

@@ -19,6 +19,8 @@ model User {
   createdTasks  Task[]         @relation("CreatedTasks")
   comments      TaskComment[]
   passwordResetTokens PasswordResetToken[]
+  tratativas         Tratativa[] @relation("TratativaResponsavel")
+  createdTratativas  Tratativa[] @relation("TratativaCreatedBy")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -157,10 +159,61 @@ model ClientNote {
   routineWhat       String? // rotina recorrente com o cliente: o que é feito
   routineWho        String? // rotina recorrente: quem faz
   routineWhen       String? // rotina recorrente: quando
+  healthStatus      String    @default("verde") // "verde" | "amarelo" | "vermelho" — semáforo de saúde da conta
+  onboardingStartAt DateTime? // D+0: data do 1º pagamento, âncora dos marcos de onboarding
+  cfoAllocatedAt    DateTime? // marco D+2
+  kickoffScheduledAt DateTime? // marco D+3
+  kickoffDoneAt     DateTime? // marco D+7
+  setupDoneAt       DateTime? // marco D+30 (Setup + Comitê de Estruturação)
+  diagnosticDoneAt  DateTime? // marco D+60 (Diagnóstico + Comitê de Diagnóstico)
+  oxyIntegratedAt   DateTime? // marco D+90 (Oxy + início do Comitê Estratégico Mensal)
   updatedAt         DateTime  @updatedAt
 
   @@index([status])
   @@index([oxyStage])
+  @@index([healthStatus])
+}
+
+model SetupMeeting {
+  id            String    @id @default(cuid())
+  client        String
+  code          String // "R1" | "R2" | "R3" | "R4"
+  scheduledAt   DateTime?
+  completedAt   DateTime?
+  participants  String?
+  recordingUrl  String?
+  transcriptUrl String?
+  nextSteps     String?
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([client, code])
+  @@index([client])
+}
+
+model Tratativa {
+  id                      String    @id @default(cuid())
+  client                  String
+  tipo                    String // "preventiva" | "reativa"
+  motivo                  String
+  descricao               String?
+  satisfacao              String?
+  problemaNaOxy           Boolean   @default(false)
+  status                  String    @default("triagem") // "triagem" | "em_tratativa" | "plano_de_acao" | "concluida"
+  responsavelId           String?
+  dataPrevistaFinalizacao DateTime?
+  planoDeAcao             String?
+  desfecho                String? // "recuperado" | "churn" | "downsell" | "mudanca_escopo" | "desistencia"
+  churnMotivo             String?
+  churnData               DateTime?
+  createdById             String
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  responsavel User? @relation("TratativaResponsavel", fields: [responsavelId], references: [id])
+  createdBy   User  @relation("TratativaCreatedBy", fields: [createdById], references: [id])
+
+  @@index([client])
+  @@index([status])
 }
 
 model MeetRecap {
@@ -215,6 +268,8 @@ model CalendarEvent {
   startAt      DateTime
   endAt        DateTime
   briefingSent Boolean  @default(false)
+  meetingType  String? // "semanal" | "comite" | "kickoff" | "setup" | "interno" — extraído do título "| <Tipo>"
+  temperature  String? // "otimo" | "bom" | "atencao" | "critico" — clima da reunião, preenchido depois
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

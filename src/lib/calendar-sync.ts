@@ -8,6 +8,19 @@ export function extractClientFromTitle(title: string): string | null {
   return match ? match[1].trim() : null;
 }
 
+// extrai o tipo de reunião do título: "O2 Inc & Zé do Flor | Comitê Estratégico Mensal" → "comite"
+export function extractMeetingTypeFromTitle(title: string): string | null {
+  const match = title.match(/\|\s*(.+)$/);
+  if (!match) return null;
+  const raw = match[1].trim().toLowerCase();
+  if (raw.includes("comit")) return "comite";
+  if (raw.includes("semanal") || raw === "weekly") return "semanal";
+  if (raw.includes("kickoff") || raw.includes("kick-off") || raw.includes("kick off")) return "kickoff";
+  if (raw.includes("setup")) return "setup";
+  if (raw.includes("interno")) return "interno";
+  return null;
+}
+
 export async function syncCalendarForUser(userId: string): Promise<number> {
   const account = await prisma.account.findFirst({
     where: { userId, provider: "google" },
@@ -52,10 +65,12 @@ export async function syncCalendarForUser(userId: string): Promise<number> {
       const endAt = new Date(event.end?.dateTime || event.end?.date || "");
       if (isNaN(startAt.getTime())) continue;
 
+      const meetingType = extractMeetingTypeFromTitle(title);
+
       await prisma.calendarEvent.upsert({
         where: { googleId: event.id! },
-        update: { title, client, startAt, endAt },
-        create: { googleId: event.id!, title, client, startAt, endAt },
+        update: { title, client, startAt, endAt, meetingType },
+        create: { googleId: event.id!, title, client, startAt, endAt, meetingType },
       });
       synced++;
     }

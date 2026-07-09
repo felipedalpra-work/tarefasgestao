@@ -1,4 +1,4 @@
-import { getClientDetail } from "@/lib/queries";
+import { getClientDetail, getUsers } from "@/lib/queries";
 import { auth } from "@/lib/auth";
 import { Building2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -16,14 +16,15 @@ export default async function ClientePage({ params }: Props) {
   const { slug } = await params;
   const client = decodeURIComponent(slug);
 
-  const [session, data] = await Promise.all([
+  const [session, data, users] = await Promise.all([
     auth(),
     getClientDetail(client),
+    getUsers(),
   ]);
 
   if (!session?.user?.id) notFound();
 
-  const { events, recaps, tasks, clientNote } = data;
+  const { events, recaps, tasks, clientNote, tratativas } = data;
 
   if (events.length === 0 && recaps.length === 0 && tasks.length === 0 && !clientNote) {
     notFound();
@@ -58,6 +59,13 @@ export default async function ClientePage({ params }: Props) {
         events={events.map((e) => ({ ...e, startAt: new Date(e.startAt).toISOString(), endAt: new Date(e.endAt).toISOString() }))}
         recaps={recaps.map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), processedAt: r.processedAt ? new Date(r.processedAt).toISOString() : null }))}
         tasks={tasks.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null }))}
+        tratativas={tratativas.map((t) => ({
+          ...t,
+          dataPrevistaFinalizacao: t.dataPrevistaFinalizacao ? new Date(t.dataPrevistaFinalizacao).toISOString() : null,
+          churnData: t.churnData ? new Date(t.churnData).toISOString() : null,
+          createdAt: new Date(t.createdAt).toISOString(),
+        }))}
+        users={users}
         currentUserId={session.user.id}
         client={client}
       />

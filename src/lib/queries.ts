@@ -111,6 +111,7 @@ export const getClientsTable = unstable_cache(
           lastDataUpdate: true,
           oxyPendencies: true,
           erp: true,
+          healthStatus: true,
         },
       }),
     ]);
@@ -137,6 +138,7 @@ export const getClientsTable = unstable_cache(
         lastDataUpdate: n?.lastDataUpdate ?? null,
         oxyPendencies: n?.oxyPendencies ?? null,
         erp: n?.erp ?? null,
+        healthStatus: n?.healthStatus ?? "verde",
       };
     });
   },
@@ -147,7 +149,7 @@ export const getClientsTable = unstable_cache(
 // Cached: dados completos de um cliente
 export const getClientDetail = unstable_cache(
   async (client: string) => {
-    const [events, recaps, tasks, clientNote] = await Promise.all([
+    const [events, recaps, tasks, clientNote, tratativas] = await Promise.all([
       prisma.calendarEvent.findMany({
         where: { client },
         orderBy: { startAt: "desc" },
@@ -163,9 +165,28 @@ export const getClientDetail = unstable_cache(
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
       }),
       prisma.clientNote.findUnique({ where: { client } }),
+      prisma.tratativa.findMany({
+        where: { client },
+        include: { responsavel: { select: { id: true, name: true, image: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
-    return { events, recaps, tasks, clientNote };
+    return { events, recaps, tasks, clientNote, tratativas };
   },
   ["client-detail"],
-  { tags: ["calendar", "recaps", "tasks", "clients"], revalidate: 30 }
+  { tags: ["calendar", "recaps", "tasks", "clients", "tratativas"], revalidate: 30 }
+);
+
+// Cached: todas as tratativas (página /tratativas)
+export const getTratativas = unstable_cache(
+  async () =>
+    prisma.tratativa.findMany({
+      include: {
+        responsavel: { select: { id: true, name: true, image: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ["tratativas-all"],
+  { tags: ["tratativas"], revalidate: 15 }
 );

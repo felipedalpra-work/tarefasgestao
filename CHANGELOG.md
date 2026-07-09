@@ -4,6 +4,17 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-09
+
+**Fluxos do Playbook CFO as a Service:**
+- `ClientNote` ganhou `healthStatus` (verde/amarelo/vermelho — semáforo de saúde da conta, editável na tabela `/clientes`) e os marcos de onboarding (`onboardingStartAt` = D+0, `cfoAllocatedAt`, `kickoffScheduledAt`, `kickoffDoneAt`, `setupDoneAt`, `diagnosticDoneAt`, `oxyIntegratedAt` = D+2/3/7/30/60/90), editáveis na nova aba **Onboarding** da página do cliente.
+- Nova aba Onboarding mostra cada marco com prazo calculado a partir do D+0, e sinaliza atraso (vermelho) quando passa do prazo sem a data real preenchida. Inclui também as 4 reuniões de Setup (R1–R4: Faturamento/CR, Compras/CP, Custeio/Estoque, Plano de Contas), cada uma com data prevista/realizada, participantes, gravação, transcrição e próximos passos — novo model `SetupMeeting` (`@@unique([client, code])`), API em `/api/clients/[name]/setup-meetings`.
+- Definir a data de início do onboarding agora **gera automaticamente** as 3 entregas recorrentes do ano 1 (Planejamento orçamentário no mês 4, Fechamento contábil no mês 6, Replanejamento geral no mês 12) como Tasks — `src/lib/onboarding-deliverables.ts`, idempotente (reajusta o prazo se a data mudar, nunca duplica).
+- Novo módulo de **Tratativas** (risco/atrito com cliente): model `Tratativa` (tipo preventiva/reativa, motivo, descrição, satisfação, problema na Oxy, responsável, status triagem→em_tratativa→plano_de_acao→concluida, desfecho recuperado/churn/downsell/mudança de escopo/desistência, motivo e data do churn). API em `/api/tratativas` (lista + criar) e `/api/tratativas/[id]` (editar). Nova página global `/tratativas` (com filtro por status e alerta quando há tratativa reativa aberta) e nova aba "Tratativas" na página de cada cliente — mesmo componente `TratativaCard` reaproveitado nos dois lugares.
+- `CalendarEvent` ganhou `meetingType` (extraído automaticamente do título do evento — só "Reunião Semanal" e "Comitê Estratégico Mensal" viram badge reconhecido, igual ao playbook) e `temperature` (clima da reunião — ótimo/bom/atenção/crítico), preenchido manualmente na aba "Reuniões" do cliente para reuniões já realizadas.
+- Menu lateral ganhou o item "Tratativas".
+- Testado ponta a ponta no dev server: tabela de clientes com saúde, criação/edição/conclusão de uma tratativa, definição de data de onboarding com geração das 3 entregas (datas conferidas e idempotência confirmada — reaplicar a mesma data não duplica), edição de reunião R1, e temperatura numa reunião passada. Todos os dados de teste foram removidos depois.
+
 ## 2026-07-08 (cont.)
 
 **Importação da carteira de clientes O2:**
