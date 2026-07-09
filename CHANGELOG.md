@@ -4,6 +4,10 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-09 (recaps 2)
+
+- Página `/recaps`: cada recap expandido ganhou o botão "Ver e-mail original", mostrando o corpo bruto do e-mail que a IA analisou pra gerar as sugestões — permite comparar o texto original com o que a IA extraiu antes de aceitar/rejeitar. O campo `body` já vinha da API, só não era exibido.
+
 ## 2026-07-09 (recaps)
 
 **Corrige duplicação de tarefas dos Meet Recaps + histórico de acerto da IA:**

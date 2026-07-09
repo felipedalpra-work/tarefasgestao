@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { RefreshCw, Sparkles, ChevronDown, ChevronUp, Plus, Pencil, X, ThumbsUp, XCircle, Undo2 } from "lucide-react";
+import { RefreshCw, Sparkles, ChevronDown, ChevronUp, Plus, Pencil, X, ThumbsUp, XCircle, Undo2, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
@@ -31,6 +31,7 @@ type Suggestion = {
 type Recap = {
   id: string;
   subject: string;
+  body: string;
   createdAt: string;
   processedAt?: string | null;
   client?: string | null;
@@ -55,6 +56,7 @@ function RecapsPageInner() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showBody, setShowBody] = useState<Record<string, boolean>>({});
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ title: "", description: "", assignee: "", priority: "medium" });
@@ -275,6 +277,24 @@ function RecapsPageInner() {
                   )}
                 </div>
               </div>
+
+              {isExpanded && (
+                <div className="border-t border-surface-3 px-5 pt-4">
+                  <button
+                    onClick={() => setShowBody((prev) => ({ ...prev, [recap.id]: !prev[recap.id] }))}
+                    className="flex items-center gap-1.5 text-xs text-ink-dim hover:text-ink transition-colors"
+                  >
+                    <Mail size={12} />
+                    {showBody[recap.id] ? "Ocultar e-mail original" : "Ver e-mail original (o que a IA analisou)"}
+                    {showBody[recap.id] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+                  {showBody[recap.id] && (
+                    <pre className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap break-words bg-surface-2 border border-surface-3 rounded-lg p-3 text-xs text-ink-dim font-sans">
+                      {recap.body || "(sem conteúdo)"}
+                    </pre>
+                  )}
+                </div>
+              )}
 
               {isExpanded && suggestions.length > 0 && (
                 <div className="border-t border-surface-3 p-5">
