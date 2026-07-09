@@ -2,9 +2,11 @@ import { prisma } from "./prisma";
 import { google } from "googleapis";
 import { log } from "./logger";
 
-// extrai o nome do cliente do título: "O2 Inc & Zé do Flor | Weekly" → "Zé do Flor"
+// extrai o nome do cliente do título: "O2 Inc. & Zé do Flor | Semanal" → "Zé do Flor"
+// exige o "|" — sem ele não dá pra distinguir reunião de cliente de reunião pessoal
+// (ex: "O2 Inc & Fulano de Contato, 11am" não é uma reunião de cliente)
 export function extractClientFromTitle(title: string): string | null {
-  const match = title.match(/O2\s*Inc\s*&\s*(.+?)(?:\s*\|.*)?$/i);
+  const match = title.match(/O2\s*Inc\.?\s*&\s*(.+?)\s*\|/i);
   return match ? match[1].trim() : null;
 }
 

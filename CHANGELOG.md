@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-09 (fix)
+
+**Bug no parser de título do calendário:**
+- `extractClientFromTitle` (`src/lib/calendar-sync.ts`) não reconhecia títulos com "O2 Inc." (com ponto) — só funcionava sem o ponto. Isso fazia reuniões reais (ex: "O2 Inc. & Captable | Semanal") não serem sincronizadas como reunião de cliente nenhuma. Corrigido pra aceitar o ponto opcional.
+- A extração agora **exige o "|"** no título pra considerar como reunião de cliente — sem isso, títulos como "O2 Inc & Fulano de Contato, 11am" (reunião com uma pessoa de contato, não um cliente) criavam um "cliente" fantasma com a hora colada no nome. Decisão do usuário: sem "|" não é reunião de cliente.
+- Título no padrão "`<Pessoa> / <Pessoa> | <Cliente>`" (sem o prefixo "O2 Inc") continua não sendo capturado — decisão consciente, só o padrão oficial do playbook conta.
+- Validado com os títulos reais do calendário do usuário (print da agenda) antes e depois da correção.
+
 ## 2026-07-09 (cont.)
 
 **Diagnóstico, checklist de reunião e Fechamento Mensal (Playbook CFOaaS):**
