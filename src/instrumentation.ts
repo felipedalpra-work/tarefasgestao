@@ -1,5 +1,10 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
+  // node-cron só funciona com um processo Node sempre vivo. Em produção (Vercel),
+  // as funções são serverless e ficam "congeladas" entre requisições — os timers
+  // do node-cron nunca chegam a disparar de verdade. Lá, quem aciona esses jobs
+  // é um agendador externo (GitHub Actions) batendo em /api/cron/[job].
+  // Aqui em dev local (processo sempre vivo) o node-cron funciona normalmente.
+  if (process.env.NEXT_RUNTIME === "nodejs" && !process.env.VERCEL) {
     const { default: cron } = await import("node-cron");
     const { syncAllUsers } = await import("./lib/gmail-sync");
     const { checkDeadlines } = await import("./lib/deadline-check");

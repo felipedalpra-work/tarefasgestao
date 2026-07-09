@@ -4,6 +4,21 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-09 (cron real + Sugestões da IA)
+
+**Bug de infraestrutura corrigido: automação não rodava de verdade em produção:**
+- `node-cron` (usado em `src/instrumentation.ts` pra sincronizar Gmail a cada 5 min, calendário a cada 30 min, alertas de prazo, briefing e digest semanal) depende de um processo Node sempre vivo. Na Vercel (serverless), a função "congela" entre requisições — os timers nunca disparavam de verdade em produção. Só funcionava em dev local (`npm run dev`).
+- Nova rota protegida `GET /api/cron/[job]` (jobs: `gmail-sync`, `calendar-sync`, `deadlines`, `briefing`, `digest`), autenticada por header `Authorization: Bearer <CRON_SECRET>`.
+- Novo workflow `.github/workflows/cron.yml`: como o plano é Vercel Hobby (Cron Jobs nativo só roda 1x/dia), o agendamento real passou a ser o GitHub Actions, batendo nos mesmos horários de antes (gmail a cada 5 min, calendário a cada 30 min, alertas 8h/17h BRT, briefing 18h BRT, digest segunda 8h BRT).
+- `instrumentation.ts`: node-cron agora só registra quando `!process.env.VERCEL` (ou seja, só em dev local) — evita rodar (e falhar silenciosamente) em produção.
+- **Pendente de configuração pelo usuário:** adicionar `CRON_SECRET` como env var no projeto da Vercel, e como secret do repositório no GitHub (Settings → Secrets and variables → Actions).
+- **Nota:** ao testar a rota `/api/cron/gmail-sync` com o secret real, isso disparou uma sincronização de Gmail de verdade (mesmo banco compartilhado dev/prod) — trouxe recaps reais (Bairral, Fismatek) com sugestões de tarefa pendentes reais, sem criar tarefa nenhuma automaticamente (confirma que o fix de duplicação continua valendo). Não foram apagados — ficaram como sugestões reais aguardando revisão.
+
+**Nova página "Sugestões da IA" (`/sugestoes-ia`):**
+- Lista plana com todas as sugestões de tarefa ainda pendentes de revisão, de todos os recaps, sem precisar expandir cada recap um por um — pedido do usuário pra facilitar o acesso.
+- Cada sugestão mostra o recap de origem (com link pra abrir e editar lá, se precisar) e os botões Adicionar/Descartar.
+- Item novo no menu lateral com contador de pendentes (atualiza a cada 60s).
+
 ## 2026-07-09 (recaps 2)
 
 - Página `/recaps`: cada recap expandido ganhou o botão "Ver e-mail original", mostrando o corpo bruto do e-mail que a IA analisou pra gerar as sugestões — permite comparar o texto original com o que a IA extraiu antes de aceitar/rejeitar. O campo `body` já vinha da API, só não era exibido.

@@ -1,0 +1,51 @@
+name: Scheduled jobs
+
+# node-cron não funciona de forma confiável em funções serverless (Vercel Hobby
+# não tem Cron Jobs frequentes). Esse workflow assume esse papel, batendo em
+# /api/cron/[job] nos mesmos horários que antes rodavam via node-cron.
+# Horários em UTC (Brasil = UTC-3, sem horário de verão).
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # gmail-sync — a cada 5 min
+    - cron: "*/30 * * * *" # calendar-sync — a cada 30 min
+    - cron: "0 11 * * *"   # deadlines — 8h BRT
+    - cron: "0 20 * * *"   # deadlines — 17h BRT
+    - cron: "0 21 * * *"   # briefing — 18h BRT
+    - cron: "0 11 * * 1"   # digest — segunda 8h BRT
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job pra rodar manualmente"
+        required: true
+        type: choice
+        options: [gmail-sync, calendar-sync, deadlines, briefing, digest]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determina qual job rodar
+        id: pick
+        run: |
+          if [ -n "${{ github.event.inputs.job }}" ]; then
+            echo "job=${{ github.event.inputs.job }}" >> "$GITHUB_OUTPUT"
+          else
+            case "${{ github.event.schedule }}" in
+              "*/5 * * * *")  echo "job=gmail-sync" >> "$GITHUB_OUTPUT" ;;
+              "*/30 * * * *") echo "job=calendar-sync" >> "$GITHUB_OUTPUT" ;;
+              "0 11 * * *")   echo "job=deadlines" >> "$GITHUB_OUTPUT" ;;
+              "0 20 * * *")   echo "job=deadlines" >> "$GITHUB_OUTPUT" ;;
+              "0 21 * * *")   echo "job=briefing" >> "$GITHUB_OUTPUT" ;;
+              "0 11 * * 1")   echo "job=digest" >> "$GITHUB_OUTPUT" ;;
+              *) echo "job=gmail-sync" >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+
+      - name: Chama /api/cron/${{ steps.pick.outputs.job }}
+        env:
+          APP_URL: https://tarefasgestao-zeta.vercel.app
+        run: |
+          curl -sf --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$APP_URL/api/cron/${{ steps.pick.outputs.job }}"

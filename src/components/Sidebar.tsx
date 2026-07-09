@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
@@ -16,6 +16,7 @@ const nav = [
   { href: "/kanban", label: "Kanban", icon: Kanban },
   { href: "/calendar", label: "Calendário", icon: CalendarDays },
   { href: "/recaps", label: "Meet Recaps", icon: FileText },
+  { href: "/sugestoes-ia", label: "Sugestões da IA", icon: Sparkles },
   { href: "/clientes", label: "Clientes", icon: Building2 },
   { href: "/tratativas", label: "Tratativas", icon: ShieldAlert },
   { href: "/logs", label: "Logs", icon: ScrollText },
@@ -26,6 +27,7 @@ export function Sidebar() {
   const path = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingSuggestions, setPendingSuggestions] = useState(0);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -33,6 +35,17 @@ export function Sidebar() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/recaps/accuracy")
+        .then((r) => r.json())
+        .then((data) => setPendingSuggestions(data.pending ?? 0))
+        .catch(() => {});
+    load();
+    const interval = setInterval(load, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   // fecha o drawer ao navegar
@@ -82,6 +95,11 @@ export function Sidebar() {
           >
             <Icon size={16} />
             {label}
+            {href === "/sugestoes-ia" && pendingSuggestions > 0 && (
+              <span className="ml-auto text-xs bg-o2-green/20 text-o2-green px-1.5 py-0.5 rounded-full">
+                {pendingSuggestions}
+              </span>
+            )}
           </Link>
         ))}
       </nav>
