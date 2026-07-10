@@ -46,6 +46,14 @@ jobs:
         env:
           APP_URL: https://tarefasgestao-zeta.vercel.app
         run: |
-          curl -sf --max-time 60 \
+          http_code=$(curl -s --max-time 60 -o response.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "$APP_URL/api/cron/${{ steps.pick.outputs.job }}"
+            "$APP_URL/api/cron/${{ steps.pick.outputs.job }}")
+          echo "HTTP status: $http_code"
+          echo "Resposta:"
+          cat response.json
+          echo
+          if [ "$http_code" -ge 400 ]; then
+            echo "::error::Job ${{ steps.pick.outputs.job }} falhou com HTTP $http_code"
+            exit 1
+          fi
