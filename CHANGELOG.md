@@ -4,6 +4,10 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-10 (lembretes: filtra Slack)
+
+- Dos 4 lembretes novos, só **Tratativa com prazo vencido** e **Fechamento mensal incompleto** continuam indo pro Slack — decisão do usuário pra reduzir ruído. Onboarding atrasado e sugestões da IA paradas ficam só na notificação in-app (sino). `broadcast`/`notifyOne` em `reminders.ts` ganharam um parâmetro `sendSlack`.
+
 ## 2026-07-10 (lembretes proativos)
 
 **4 novos alertas, reaproveitando a infraestrutura de notificação já existente (in-app + Slack):**

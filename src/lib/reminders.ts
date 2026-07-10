@@ -12,18 +12,20 @@ async function alreadyNotifiedToday(type: string, link: string): Promise<boolean
   return !!existing;
 }
 
-async function broadcast(users: { id: string }[], type: string, message: string, link: string) {
+// sendSlack=false: só notificação in-app (sino) — reservado pros lembretes menos
+// críticos, pra não gerar ruído em excesso no Slack do squad.
+async function broadcast(users: { id: string }[], type: string, message: string, link: string, sendSlack: boolean) {
   if (await alreadyNotifiedToday(type, link)) return;
   for (const u of users) {
     await prisma.notification.create({ data: { userId: u.id, type, message, link } });
-    await notifyUser(u.id, message).catch(() => {});
+    if (sendSlack) await notifyUser(u.id, message).catch(() => {});
   }
 }
 
-async function notifyOne(userId: string, type: string, message: string, link: string) {
+async function notifyOne(userId: string, type: string, message: string, link: string, sendSlack: boolean) {
   if (await alreadyNotifiedToday(type, link)) return;
   await prisma.notification.create({ data: { userId, type, message, link } });
-  await notifyUser(userId, message).catch(() => {});
+  if (sendSlack) await notifyUser(userId, message).catch(() => {});
 }
 
 const MILESTONES = [
@@ -54,7 +56,7 @@ export async function checkOnboardingDelays(): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `⏰ Onboarding atrasado: "${m.label}" de ${c.client} venceu em ${target.toLocaleDateString("pt-BR")}`;
-      await broadcast(users, `onboarding_atraso_${m.key}`, message, link);
+      await broadcast(users, `onboarding_atraso_${m.key}`, message, link, false);
       alerted++;
     }
   }
@@ -74,9 +76,9 @@ export async function checkTratativasOverdue(): Promise<number> {
     const link = `/tratativas`;
     const message = `⚠️ Tratativa com prazo vencido: "${t.motivo}" (${t.client}) — previsto pra ${new Date(t.dataPrevistaFinalizacao!).toLocaleDateString("pt-BR")}`;
     if (t.responsavelId) {
-      await notifyOne(t.responsavelId, `tratativa_atraso_${t.id}`, message, link);
+      await notifyOne(t.responsavelId, `tratativa_atraso_${t.id}`, message, link, true);
     } else {
-      await broadcast(users, `tratativa_atraso_${t.id}`, message, link);
+      await broadcast(users, `tratativa_atraso_${t.id}`, message, link, true);
     }
   }
   return tratativas.length;
@@ -112,7 +114,7 @@ export async function checkFechamentoIncompleto(): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `📋 Fechamento de ${String(p.month).padStart(2, "0")}/${p.year} de ${c.client} está incompleto`;
-      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link);
+      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, true);
       alerted++;
     }
   }
@@ -131,7 +133,7 @@ export async function checkStaleRecapSuggestions(): Promise<number> {
   if (count === 0) return 0;
 
   const message = `🤖 ${count} sugestão(ões) da IA aguardando revisão há mais de 3 dias`;
-  await broadcast(users, "recap_pendente", message, "/sugestoes-ia");
+  await broadcast(users, "recap_pendente", message, "/sugestoes-ia", false);
   return count;
 }
 
