@@ -8,6 +8,7 @@ export async function register() {
     const { default: cron } = await import("node-cron");
     const { syncAllUsers } = await import("./lib/gmail-sync");
     const { checkDeadlines } = await import("./lib/deadline-check");
+    const { checkAllReminders } = await import("./lib/reminders");
     const { syncAllCalendars } = await import("./lib/calendar-sync");
     const { sendMeetingBriefings } = await import("./lib/meeting-briefing");
     const { sendWeeklyDigest } = await import("./lib/weekly-digest");
@@ -24,14 +25,14 @@ export async function register() {
       catch (err) { console.error("[cron] calendar sync:", err); }
     });
 
-    // alertas de prazo: 8h e 17h
+    // alertas de prazo (tarefas, onboarding, tratativas, fechamento, sugestões da IA): 8h e 17h
     cron.schedule("0 8 * * *", async () => {
-      try { await checkDeadlines(); }
+      try { await checkDeadlines(); await checkAllReminders(); }
       catch (err) { console.error("[cron] deadline check 8h:", err); }
     });
 
     cron.schedule("0 17 * * *", async () => {
-      try { await checkDeadlines(); }
+      try { await checkDeadlines(); await checkAllReminders(); }
       catch (err) { console.error("[cron] deadline check 17h:", err); }
     });
 

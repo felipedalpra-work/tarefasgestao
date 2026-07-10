@@ -4,6 +4,18 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-10 (lembretes proativos)
+
+**4 novos alertas, reaproveitando a infraestrutura de notificação já existente (in-app + Slack):**
+- `src/lib/reminders.ts`, plugado no job `deadlines` (mesmo horário dos alertas de prazo de tarefa, 8h/17h):
+  - **Onboarding atrasado**: qualquer marco D+2..D+90 (CFO alocado, kickoff, Setup, Diagnóstico, Oxy) que passou do prazo sem a data real preenchida, pra clientes ativos.
+  - **Tratativa com prazo vencido**: `dataPrevistaFinalizacao` no passado e status ainda não `concluida`. Se a tratativa tem responsável definido, notifica só ele; sem responsável, notifica todo mundo.
+  - **Fechamento mensal incompleto**: perto da virada do mês (dias 25-31 checando o mês corrente, dias 1-5 checando o mês anterior) — se o checklist de `FechamentoMensal` não estiver 100% marcado.
+  - **Sugestões da IA paradas**: mais de 3 dias como `pending` sem revisão, um alerta agregado com a contagem.
+- Todos usam um dedup por dia (mesmo `type` + `link` não notifica de novo no mesmo dia) — testado rodando o job duas vezes seguidas e confirmando que não duplica.
+- Onboarding/Fechamento/Recap-parado notificam todo o squad (broadcast); Tratativa notifica o responsável específico quando definido.
+- Testado ponta a ponta: cliente de teste com onboarding 100 dias atrás (6 marcos atrasados → 24 notificações pros 4 usuários), tratativa com e sem responsável (broadcast vs. direcionada), sugestão parada há 4 dias. Dados de teste e notificações removidos depois.
+
 ## 2026-07-09 (cron real + Sugestões da IA)
 
 **Bug de infraestrutura corrigido: automação não rodava de verdade em produção:**
