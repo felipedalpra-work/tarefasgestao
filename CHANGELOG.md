@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-13 (modal de prazo ao adicionar sugestão da IA)
+
+- Novo componente `DeadlineConfirmModal` (`src/components/`): ao clicar em "Adicionar" numa sugestão de tarefa da IA (no botão rápido, sem passar pelo formulário de edição completo), agora abre um modal perguntando se quer definir um prazo antes de confirmar — pré-preenchido com o prazo que a IA sugeriu, se tiver. Deixar em branco = sem prazo.
+- Aplicado em `/recaps` e em `/sugestoes-ia` (as duas telas onde dá pra aceitar uma sugestão direto). O fluxo de "editar antes de adicionar" (lápis) não ganhou o modal — já tem o campo de prazo visível ali, seria redundante.
+- Se o prazo escolhido no modal for diferente do sugerido pela IA, a sugestão é marcada como `edited` (em vez de `accepted`) — mesma lógica de acurácia já existente.
+- O prazo já aparecia automaticamente na mensagem do Slack (`notifyTaskAssigned`, código existente) sempre que a tarefa tem `dueDate` — não precisou mudar nada lá, só garantir que o modal alimenta esse campo corretamente.
+- Testado ponta a ponta: sugestão sem prazo original + prazo definido no modal → task criada com o prazo certo, sugestão marcada `edited` e vinculada à task. Dados de teste removidos depois.
+
 ## 2026-07-10 (lembretes: filtra Slack)
 
 - Dos 4 lembretes novos, só **Tratativa com prazo vencido** e **Fechamento mensal incompleto** continuam indo pro Slack — decisão do usuário pra reduzir ruído. Onboarding atrasado e sugestões da IA paradas ficam só na notificação in-app (sino). `broadcast`/`notifyOne` em `reminders.ts` ganharam um parâmetro `sendSlack`.

@@ -6,6 +6,7 @@ import { Sparkles, Plus, XCircle, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
+import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
 
 type Suggestion = {
   id: string;
@@ -34,6 +35,7 @@ export default function SugestoesIaPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [actingKey, setActingKey] = useState<string | null>(null);
+  const [deadlinePrompt, setDeadlinePrompt] = useState<Row | null>(null);
 
   async function load() {
     const [recapsRes, usersRes] = await Promise.all([fetch("/api/recaps"), fetch("/api/users")]);
@@ -61,9 +63,11 @@ export default function SugestoesIaPage() {
     return found?.id ?? null;
   }
 
-  async function accept(row: Row) {
+  async function accept(row: Row, dueDate: string | null) {
     const key = row.suggestion.id;
     setActingKey(key);
+    const originalDate = row.suggestion.dueDate ? row.suggestion.dueDate.slice(0, 10) : null;
+    const edited = dueDate !== originalDate;
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -72,12 +76,12 @@ export default function SugestoesIaPage() {
         description: row.suggestion.description,
         priority: row.suggestion.priority || "medium",
         assigneeId: matchAssigneeId(row.suggestion.assignee),
-        dueDate: row.suggestion.dueDate,
+        dueDate,
         source: "meet_recap",
         sourceRef: row.recap.id,
         client: row.recap.client ?? null,
         recapSuggestionId: row.suggestion.id,
-        suggestionEdited: false,
+        suggestionEdited: edited,
       }),
     });
     setActingKey(null);
@@ -171,7 +175,7 @@ export default function SugestoesIaPage() {
                       <XCircle size={14} />
                     </button>
                     <button
-                      onClick={() => accept({ recap, suggestion })}
+                      onClick={() => setDeadlinePrompt({ recap, suggestion })}
                       disabled={acting}
                       className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
                     >
@@ -184,6 +188,18 @@ export default function SugestoesIaPage() {
             );
           })}
         </div>
+      )}
+
+      {deadlinePrompt && (
+        <DeadlineConfirmModal
+          title={deadlinePrompt.suggestion.title}
+          initialDate={deadlinePrompt.suggestion.dueDate}
+          onCancel={() => setDeadlinePrompt(null)}
+          onConfirm={(date) => {
+            accept(deadlinePrompt, date);
+            setDeadlinePrompt(null);
+          }}
+        />
       )}
     </div>
   );

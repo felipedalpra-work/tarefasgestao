@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
+import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
 
 type EditForm = {
   title: string;
@@ -60,6 +61,7 @@ function RecapsPageInner() {
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ title: "", description: "", assignee: "", priority: "medium" });
+  const [deadlinePrompt, setDeadlinePrompt] = useState<{ recap: Recap; suggestion: Suggestion } | null>(null);
 
   async function load() {
     const [recapsRes, usersRes, accuracyRes] = await Promise.all([
@@ -409,7 +411,7 @@ function RecapsPageInner() {
                                   <XCircle size={14} />
                                 </button>
                                 <button
-                                  onClick={() => addTask(recap, s, { title: s.title, description: s.description ?? "", assignee: s.assignee ?? "", priority: s.priority ?? "medium", dueDate: s.dueDate }, false)}
+                                  onClick={() => setDeadlinePrompt({ recap, suggestion: s })}
                                   disabled={acting}
                                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
                                 >
@@ -460,6 +462,32 @@ function RecapsPageInner() {
           </div>
         )}
       </div>
+
+      {deadlinePrompt && (
+        <DeadlineConfirmModal
+          title={deadlinePrompt.suggestion.title}
+          initialDate={deadlinePrompt.suggestion.dueDate}
+          onCancel={() => setDeadlinePrompt(null)}
+          onConfirm={(date) => {
+            const { recap, suggestion } = deadlinePrompt;
+            const originalDate = suggestion.dueDate ? suggestion.dueDate.slice(0, 10) : null;
+            const edited = date !== originalDate;
+            addTask(
+              recap,
+              suggestion,
+              {
+                title: suggestion.title,
+                description: suggestion.description ?? "",
+                assignee: suggestion.assignee ?? "",
+                priority: suggestion.priority ?? "medium",
+                dueDate: date,
+              },
+              edited
+            );
+            setDeadlinePrompt(null);
+          }}
+        />
+      )}
     </div>
   );
 }
