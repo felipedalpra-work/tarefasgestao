@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { recordTaskChanges } from "@/lib/activity";
+import { notifyTaskCompleted } from "@/lib/slack";
 
 const TASK_INCLUDE = {
   assignee: { select: { id: true, name: true, image: true } },
@@ -89,6 +90,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         link: `/tasks?task=${task.id}`,
       },
     }).catch((e) => console.error("[notification]", e));
+  }
+
+  // parabeniza no Slack quem concluiu a tarefa
+  if (body.status === "done" && before.status !== "done" && session.user?.id) {
+    await notifyTaskCompleted({
+      userDbId: session.user.id,
+      taskTitle: task.title,
+      client: task.client,
+    }).catch((e) => console.error("[slack]", e));
   }
 
   // recorrência: ao concluir, cria a próxima ocorrência

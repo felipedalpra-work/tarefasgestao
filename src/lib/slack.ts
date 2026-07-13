@@ -109,6 +109,31 @@ export async function notifyTaskAssigned({
   await sendSlackDM(slackUserId, config.botToken, lines.join("\n"));
 }
 
+export async function notifyTaskCompleted({
+  userDbId,
+  taskTitle,
+  client,
+}: {
+  userDbId: string;
+  taskTitle: string;
+  client?: string | null;
+}): Promise<void> {
+  const config = await getSlackConfig();
+  if (!config) return;
+
+  const slackUserId = config.userMap[userDbId];
+  if (!slackUserId) return;
+
+  const lines: string[] = [
+    `🎉 *Parabéns pela tarefa concluída!*`,
+    `*${taskTitle}*`,
+  ];
+  if (client) lines.push(`🏢 Cliente: *${client}*`);
+  lines.push("", "Mandou bem! 💪");
+
+  await sendSlackDM(slackUserId, config.botToken, lines.join("\n"));
+}
+
 // DM genérica para um usuário do banco (usada por menções em comentários)
 export async function notifyUser(dbUserId: string, message: string): Promise<void> {
   const config = await getSlackConfig();

@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-13 (parabéns no Slack ao concluir tarefa)
+
+- `notifyTaskCompleted` (`src/lib/slack.ts`): manda uma DM no Slack pra quem concluiu a tarefa, parabenizando e citando o nome da tarefa (e o cliente, se tiver).
+- Disparado em `PATCH /api/tasks/[id]` sempre que `status` muda de algo diferente de `"done"` para `"done"` — pega os dois caminhos que levam a isso (arrastar no Kanban e marcar como concluída no painel de detalhe), já que os dois passam por essa mesma rota.
+- Vai pra quem *marcou* como concluída (`session.user.id`), não necessariamente o responsável original da tarefa — é uma mensagem de reconhecimento pessoal, não uma notificação de mudança de status.
+- Se a pessoa não tiver Slack configurado (`slack_user_<id>` no Setting), a função simplesmente não faz nada — mesmo padrão de fallback silencioso já usado em `notifyTaskAssigned`/`notifyUser`.
+- Testado enviando uma DM real de teste (mensagem clara "[TESTE]") pro usuário com Slack configurado — confirmado `ok: true` na resposta da API do Slack. Script de teste removido depois.
+
 ## 2026-07-13 (logo real da O2 Inc.)
 
 - Novo componente `LogoIcon` (`src/components/LogoIcon.tsx`): ícone SVG vetorial do logo oficial da O2 Inc. (dois anéis concêntricos), recriado a partir do PDF de marca enviado pelo usuário — medi as proporções reais dos anéis em pixels (raio/espessura) pra reproduzir fielmente, não só "parecido".
