@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { LogoIcon } from "@/components/LogoIcon";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,7 +40,8 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-10">
-          <div className="inline-flex items-baseline gap-2 mb-3">
+          <div className="inline-flex items-center gap-2.5 mb-3">
+            <LogoIcon className="w-10 h-10 text-o2-green shrink-0" />
             <span className="text-5xl font-black text-o2-green tracking-tighter">O2</span>
             <span className="text-lg text-ink-mid uppercase tracking-widest font-medium">Squad</span>
           </div>

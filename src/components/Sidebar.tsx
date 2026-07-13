@@ -8,6 +8,7 @@ import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationsBell } from "./NotificationsBell";
+import { LogoIcon } from "./LogoIcon";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -57,6 +58,7 @@ export function Sidebar() {
       <div className="px-6 py-4 border-b border-surface-3 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
+            <LogoIcon className="w-6 h-6 text-o2-green shrink-0" />
             <span className="text-2xl font-black text-o2-green tracking-tight">O2</span>
             <span className="text-xs text-ink-mid uppercase tracking-widest font-medium mt-1">Squad</span>
           </div>
@@ -126,6 +128,7 @@ export function Sidebar() {
         <button onClick={() => setMobileOpen(true)} className="text-ink-mid hover:text-ink p-1">
           <Menu size={20} />
         </button>
+        <LogoIcon className="w-5 h-5 text-o2-green shrink-0" />
         <span className="text-lg font-black text-o2-green tracking-tight">O2</span>
         <span className="text-[10px] text-ink-mid uppercase tracking-widest font-medium">Squad</span>
         <button onClick={() => setSearchOpen(true)} className="ml-auto text-ink-mid hover:text-ink p-1">

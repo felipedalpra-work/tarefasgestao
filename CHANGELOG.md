@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-13 (logo real da O2 Inc.)
+
+- Novo componente `LogoIcon` (`src/components/LogoIcon.tsx`): ícone SVG vetorial do logo oficial da O2 Inc. (dois anéis concêntricos), recriado a partir do PDF de marca enviado pelo usuário — medi as proporções reais dos anéis em pixels (raio/espessura) pra reproduzir fielmente, não só "parecido".
+- Substituiu o texto solto "O2" (sem ícone) em: `Sidebar` (header desktop + barra mobile), `/login`, `/forgot-password`, `/reset-password`. O texto "O2 SQUAD" continua do lado do ícone — não trocamos pelo wordmark completo "O2 INC." porque este é o app do squad, não o institucional.
+- `favicon.ico` regerado (16/32/48/256px, PNG-in-ICO) com o mesmo ícone, verde sobre fundo escuro, batendo com o tema dark do app.
+- Testado visualmente com Playwright (screenshot real do `/login` e mockup do header do Sidebar) antes de commitar — sem servidor de imagem/conversão de PDF disponível no ambiente (sem poppler/ImageMagick/python), usei `pdfjs-dist` + `@napi-rs/canvas` num projeto node à parte (scratchpad) só pra extrair e medir o logo; nada disso entrou no repo.
+
 ## 2026-07-13 (modal de prazo ao adicionar sugestão da IA)
 
 - Novo componente `DeadlineConfirmModal` (`src/components/`): ao clicar em "Adicionar" numa sugestão de tarefa da IA (no botão rápido, sem passar pelo formulário de edição completo), agora abre um modal perguntando se quer definir um prazo antes de confirmar — pré-preenchido com o prazo que a IA sugeriu, se tiver. Deixar em branco = sem prazo.
