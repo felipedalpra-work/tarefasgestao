@@ -38,9 +38,26 @@
   to { opacity: 1; }
 }
 
+@keyframes login-enter {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes logo-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+
 .animate-slide-in-right { animation: slide-in-right 0.22s cubic-bezier(0.32, 0.72, 0.28, 1); }
 .animate-slide-in-up { animation: slide-in-up 0.18s ease-out; }
 .animate-fade-in { animation: fade-in 0.15s ease-out; }
+.animate-login-enter { animation: login-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-logo-breathe { animation: logo-breathe 3.5s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-login-enter,
+  .animate-logo-breathe { animation: none; }
+}
 
 * {
   box-sizing: border-box;

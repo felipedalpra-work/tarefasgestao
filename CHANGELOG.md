@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-17 (login interativo com efeito "wow")
+
+- Novo componente `LoginFX` (`src/components/LoginFX.tsx`): fundo vivo nas telas de auth — bolhas de oxigênio subindo que desviam do cursor, aurora verde que persegue o mouse com atraso, e clique/toque em qualquer lugar dispara anéis concêntricos verdes se expandindo (eco do logo O2). Canvas com rAF, cap de DPR em 2x e ~70 partículas no máximo; respeita `prefers-reduced-motion` (desliga tudo).
+- `TiltCard` (mesmo arquivo): tilt 3D sutil no card conforme a posição do mouse (só pointer de mouse, não touch), com retorno suave ao sair.
+- Animações de entrada (`animate-login-enter`, logo → card em sequência) e logo "respirando" (`animate-logo-breathe`) em `globals.css`.
+- Aplicado em `/login`, `/forgot-password` e `/reset-password` (compartilham o mesmo visual).
+- Escolha do usuário via pergunta: "tudo no máximo" (anéis + partículas + aurora + tilt), calibrado pra não virar poluição visual.
+
 ## 2026-07-13 (parabéns no Slack ao concluir tarefa)
 
 - `notifyTaskCompleted` (`src/lib/slack.ts`): manda uma DM no Slack pra quem concluiu a tarefa, parabenizando e citando o nome da tarefa (e o cliente, se tiver).
