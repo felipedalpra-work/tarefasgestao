@@ -87,6 +87,7 @@ model Task {
   activities  TaskActivity[]
   links       TaskLink[]
   recapSuggestion RecapSuggestion?
+  externalSuggestion ExternalSuggestion?
 
   @@index([assigneeId])
   @@index([status])
@@ -255,6 +256,29 @@ model RecapSuggestion {
 
   @@index([recapId])
   @@index([status])
+}
+
+// Sugestão de tarefa vinda de uma fonte externa (ex.: workflow n8n).
+// Igual à RecapSuggestion no espírito (fica pendente até alguém aceitar/descartar
+// em /sugestoes-ia), mas sem depender de um MeetRecap.
+model ExternalSuggestion {
+  id          String    @id @default(cuid())
+  source      String // "n8n" (aberto pra outras origens no futuro)
+  sourceRef   String?
+  title       String
+  description String?
+  client      String?
+  priority    String?
+  dueDate     DateTime?
+  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected"
+  taskId      String?   @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  task Task? @relation(fields: [taskId], references: [id])
+
+  @@index([status])
+  @@index([source])
 }
 
 model Setting {

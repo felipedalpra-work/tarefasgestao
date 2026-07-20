@@ -4,6 +4,19 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-20 (workflow n8n como fonte de sugestões)
+
+- Novo modelo `ExternalSuggestion` (`prisma/schema.prisma`): sugestão de tarefa vinda de fonte externa, sem depender de `MeetRecap` (diferente da `RecapSuggestion`, que é 1:1 amarrada a um recap).
+- `POST /api/webhooks/n8n`: recebe os itens do workflow n8n de uma colega de squad (que hoje só mandam pra uma lista no Slack), autenticado por `N8N_WEBHOOK_SECRET` (mesmo padrão Bearer do `CRON_SECRET` em `/api/cron/[job]`). Cria uma `ExternalSuggestion` pendente por item — não vira tarefa direto.
+- `GET /api/suggestions/external` e `PATCH /api/suggestions/external/[id]`: leitura/descarte da sugestão, autenticados por sessão (mesmo contrato do fluxo de Meet Recap).
+- `POST /api/tasks` aceita `externalSuggestionId` pra vincular a tarefa criada de volta à sugestão (mesmo mecanismo do `recapSuggestionId`).
+- `/sugestoes-ia` unificado: mostra sugestões de Meet Recap e do n8n na mesma lista de revisão, com "Adicionar"/"Descartar" pros dois tipos.
+- O workflow do n8n não define responsável (isso continua manual) — ao aceitar, a tarefa cai pra quem clicou "Adicionar" e é reatribuída depois pelo Kanban, como já acontecia.
+- `N8N_WEBHOOK_SECRET` precisa ser adicionado nas env vars da Vercel pra funcionar em produção (só existe no `.env` local por enquanto).
+- Depois de ver o JSON real do workflow (node `11 | Slack Lists | Build Tasks Payload`): prioridade lá é `P0`/`P1`/`P2`, não `high`/`medium`/`low`. `POST /api/webhooks/n8n` agora normaliza isso (`P0→high`, `P1→medium`, `P2→low`, case-insensitive; valor não reconhecido vira `null`, mesmo fallback que a UI já trata como "média").
+- `/sugestoes-ia` mostra o `sourceRef` (referência da reunião de origem, ex. `"O2 Inc. & Cliente — 20/07/2026"`) no lugar do texto genérico "n8n", quando presente — mesmo papel que o `subject` do recap tem pras sugestões de Meet Recap.
+- O workflow dela categoriza cada item como `tarefas_internas`/`tarefas_cliente`/`tarefas_bpo` — decidimos aceitar os três tipos como sugestão (não só as internas), porque acompanhar pendência do cliente/BPO também é parte do trabalho do squad (ver playbook CFOaaS); quem revisar em `/sugestoes-ia` descarta o que não for relevante.
+
 ## 2026-07-17 (login interativo com efeito "wow")
 
 - Novo componente `LoginFX` (`src/components/LoginFX.tsx`): fundo vivo nas telas de auth — bolhas de oxigênio subindo que desviam do cursor, aurora verde que persegue o mouse com atraso, e clique/toque em qualquer lugar dispara anéis concêntricos verdes se expandindo (eco do logo O2). Canvas com rAF, cap de DPR em 2x e ~70 partículas no máximo; respeita `prefers-reduced-motion` (desliga tudo).

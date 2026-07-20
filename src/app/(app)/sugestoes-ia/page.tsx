@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Plus, XCircle, ExternalLink } from "lucide-react";
+import { Sparkles, Plus, XCircle, ExternalLink, Workflow } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
@@ -26,9 +26,24 @@ type Recap = {
   suggestions: Suggestion[];
 };
 
+type ExternalSuggestion = {
+  id: string;
+  source: string;
+  sourceRef: string | null;
+  title: string;
+  description: string | null;
+  client: string | null;
+  priority: string | null;
+  dueDate: string | null;
+  status: "pending" | "accepted" | "edited" | "rejected";
+  createdAt: string;
+};
+
 type User = { id: string; name?: string | null; email: string };
 
-type Row = { recap: Recap; suggestion: Suggestion };
+type Row =
+  | { kind: "recap"; recap: Recap; suggestion: Suggestion; sortDate: string }
+  | { kind: "external"; suggestion: ExternalSuggestion; sortDate: string };
 
 export default function SugestoesIaPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -38,18 +53,32 @@ export default function SugestoesIaPage() {
   const [deadlinePrompt, setDeadlinePrompt] = useState<Row | null>(null);
 
   async function load() {
-    const [recapsRes, usersRes] = await Promise.all([fetch("/api/recaps"), fetch("/api/users")]);
+    const [recapsRes, usersRes, externalRes] = await Promise.all([
+      fetch("/api/recaps"),
+      fetch("/api/users"),
+      fetch("/api/suggestions/external"),
+    ]);
     const recaps: Recap[] = await recapsRes.json();
     const u = await usersRes.json();
+    const external: ExternalSuggestion[] = await externalRes.json();
     if (Array.isArray(u)) setUsers(u);
 
     const flat: Row[] = [];
     for (const recap of recaps) {
       for (const suggestion of recap.suggestions) {
-        if (suggestion.status === "pending") flat.push({ recap, suggestion });
+        if (suggestion.status === "pending") {
+          flat.push({ kind: "recap", recap, suggestion, sortDate: recap.createdAt });
+        }
       }
     }
-    flat.sort((a, b) => new Date(b.recap.createdAt).getTime() - new Date(a.recap.createdAt).getTime());
+    if (Array.isArray(external)) {
+      for (const suggestion of external) {
+        if (suggestion.status === "pending") {
+          flat.push({ kind: "external", suggestion, sortDate: suggestion.createdAt });
+        }
+      }
+    }
+    flat.sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
     setRows(flat);
     setLoaded(true);
   }
@@ -68,21 +97,37 @@ export default function SugestoesIaPage() {
     setActingKey(key);
     const originalDate = row.suggestion.dueDate ? row.suggestion.dueDate.slice(0, 10) : null;
     const edited = dueDate !== originalDate;
+
+    const body =
+      row.kind === "recap"
+        ? {
+            title: row.suggestion.title,
+            description: row.suggestion.description,
+            priority: row.suggestion.priority || "medium",
+            assigneeId: matchAssigneeId(row.suggestion.assignee),
+            dueDate,
+            source: "meet_recap",
+            sourceRef: row.recap.id,
+            client: row.recap.client ?? null,
+            recapSuggestionId: row.suggestion.id,
+            suggestionEdited: edited,
+          }
+        : {
+            title: row.suggestion.title,
+            description: row.suggestion.description,
+            priority: row.suggestion.priority || "medium",
+            dueDate,
+            source: "n8n",
+            sourceRef: row.suggestion.sourceRef,
+            client: row.suggestion.client,
+            externalSuggestionId: row.suggestion.id,
+            suggestionEdited: edited,
+          };
+
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: row.suggestion.title,
-        description: row.suggestion.description,
-        priority: row.suggestion.priority || "medium",
-        assigneeId: matchAssigneeId(row.suggestion.assignee),
-        dueDate,
-        source: "meet_recap",
-        sourceRef: row.recap.id,
-        client: row.recap.client ?? null,
-        recapSuggestionId: row.suggestion.id,
-        suggestionEdited: edited,
-      }),
+      body: JSON.stringify(body),
     });
     setActingKey(null);
     if (res.ok) {
@@ -96,7 +141,11 @@ export default function SugestoesIaPage() {
   async function reject(row: Row) {
     const key = row.suggestion.id;
     setActingKey(key);
-    const res = await fetch(`/api/recaps/${row.recap.id}/suggestions/${row.suggestion.id}`, {
+    const url =
+      row.kind === "recap"
+        ? `/api/recaps/${row.recap.id}/suggestions/${row.suggestion.id}`
+        : `/api/suggestions/external/${row.suggestion.id}`;
+    const res = await fetch(url, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "rejected" }),
@@ -117,7 +166,7 @@ export default function SugestoesIaPage() {
           Sugestões da IA
         </h1>
         <p className="text-ink-mid text-sm mt-0.5">
-          Todas as tarefas que a IA identificou nos Meet Recaps, ainda pendentes de revisão — em um só lugar.
+          Todas as tarefas que a IA identificou nos Meet Recaps e nos workflows conectados, ainda pendentes de revisão — em um só lugar.
         </p>
       </div>
 
@@ -131,20 +180,30 @@ export default function SugestoesIaPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {rows.map(({ recap, suggestion }) => {
+          {rows.map((row) => {
+            const { suggestion } = row;
             const acting = actingKey === suggestion.id;
             return (
               <div key={suggestion.id} className="bg-surface border border-surface-3 rounded-xl p-4">
                 <div className="flex items-center justify-between gap-3 mb-2.5">
-                  <Link
-                    href={`/recaps?recap=${recap.id}`}
-                    className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-o2-green transition-colors truncate"
-                  >
-                    <ExternalLink size={11} className="shrink-0" />
-                    <span className="truncate">{recap.subject}</span>
-                    <span className="shrink-0">· {format(new Date(recap.createdAt), "dd 'de' MMM", { locale: ptBR })}</span>
-                    {recap.client && <span className="shrink-0">· {recap.client}</span>}
-                  </Link>
+                  {row.kind === "recap" ? (
+                    <Link
+                      href={`/recaps?recap=${row.recap.id}`}
+                      className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-o2-green transition-colors truncate"
+                    >
+                      <ExternalLink size={11} className="shrink-0" />
+                      <span className="truncate">{row.recap.subject}</span>
+                      <span className="shrink-0">· {format(new Date(row.recap.createdAt), "dd 'de' MMM", { locale: ptBR })}</span>
+                      {row.recap.client && <span className="shrink-0">· {row.recap.client}</span>}
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-xs text-ink-faint truncate">
+                      <Workflow size={11} className="shrink-0" />
+                      <span className="truncate">{row.suggestion.sourceRef || "n8n"}</span>
+                      <span className="shrink-0">· {format(new Date(row.suggestion.createdAt), "dd 'de' MMM", { locale: ptBR })}</span>
+                      {row.suggestion.client && <span className="shrink-0">· {row.suggestion.client}</span>}
+                    </span>
+                  )}
                 </div>
 
                 <p className="text-sm font-medium text-ink">{suggestion.title}</p>
@@ -152,7 +211,9 @@ export default function SugestoesIaPage() {
 
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex items-center gap-2">
-                    {suggestion.assignee && <span className="text-xs text-ink-dim">→ {suggestion.assignee}</span>}
+                    {row.kind === "recap" && row.suggestion.assignee && (
+                      <span className="text-xs text-ink-dim">→ {row.suggestion.assignee}</span>
+                    )}
                     <span
                       className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
                         suggestion.priority === "high"
@@ -167,7 +228,7 @@ export default function SugestoesIaPage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => reject({ recap, suggestion })}
+                      onClick={() => reject(row)}
                       disabled={acting}
                       className="text-ink-faint hover:text-red-400 p-1.5 transition-colors disabled:opacity-50"
                       title="Descartar sugestão"
@@ -175,7 +236,7 @@ export default function SugestoesIaPage() {
                       <XCircle size={14} />
                     </button>
                     <button
-                      onClick={() => setDeadlinePrompt({ recap, suggestion })}
+                      onClick={() => setDeadlinePrompt(row)}
                       disabled={acting}
                       className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
                     >

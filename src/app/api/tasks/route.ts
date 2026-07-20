@@ -53,7 +53,12 @@ export async function POST(req: NextRequest) {
       taskId: task.id,
       userName: session.user.name ?? null,
       type: "created",
-      detail: task.source === "meet_recap" ? "Criada a partir de um Meet Recap" : "Tarefa criada",
+      detail:
+        task.source === "meet_recap"
+          ? "Criada a partir de um Meet Recap"
+          : task.source === "n8n"
+          ? "Criada a partir do workflow n8n"
+          : "Tarefa criada",
     },
   });
 
@@ -62,6 +67,13 @@ export async function POST(req: NextRequest) {
       where: { id: body.recapSuggestionId },
       data: { status: body.suggestionEdited ? "edited" : "accepted", taskId: task.id },
     }).catch((e) => console.error("[recap-suggestion] erro ao vincular:", e));
+  }
+
+  if (body.externalSuggestionId) {
+    await prisma.externalSuggestion.update({
+      where: { id: body.externalSuggestionId },
+      data: { status: body.suggestionEdited ? "edited" : "accepted", taskId: task.id },
+    }).catch((e) => console.error("[external-suggestion] erro ao vincular:", e));
   }
 
   // notificação in-app quando atribuída a outra pessoa
