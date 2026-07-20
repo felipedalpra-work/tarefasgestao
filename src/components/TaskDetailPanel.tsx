@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   X, Send, MessageSquare, Calendar, User, Tag, Building2, Clock, CheckCircle2,
-  Circle, AlertCircle, Trash2, Pencil, Check, ListChecks, Link2, Plus, History, Repeat,
+  Circle, AlertCircle, Trash2, Pencil, Check, ListChecks, Link2, Plus, History, Repeat, Video,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -430,6 +430,14 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
               {task.client && (
                 <MetaRow icon={Building2} label="Cliente">
                   <span className="text-xs text-ink-soft">{task.client}</span>
+                </MetaRow>
+              )}
+              {task.meetingTitle && (
+                <MetaRow icon={Video} label="Reunião de origem">
+                  <span className="text-xs text-ink-soft">
+                    {task.meetingTitle}
+                    {task.meetingDate && ` · ${format(new Date(task.meetingDate), "dd 'de' MMM 'de' yyyy", { locale: ptBR })}`}
+                  </span>
                 </MetaRow>
               )}
             </div>

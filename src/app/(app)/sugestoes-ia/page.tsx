@@ -40,6 +40,8 @@ type ExternalSuggestion = {
   dueDate: string | null;
   status: SuggestionStatus;
   duplicateNote?: string | null;
+  meetingTitle?: string | null;
+  meetingDate?: string | null;
   createdAt: string;
 };
 
@@ -124,6 +126,8 @@ export default function SugestoesIaPage() {
             source: "meet_recap",
             sourceRef: row.recap.id,
             client: row.recap.client ?? null,
+            meetingTitle: row.recap.subject,
+            meetingDate: row.recap.createdAt,
             recapSuggestionId: row.suggestion.id,
             suggestionEdited: edited,
           }
@@ -141,6 +145,8 @@ export default function SugestoesIaPage() {
               source: "n8n",
               sourceRef: row.suggestion.sourceRef,
               client: row.suggestion.client,
+              meetingTitle: row.suggestion.meetingTitle ?? null,
+              meetingDate: row.suggestion.meetingDate ?? null,
               externalSuggestionId: row.suggestion.id,
               suggestionEdited: edited,
             };

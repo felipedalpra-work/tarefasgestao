@@ -11,6 +11,8 @@ export type TaskListItem = {
   sortOrder?: number;
   recurrence?: string | null;
   deliverTo?: string | null;
+  meetingTitle?: string | null;
+  meetingDate?: string | Date | null;
   assignee?: { id: string; name?: string | null; image?: string | null } | null;
   subtasks?: { id: string; done: boolean }[];
   _count?: { links: number; comments: number };

@@ -77,6 +77,8 @@ model Task {
   sourceRef   String?
   client      String?
   deliverTo   String?
+  meetingTitle String? // assunto da reunião de origem (Meet Recap ou n8n), quando houver
+  meetingDate  DateTime? // data da reunião de origem
   sortOrder   Float     @default(0)
   recurrence  String?   // "weekly" | "biweekly" | "monthly"
   createdAt   DateTime  @default(now())
@@ -274,6 +276,8 @@ model ExternalSuggestion {
   dueDate     DateTime?
   status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "duplicate"
   duplicateNote String? // preenchido quando status = "duplicate": explica com o que bateu
+  meetingTitle String? // assunto da reunião de origem, se o workflow mandar
+  meetingDate  DateTime? // data da reunião de origem, se o workflow mandar
   taskId      String?   @unique
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

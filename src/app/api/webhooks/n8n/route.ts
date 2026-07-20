@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       status: duplicateNote ? "duplicate" : "pending",
       duplicateNote,
+      meetingTitle: body.meetingTitle || null,
+      meetingDate: body.meetingDate ? new Date(body.meetingDate) : null,
     },
   });
 

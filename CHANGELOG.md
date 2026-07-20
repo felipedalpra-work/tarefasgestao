@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-20 (mostrar reunião de origem — assunto e data — na tarefa)
+
+- Novos campos `meetingTitle`/`meetingDate` em `Task` e `ExternalSuggestion`. Cliente já era copiado pra `Task` na criação — só faltava assunto/data da reunião.
+- Meet Recap: `/sugestoes-ia` já tinha o `Recap` completo em mãos no aceite (`subject`, `createdAt`) — só passou a mandar isso pro `POST /api/tasks`, sem consulta nova no backend.
+- n8n: `POST /api/webhooks/n8n` aceita `meetingTitle`/`meetingDate` opcionais no body. Ainda não vêm de lá (a colega precisa adicionar esses 2 campos no node HTTP Request dela, referenciando `$node['07 | Meeting Meta...'].json.meeting_title`/`.meeting_date` — instruções passadas a ela); até isso acontecer, tarefas do n8n não mostram essa seção.
+- `TaskDetailPanel` ganhou a linha "Reunião de origem" (assunto + data), só aparece quando `task.meetingTitle` existe. Participantes ficou de fora por decisão do usuário — nenhum dos dois fluxos captura isso hoje, exigiria extração por IA nova.
+- **Backfill**: as 13 tarefas `meet_recap` já existentes sem esses campos foram atualizadas retroativamente (buscando o `MeetRecap` pelo `sourceRef`). Tarefas antigas do n8n não entraram no backfill — o `sourceRef` delas é só texto livre concatenado, sem como separar assunto/data com segurança.
+
 ## 2026-07-20 (filtro de pessoa multi-seleção + filtro de cliente com drill-down no Kanban)
 
 - Filtro de pessoa no Kanban (`/kanban`) deixou de ser seleção única e virou multi-seleção — dá pra combinar, por exemplo, Felipe + Tainara e ver só as tarefas dessas duas pessoas juntas. "Todos" limpa a seleção.

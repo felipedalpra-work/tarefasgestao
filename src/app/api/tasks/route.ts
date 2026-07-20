@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
       sourceRef: body.sourceRef || null,
       client: body.client || null,
       deliverTo: body.deliverTo || null,
+      meetingTitle: body.meetingTitle || null,
+      meetingDate: body.meetingDate ? new Date(body.meetingDate) : null,
       recurrence: body.recurrence || null,
     },
     include: {
