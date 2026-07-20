@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncAllUsers } from "@/lib/gmail-sync";
 import { syncAllCalendars } from "@/lib/calendar-sync";
-import { checkDeadlines } from "@/lib/deadline-check";
+import { checkDeadlines, checkClientTasksOverdue } from "@/lib/deadline-check";
 import { checkAllReminders } from "@/lib/reminders";
 import { sendMeetingBriefings } from "@/lib/meeting-briefing";
 import { sendWeeklyDigest } from "@/lib/weekly-digest";
@@ -14,6 +14,7 @@ const JOBS: Record<string, () => Promise<void>> = {
   "calendar-sync": syncAllCalendars,
   deadlines: async () => {
     await checkDeadlines();
+    await checkClientTasksOverdue();
     await checkAllReminders();
   },
   briefing: async () => {

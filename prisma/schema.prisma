@@ -79,6 +79,7 @@ model Task {
   deliverTo   String?
   meetingTitle String? // assunto da reunião de origem (Meet Recap ou n8n), quando houver
   meetingDate  DateTime? // data da reunião de origem
+  clientDraftCreatedAt DateTime? // quando o rascunho de cobrança pro cliente foi criado (evita duplicar)
   sortOrder   Float     @default(0)
   recurrence  String?   // "weekly" | "biweekly" | "monthly"
   createdAt   DateTime  @default(now())

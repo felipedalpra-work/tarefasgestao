@@ -26,14 +26,26 @@ function baseTemplate(content: string) {
             <td style="padding-bottom:28px;">
               <table cellpadding="0" cellspacing="0">
                 <tr>
-                  <td>
-                    <span style="font-size:30px;font-weight:900;color:#6BF169;letter-spacing:-1px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">O2</span>
-                    <span style="font-size:11px;color:#666666;text-transform:uppercase;letter-spacing:4px;margin-left:8px;vertical-align:middle;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Squad</span>
+                  <td style="padding-right:10px;vertical-align:middle;">
+                    <svg width="30" height="30" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="50" cy="50" r="45" stroke="#6BF169" stroke-width="9" fill="none" />
+                      <circle cx="50" cy="50" r="25" stroke="#6BF169" stroke-width="9" fill="none" />
+                    </svg>
                   </td>
-                </tr>
-                <tr>
-                  <td style="padding-top:2px;">
-                    <span style="font-size:11px;color:#444444;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">gestão fluída.</span>
+                  <td style="vertical-align:middle;">
+                    <table cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td>
+                          <span style="font-size:30px;font-weight:900;color:#6BF169;letter-spacing:-1px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">O2</span>
+                          <span style="font-size:11px;color:#666666;text-transform:uppercase;letter-spacing:4px;margin-left:8px;vertical-align:middle;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Squad</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding-top:2px;">
+                          <span style="font-size:11px;color:#444444;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">gestão fluída.</span>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
               </table>
@@ -267,4 +279,78 @@ export async function sendPasswordResetEmail({
   `);
 
   return getResend().emails.send({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
+}
+
+// Monta (sem enviar) o conteúdo de um e-mail de cobrança de pendência do cliente —
+// escrito como se fosse endereçado a ele, pra virar rascunho no Gmail de alguém do
+// squad revisar/completar destinatário antes de mandar. Ver src/lib/gmail-draft.ts.
+export function buildClientTaskDraftHtml({
+  client,
+  taskTitle,
+  taskDescription,
+  dueDate,
+  meetingTitle,
+  meetingDate,
+}: {
+  client: string;
+  taskTitle: string;
+  taskDescription?: string | null;
+  dueDate: Date;
+  meetingTitle?: string | null;
+  meetingDate?: Date | null;
+}) {
+  const dueDateStr = new Date(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  const meetingDateStr = meetingDate
+    ? new Date(meetingDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+    : null;
+
+  const html = baseTemplate(`
+    <!-- Title -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td>
+          <div style="width:36px;height:36px;background-color:#2d1a1a;border-radius:8px;display:inline-block;text-align:center;line-height:36px;margin-bottom:16px;">
+            <span style="font-size:18px;">⚠️</span>
+          </div>
+          <h1 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f0f0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Rascunho: cobrança de pendência</h1>
+          <p style="margin:0;font-size:13px;color:#666666;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Rascunho gerado automaticamente — revise, preencha o destinatário e edite como quiser antes de enviar.</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Divider -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td style="height:1px;background-color:#2a2a2a;"></td></tr>
+    </table>
+
+    <!-- Mensagem pro cliente -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#222222;border-radius:12px;margin-bottom:24px;">
+      <tr>
+        <td style="padding:20px;">
+          <p style="margin:0 0 14px;font-size:14px;color:#e0e0e0;line-height:1.7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Olá, tudo bem?</p>
+          <p style="margin:0 0 14px;font-size:14px;color:#e0e0e0;line-height:1.7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+            Passando para dar continuidade à pendência <strong style="color:#f0f0f0;">"${taskTitle}"</strong>${meetingTitle ? `, tratada na nossa reunião${meetingDateStr ? ` do dia ${meetingDateStr}` : ""} ("${meetingTitle}")` : ""}.
+          </p>
+          ${taskDescription ? `<p style="margin:0 0 14px;font-size:14px;color:#e0e0e0;line-height:1.7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">${taskDescription}</p>` : ""}
+          <p style="margin:0 0 14px;font-size:14px;color:#e0e0e0;line-height:1.7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+            O prazo combinado era <strong style="color:#f87171;">${dueDateStr}</strong> — poderia nos dar um retorno sobre o andamento?
+          </p>
+          <p style="margin:0;font-size:14px;color:#e0e0e0;line-height:1.7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Qualquer dúvida, estamos à disposição.</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Contexto interno (não faz parte da mensagem ao cliente) -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background-color:#161616;border-radius:8px;padding:12px 16px;">
+          <p style="margin:0;font-size:12px;color:#666666;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+            Cliente: <strong style="color:#888888;">${client}</strong> · Tarefa vencida desde ${dueDateStr}
+          </p>
+        </td>
+      </tr>
+    </table>
+  `);
+
+  return { subject: `Follow-up: ${taskTitle}`, html };
 }

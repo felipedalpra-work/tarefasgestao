@@ -4,6 +4,15 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-20 (rascunho de e-mail no Gmail do Felipe pra tarefa do cliente vencida)
+
+- Descoberta: `checkDeadlines` (`src/lib/deadline-check.ts`) só olha `task.assignee` — uma tarefa atribuída ao cliente (`assigneeId: null` + `deliverTo: "o2"`) nunca gerava alerta de prazo pra ninguém, mesmo vencida.
+- Nova `checkClientTasksOverdue()` no mesmo arquivo: pra tarefa do cliente vencida (e ainda não tratada), cria um **rascunho** — nunca envia — no Gmail do Felipe Dalpra (`src/lib/gmail-draft.ts`), com o corpo já redigido como se fosse pro cliente (menciona a pendência, contexto da reunião de origem se tiver, prazo vencido) pra ele revisar, completar o destinatário (não temos e-mail de cliente cadastrado na plataforma) e decidir se envia.
+- Novo campo `Task.clientDraftCreatedAt`: garante que o rascunho é criado **uma única vez** por tarefa (diferente do padrão de lembrete "1x por dia" de `reminders.ts` — rascunho repetido todo dia sujaria a caixa).
+- `baseTemplate()` em `src/lib/email.ts` ganhou o ícone real da marca (os anéis do `LogoIcon.tsx`, com cor fixa em vez de `currentColor` que não funciona em e-mail) — melhora todos os e-mails do sistema, não só esse.
+- **Escopo Google novo**: `gmail.compose` adicionado ao provider em `src/lib/auth.ts` (antes só tinha `gmail.readonly`/`calendar.readonly`). **O Felipe precisa reconectar a conta Google em Configurações depois desse deploy** — confirmei no banco que a conta dele só tem o escopo antigo; sem reconectar, a criação de rascunho falha com "insufficient authentication scopes" (testei e reproduzi esse erro exato, é o esperado até a reconexão).
+- Job de cron `deadlines` (`/api/cron/deadlines`) passou a chamar essa checagem também.
+
 ## 2026-07-20 (mostrar reunião de origem — assunto e data — na tarefa)
 
 - Novos campos `meetingTitle`/`meetingDate` em `Task` e `ExternalSuggestion`. Cliente já era copiado pra `Task` na criação — só faltava assunto/data da reunião.
