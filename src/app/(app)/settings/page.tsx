@@ -2,9 +2,10 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, UserPlus, Trash2 } from "lucide-react";
+import { toast } from "@/components/Toaster";
 
-type SquadUser = { id: string; name: string | null; email: string };
+type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null };
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -19,6 +20,13 @@ export default function SettingsPage() {
   const [slackSaving, setSlackSaving] = useState(false);
   const [slackMsg, setSlackMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+
+  // Equipe state
+  const [cargoDrafts, setCargoDrafts] = useState<Record<string, string>>({});
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
+  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "" });
+  const [addingMember, setAddingMember] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/google-status")
@@ -86,6 +94,58 @@ export default function SettingsPage() {
     setTestingId(null);
     const data = await res.json();
     setSlackMsg(data.ok ? { type: "ok", text: "Mensagem de teste enviada no Slack!" } : { type: "err", text: data.error || "Falha ao enviar. Verifique as configurações." });
+  }
+
+  async function saveCargo(userId: string) {
+    const cargo = cargoDrafts[userId];
+    if (cargo === undefined) return;
+    const original = users.find((u) => u.id === userId)?.cargo || "";
+    if (cargo === original) return;
+    const res = await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cargo }),
+    });
+    if (res.ok) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, cargo } : u)));
+      toast("Cargo atualizado", "success");
+    } else {
+      toast("Erro ao salvar o cargo", "error");
+    }
+  }
+
+  async function removeMember(userId: string) {
+    setRemovingId(userId);
+    const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+    setRemovingId(null);
+    setConfirmingRemoveId(null);
+    if (res.ok) {
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      toast("Membro removido", "success");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || "Erro ao remover", "error");
+    }
+  }
+
+  async function addMember() {
+    if (!newMember.email) { toast("Informe o e-mail", "error"); return; }
+    setAddingMember(true);
+    const res = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newMember),
+    });
+    setAddingMember(false);
+    if (res.ok) {
+      const created = await res.json();
+      setUsers((prev) => [...prev, created]);
+      setNewMember({ name: "", email: "", cargo: "" });
+      toast("Membro adicionado", "success");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || "Erro ao adicionar membro", "error");
+    }
   }
 
   return (
@@ -233,6 +293,97 @@ export default function SettingsPage() {
           <Save size={16} />
           {slackSaving ? "Salvando..." : "Salvar configurações Slack"}
         </button>
+      </div>
+
+      {/* Equipe */}
+      <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Equipe</h2>
+        <p className="text-xs text-ink-mid mb-6">Gerencie quem faz parte do squad e o cargo de cada um.</p>
+
+        <div className="space-y-2.5 mb-6">
+          {users.length === 0 ? (
+            <div className="h-10 bg-surface-2 rounded-lg animate-pulse" />
+          ) : users.map((u) => (
+            <div key={u.id} className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-o2-green/20 flex items-center justify-center text-o2-green text-xs font-bold shrink-0">
+                {(u.name || u.email)[0].toUpperCase()}
+              </div>
+              <div className="w-32 shrink-0">
+                <p className="text-sm text-ink truncate">{u.name || u.email}</p>
+                <p className="text-xs text-ink-faint truncate">{u.email}</p>
+              </div>
+              <input
+                type="text"
+                placeholder="Cargo (ex: CFO)"
+                value={cargoDrafts[u.id] ?? u.cargo ?? ""}
+                onChange={(e) => setCargoDrafts((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                onBlur={() => saveCargo(u.id)}
+                className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+              />
+              {confirmingRemoveId === u.id ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs text-ink-mid">Remover mesmo?</span>
+                  <button
+                    onClick={() => removeMember(u.id)}
+                    disabled={removingId === u.id}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                  >
+                    {removingId === u.id ? "..." : "Sim"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmingRemoveId(null)}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-2 border border-border text-ink-mid hover:text-ink"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingRemoveId(u.id)}
+                  className="p-2 text-ink-faint hover:text-red-400 transition-colors shrink-0"
+                  title="Remover da equipe"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-border pt-5">
+          <p className="text-xs text-ink-mid mb-2.5">Adicionar membro</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Nome"
+              value={newMember.name}
+              onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
+              className="w-28 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+            />
+            <input
+              type="email"
+              placeholder="E-mail"
+              value={newMember.email}
+              onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
+              className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+            />
+            <input
+              type="text"
+              placeholder="Cargo"
+              value={newMember.cargo}
+              onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+            />
+            <button
+              onClick={addMember}
+              disabled={addingMember || !newMember.email}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs bg-o2-green/10 text-o2-green rounded-lg hover:bg-o2-green/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            >
+              <UserPlus size={13} />
+              {addingMember ? "..." : "Adicionar"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

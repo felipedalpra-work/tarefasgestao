@@ -6,7 +6,7 @@ export const getUsers = unstable_cache(
   async () =>
     prisma.user.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true, image: true },
+      select: { id: true, name: true, email: true, image: true, cargo: true },
     }),
   ["users"],
   { tags: ["users"], revalidate: 300 } // 5 min

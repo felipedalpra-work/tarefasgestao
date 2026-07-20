@@ -13,6 +13,7 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?
+  cargo         String?
   accounts      Account[]
   sessions      Session[]
   tasks         Task[]         @relation("AssignedTasks")

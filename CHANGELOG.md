@@ -4,6 +4,21 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-20 (login com Google na tela de entrada)
+
+- Botão "Continuar com Google" em `/login`, ao lado do form de e-mail/senha — reaproveita o provider Google que já existia em `src/lib/auth.ts` (até então só usado em Configurações pra conectar Gmail/Calendar, nunca exposto como opção de login).
+- Motivo: membro novo da equipe (ver seção de gestão de equipe abaixo) não tem senha cadastrada — só dá pra logar via Google. O callback `signIn` do NextAuth já restringe a e-mails que já existem em `User`, então continua seguro (ninguém de fora consegue criar conta só clicando no botão).
+- Página dividida em `page.tsx` (server, chrome) + `login-form.tsx` (client, com `useSearchParams` dentro de `Suspense`) — mesmo padrão já usado em `/reset-password`, necessário porque `useSearchParams` fora de `Suspense` quebra o build.
+- Se o login com Google for rejeitado (e-mail sem acesso), a página mostra uma mensagem de erro lendo `?error=` da URL (antes esse caso não tinha nenhum feedback visual).
+
+## 2026-07-20 (cargo por pessoa + gestão de equipe em Configurações)
+
+- Novo campo `cargo` (texto livre) no `model User` (`prisma/schema.prisma`) — só um rótulo de exibição, não é permissão/enum.
+- `POST /api/users` (criar membro), `PATCH /api/users/[id]` (editar nome/cargo) e `DELETE /api/users/[id]` (remover) — todos autenticados por sessão. O `DELETE` primeiro conta `Task` (assigneeId/createdById), `TaskComment` e `Tratativa` vinculados à pessoa e bloqueia com 409 se houver algo pendente, porque essas relações não têm `onDelete: Cascade` e o Postgres rejeitaria a exclusão de qualquer jeito — preferimos um erro claro explicando o que precisa ser reatribuído.
+- Nova seção "Equipe" em `/settings`: lista quem faz parte do squad, cargo editável inline, remover com confirmação inline (sem modal novo), formulário pra adicionar gente nova.
+- Importante: login com Google só é liberado (`src/lib/auth.ts`, callback `signIn`) se o e-mail já existir em `User` — "adicionar" alguém na equipe é o que cria essa linha antes da pessoa tentar logar.
+- Mudança real de equipe aplicada: **Humberto saiu** (conta excluída — verificado antes que ele tinha zero tarefas/comentários/tratativas vinculados, exclusão seguro) e **Tainara Konzen** entrou (analista financeira, `tainara.konzen@o2inc.com.br` — provavelmente a mesma colega do workflow n8n conectado antes). Cargos: Felipe = Estagiário F&P, Gustavo = CFO, Tainara = Analista Financeira.
+
 ## 2026-07-20 (workflow n8n como fonte de sugestões)
 
 - Novo modelo `ExternalSuggestion` (`prisma/schema.prisma`): sugestão de tarefa vinda de fonte externa, sem depender de `MeetRecap` (diferente da `RecapSuggestion`, que é 1:1 amarrada a um recap).
