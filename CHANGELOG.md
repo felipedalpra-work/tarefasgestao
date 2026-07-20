@@ -4,6 +4,31 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-20 (filtro de pessoa multi-seleção + filtro de cliente com drill-down no Kanban)
+
+- Filtro de pessoa no Kanban (`/kanban`) deixou de ser seleção única e virou multi-seleção — dá pra combinar, por exemplo, Felipe + Tainara e ver só as tarefas dessas duas pessoas juntas. "Todos" limpa a seleção.
+- Novo filtro de cliente (dropdown), que aparece do lado do filtro de pessoa. É drill-down de propósito: as opções de cliente só mostram os clientes que aparecem nas tarefas das pessoas já selecionadas — em vez de um filtro fixo pra cada combinação pessoa×cliente (que explodiria em opções), são dois filtros independentes que se combinam (E lógico entre os dois).
+- Estado dos dois filtros vai pra URL (`?assignee=id1,id2&client=Nome`), então dá pra compartilhar/favoritar uma combinação específica.
+- Se a pessoa selecionada mudar e o cliente escolhido não tiver mais tarefa nenhuma nessa combinação, o filtro de cliente volta pra "Todos os clientes" automaticamente (evita ficar com filtro "travado" mostrando zero tarefas sem explicação).
+
+## 2026-07-20 (escolher responsável — pessoa do squad ou "Cliente" — nas sugestões do n8n)
+
+- Em `/sugestoes-ia`, cards de sugestão vindos do n8n ganharam um seletor "Responsável": pessoa do squad, "Cliente ({nome do cliente})", ou em branco (mantém o comportamento de sempre — cai pra quem clicar "Adicionar").
+- Reaproveitado `Task.deliverTo` (campo que já existia, usado em `NewTaskModal`/`calendar`/`meeting-briefing`) em vez de criar campo novo: `deliverTo: "o2"` = tarefa do cliente (ele entrega pra O2) — é a convenção real já em uso nesses 3 lugares.
+- **Achado**: o comentário do prompt da IA em `process-recap.ts` descreve o significado de `deliverTo` ao contrário do que os outros 3 lugares fazem. Inofensivo hoje (esse campo da IA nunca é persistido — `RecapSuggestion` não tem coluna `deliverTo`), mas documentado em memória pra não confundir quem for religar esse fio depois.
+- `POST /api/tasks` ganhou `noAssignee: true` — força `assigneeId: null` mesmo sem mandar um valor, porque o comportamento padrão (`body.assigneeId || session.user.id`) sempre cai pra quem criou/aceitou se não vier nada; sem esse flag não tinha como deixar uma tarefa de fato sem responsável.
+- `TaskCard` e `TaskDetailPanel` mostram "Cliente" no lugar do responsável quando `!assignee && deliverTo === "o2"` (antes disso, tarefa sem assignee simplesmente não mostrava nada nesse campo).
+- Testado via Prisma direto (sem sessão, então sem clique real no navegador): tarefa criada com `assigneeId: null, deliverTo: "o2"` e confirmado que o formato bate com o que os componentes esperam.
+
+## 2026-07-20 (detecção de sugestão duplicada + aba "Duplicadas")
+
+- Novo helper `findDuplicateNote(title, client)` (`src/lib/duplicate-detection.ts`): normaliza título/cliente (minúsculo, sem acento/pontuação) e checa igualdade exata contra `Task` abertas (`status != "done"`), outras `RecapSuggestion` pendentes e outras `ExternalSuggestion` pendentes do mesmo cliente. Sem cliente identificado, não checa nada (não dá pra comparar com segurança).
+- `processRecap` (`src/lib/process-recap.ts`) e `POST /api/webhooks/n8n` chamam esse helper antes de gravar a sugestão — se bater, ela já nasce com `status: "duplicate"` e `duplicateNote` preenchido, em vez de `"pending"`.
+- Novos campos: `status` de `RecapSuggestion`/`ExternalSuggestion` ganha o valor `"duplicate"`; ambos os modelos ganham `duplicateNote String?`.
+- `/sugestoes-ia` ganhou duas abas: "Pendentes" (comportamento de sempre) e "Duplicadas" — mostra o motivo da duplicidade em cada card e permite "Adicionar mesmo assim" (mesmo fluxo de aceite de sempre) pra quem achar que a detecção foi precipitada.
+- É comparação por **igualdade exata** após normalização, não similaridade aproximada — decisão deliberada pra evitar esconder tarefas só parecidas; o botão "Adicionar mesmo assim" é a válvula de escape pros casos que a checagem exata não pegar.
+- Testado via webhook do n8n: mesmo título+cliente de uma tarefa aberta → duplicate; cliente diferente → pending; título diferente → pending; sem cliente → pending; mesmo título+cliente de outra sugestão externa ainda pendente → duplicate.
+
 ## 2026-07-20 (login com Google na tela de entrada)
 
 - Botão "Continuar com Google" em `/login`, ao lado do form de e-mail/senha — reaproveita o provider Google que já existia em `src/lib/auth.ts` (até então só usado em Configurações pra conectar Gmail/Calendar, nunca exposto como opção de login).

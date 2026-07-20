@@ -10,6 +10,7 @@ export type TaskListItem = {
   source: string;
   sortOrder?: number;
   recurrence?: string | null;
+  deliverTo?: string | null;
   assignee?: { id: string; name?: string | null; image?: string | null } | null;
   subtasks?: { id: string; done: boolean }[];
   _count?: { links: number; comments: number };

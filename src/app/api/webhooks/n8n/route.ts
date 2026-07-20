@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { log } from "@/lib/logger";
+import { findDuplicateNote } from "@/lib/duplicate-detection";
 
 // O workflow n8n (extração de tarefas de Meet Recap via Gemini, node
 // "11 | Slack Lists | Build Tasks Payload") usa prioridade em P0/P1/P2 — aqui
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "title é obrigatório" }, { status: 400 });
   }
 
+  const duplicateNote = await findDuplicateNote(body.title, body.client || null);
+
   const suggestion = await prisma.externalSuggestion.create({
     data: {
       source: "n8n",
@@ -43,6 +46,8 @@ export async function POST(req: NextRequest) {
       client: body.client || null,
       priority: normalizePriority(body.priority),
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      status: duplicateNote ? "duplicate" : "pending",
+      duplicateNote,
     },
   });
 

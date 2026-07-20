@@ -137,9 +137,11 @@ export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem
               {format(new Date(task.dueDate), "dd MMM", { locale: ptBR })}
             </div>
           )}
-          {task.assignee && (
+          {task.assignee ? (
             <UserAvatar name={task.assignee.name} image={task.assignee.image} size="sm" />
-          )}
+          ) : task.deliverTo === "o2" ? (
+            <span className="text-[10px] text-ink-faint uppercase tracking-wide shrink-0">Cliente</span>
+          ) : null}
         </div>
       </div>
     </div>

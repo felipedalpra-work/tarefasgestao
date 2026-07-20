@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import Groq from "groq-sdk";
 import { log } from "./logger";
+import { findDuplicateNote } from "./duplicate-detection";
 
 let groq: Groq | null = null;
 function getGroq() {
@@ -144,6 +145,7 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
 
     const validTasks = tasks.filter((t) => t.title?.trim());
     if (validTasks.length > 0) {
+      const duplicateNotes = await Promise.all(validTasks.map((t) => findDuplicateNote(t.title!, client)));
       await prisma.recapSuggestion.createMany({
         data: validTasks.map((t, index) => ({
           recapId,
@@ -153,6 +155,8 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
           assignee: t.assignee || null,
           priority: ["high", "medium", "low"].includes(t.priority ?? "") ? t.priority! : "medium",
           dueDate: t.dueDate ? new Date(t.dueDate) : null,
+          status: duplicateNotes[index] ? "duplicate" : "pending",
+          duplicateNote: duplicateNotes[index],
         })),
       });
     }

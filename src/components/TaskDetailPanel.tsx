@@ -418,11 +418,15 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                   <span className="text-xs text-ink-soft">{RECURRENCE_LABELS[task.recurrence] ?? task.recurrence}</span>
                 </MetaRow>
               )}
-              {task.assignee && (
+              {task.assignee ? (
                 <MetaRow icon={User} label="Responsável">
                   <span className="text-xs text-ink-soft">{task.assignee.name}</span>
                 </MetaRow>
-              )}
+              ) : task.deliverTo === "o2" ? (
+                <MetaRow icon={User} label="Responsável">
+                  <span className="text-xs text-ink-soft">Cliente</span>
+                </MetaRow>
+              ) : null}
               {task.client && (
                 <MetaRow icon={Building2} label="Cliente">
                   <span className="text-xs text-ink-soft">{task.client}</span>

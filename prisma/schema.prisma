@@ -247,7 +247,8 @@ model RecapSuggestion {
   assignee    String?
   priority    String?
   dueDate     DateTime?
-  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "superseded"
+  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "superseded" | "duplicate"
+  duplicateNote String? // preenchido quando status = "duplicate": explica com o que bateu
   taskId      String?   @unique
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -271,7 +272,8 @@ model ExternalSuggestion {
   client      String?
   priority    String?
   dueDate     DateTime?
-  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected"
+  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "duplicate"
+  duplicateNote String? // preenchido quando status = "duplicate": explica com o que bateu
   taskId      String?   @unique
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

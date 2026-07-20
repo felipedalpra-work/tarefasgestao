@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Plus, XCircle, ExternalLink, Workflow } from "lucide-react";
+import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
+
+type SuggestionStatus = "pending" | "accepted" | "edited" | "rejected" | "duplicate";
 
 type Suggestion = {
   id: string;
@@ -15,7 +17,8 @@ type Suggestion = {
   assignee: string | null;
   priority: string | null;
   dueDate: string | null;
-  status: "pending" | "accepted" | "edited" | "rejected";
+  status: SuggestionStatus;
+  duplicateNote?: string | null;
 };
 
 type Recap = {
@@ -35,7 +38,8 @@ type ExternalSuggestion = {
   client: string | null;
   priority: string | null;
   dueDate: string | null;
-  status: "pending" | "accepted" | "edited" | "rejected";
+  status: SuggestionStatus;
+  duplicateNote?: string | null;
   createdAt: string;
 };
 
@@ -45,12 +49,19 @@ type Row =
   | { kind: "recap"; recap: Recap; suggestion: Suggestion; sortDate: string }
   | { kind: "external"; suggestion: ExternalSuggestion; sortDate: string };
 
+type Tab = "pending" | "duplicate";
+
+// valor sentinela pro select de responsável — indica "atribuir ao cliente" em vez de uma pessoa do squad
+const CLIENT_CHOICE = "__client__";
+
 export default function SugestoesIaPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [deadlinePrompt, setDeadlinePrompt] = useState<Row | null>(null);
+  const [tab, setTab] = useState<Tab>("pending");
+  const [assigneeChoice, setAssigneeChoice] = useState<Record<string, string>>({});
 
   async function load() {
     const [recapsRes, usersRes, externalRes] = await Promise.all([
@@ -66,14 +77,14 @@ export default function SugestoesIaPage() {
     const flat: Row[] = [];
     for (const recap of recaps) {
       for (const suggestion of recap.suggestions) {
-        if (suggestion.status === "pending") {
+        if (suggestion.status === "pending" || suggestion.status === "duplicate") {
           flat.push({ kind: "recap", recap, suggestion, sortDate: recap.createdAt });
         }
       }
     }
     if (Array.isArray(external)) {
       for (const suggestion of external) {
-        if (suggestion.status === "pending") {
+        if (suggestion.status === "pending" || suggestion.status === "duplicate") {
           flat.push({ kind: "external", suggestion, sortDate: suggestion.createdAt });
         }
       }
@@ -84,6 +95,10 @@ export default function SugestoesIaPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  const pendingRows = useMemo(() => rows.filter((r) => r.suggestion.status === "pending"), [rows]);
+  const duplicateRows = useMemo(() => rows.filter((r) => r.suggestion.status === "duplicate"), [rows]);
+  const visibleRows = tab === "pending" ? pendingRows : duplicateRows;
 
   function matchAssigneeId(name: string | null): string | null {
     if (!name) return null;
@@ -112,17 +127,24 @@ export default function SugestoesIaPage() {
             recapSuggestionId: row.suggestion.id,
             suggestionEdited: edited,
           }
-        : {
-            title: row.suggestion.title,
-            description: row.suggestion.description,
-            priority: row.suggestion.priority || "medium",
-            dueDate,
-            source: "n8n",
-            sourceRef: row.suggestion.sourceRef,
-            client: row.suggestion.client,
-            externalSuggestionId: row.suggestion.id,
-            suggestionEdited: edited,
-          };
+        : (() => {
+            const choice = assigneeChoice[row.suggestion.id] || "";
+            const isClient = choice === CLIENT_CHOICE;
+            return {
+              title: row.suggestion.title,
+              description: row.suggestion.description,
+              priority: row.suggestion.priority || "medium",
+              assigneeId: choice && !isClient ? choice : null,
+              noAssignee: isClient,
+              deliverTo: isClient ? "o2" : null,
+              dueDate,
+              source: "n8n",
+              sourceRef: row.suggestion.sourceRef,
+              client: row.suggestion.client,
+              externalSuggestionId: row.suggestion.id,
+              suggestionEdited: edited,
+            };
+          })();
 
     const res = await fetch("/api/tasks", {
       method: "POST",
@@ -170,17 +192,41 @@ export default function SugestoesIaPage() {
         </p>
       </div>
 
+      <div className="flex items-center gap-2 mb-5">
+        <button
+          onClick={() => setTab("pending")}
+          className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+            tab === "pending" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
+          }`}
+        >
+          Pendentes {loaded && `(${pendingRows.length})`}
+        </button>
+        <button
+          onClick={() => setTab("duplicate")}
+          className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+            tab === "duplicate" ? "bg-yellow-500/15 text-yellow-400" : "bg-surface-2 text-ink-mid hover:text-ink"
+          }`}
+        >
+          <AlertTriangle size={11} />
+          Duplicadas {loaded && `(${duplicateRows.length})`}
+        </button>
+      </div>
+
       {!loaded ? (
         <p className="text-xs text-ink-faint text-center py-8">Carregando…</p>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <div className="flex flex-col items-center py-24 text-center">
           <Sparkles size={40} className="text-border mb-4" />
-          <p className="text-ink-faint text-sm">Nenhuma sugestão pendente.</p>
-          <p className="text-ink-ghost text-xs mt-1">Tudo revisado — bom trabalho.</p>
+          <p className="text-ink-faint text-sm">
+            {tab === "pending" ? "Nenhuma sugestão pendente." : "Nenhuma duplicada encontrada."}
+          </p>
+          <p className="text-ink-ghost text-xs mt-1">
+            {tab === "pending" ? "Tudo revisado — bom trabalho." : "A IA não descartou nada por duplicidade."}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {rows.map((row) => {
+          {visibleRows.map((row) => {
             const { suggestion } = row;
             const acting = actingKey === suggestion.id;
             return (
@@ -208,6 +254,31 @@ export default function SugestoesIaPage() {
 
                 <p className="text-sm font-medium text-ink">{suggestion.title}</p>
                 {suggestion.description && <p className="text-xs text-ink-mid mt-1">{suggestion.description}</p>}
+                {tab === "duplicate" && suggestion.duplicateNote && (
+                  <p className="flex items-start gap-1.5 text-xs text-yellow-400 bg-yellow-500/10 rounded-lg px-2.5 py-1.5 mt-2">
+                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                    {suggestion.duplicateNote}
+                  </p>
+                )}
+
+                {row.kind === "external" && (
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <label className="text-xs text-ink-faint shrink-0">Responsável:</label>
+                    <select
+                      value={assigneeChoice[suggestion.id] || ""}
+                      onChange={(e) => setAssigneeChoice((prev) => ({ ...prev, [suggestion.id]: e.target.value }))}
+                      className="text-xs bg-surface-2 border border-border rounded-lg px-2 py-1 text-ink focus:outline-none focus:border-o2-green/50"
+                    >
+                      <option value="">Quem adicionar (padrão)</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                      ))}
+                      {row.suggestion.client && (
+                        <option value={CLIENT_CHOICE}>Cliente ({row.suggestion.client})</option>
+                      )}
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex items-center gap-2">
@@ -241,7 +312,7 @@ export default function SugestoesIaPage() {
                       className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
                     >
                       <Plus size={12} />
-                      {acting ? "Adicionando…" : "Adicionar"}
+                      {acting ? "Adicionando…" : tab === "duplicate" ? "Adicionar mesmo assim" : "Adicionar"}
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { TaskCard } from "@/components/TaskCard";
@@ -29,13 +29,36 @@ function KanbanPageInner() {
   const [dropTarget, setDropTarget] = useState<{ col: string; index: number } | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskListItem | null>(null);
 
-  const personFilter = searchParams.get("assignee"); // null = não definido, "all" = todos
+  const assigneeParam = searchParams.get("assignee"); // null = não definido, "all" = todos, ou lista separada por vírgula
+  const clientParam = searchParams.get("client"); // null/"all" = todos os clientes
 
-  const setAssigneeParam = useCallback((value: string) => {
+  const selectedAssignees = useMemo(
+    () => (assigneeParam && assigneeParam !== "all" ? assigneeParam.split(",").filter(Boolean) : []),
+    [assigneeParam]
+  );
+  const selectedClient = clientParam && clientParam !== "all" ? clientParam : null;
+
+  const setParams = useCallback((updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("assignee", value);
+    Object.entries(updates).forEach(([k, v]) => params.set(k, v));
     router.replace(`/kanban?${params.toString()}`, { scroll: false });
   }, [searchParams, router]);
+
+  function toggleAssignee(userId: string) {
+    const next = selectedAssignees.includes(userId)
+      ? selectedAssignees.filter((id) => id !== userId)
+      : [...selectedAssignees, userId];
+    setParams({ assignee: next.length ? next.join(",") : "all" });
+  }
+
+  // drill-down: só mostra clientes que aparecem nas tarefas das pessoas já selecionadas
+  const clientOptions = useMemo(() => {
+    const relevant = selectedAssignees.length
+      ? tasks.filter((t) => t.assignee && selectedAssignees.includes(t.assignee.id))
+      : tasks;
+    const set = new Set(relevant.map((t) => t.client).filter((c): c is string => !!c));
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [tasks, selectedAssignees]);
 
   async function load() {
     const [tasksRes, usersRes] = await Promise.all([
@@ -49,8 +72,13 @@ function KanbanPageInner() {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    if (session?.user?.id && personFilter === null) setAssigneeParam(session.user.id);
-  }, [session?.user?.id, personFilter, setAssigneeParam]);
+    if (session?.user?.id && assigneeParam === null) setParams({ assignee: session.user.id });
+  }, [session?.user?.id, assigneeParam, setParams]);
+
+  // drill-down: se o cliente selecionado deixou de existir entre as pessoas escolhidas, limpa
+  useEffect(() => {
+    if (selectedClient && !clientOptions.includes(selectedClient)) setParams({ client: "all" });
+  }, [selectedClient, clientOptions, setParams]);
 
   // Optimistic update: muda local na hora, persiste em background
   function patchTask(id: string, data: Record<string, unknown>) {
@@ -68,7 +96,9 @@ function KanbanPageInner() {
 
   function colTasksOf(colId: string) {
     return tasks
-      .filter((t) => t.status === colId && (!personFilter || personFilter === "all" || t.assignee?.id === personFilter))
+      .filter((t) => t.status === colId)
+      .filter((t) => selectedAssignees.length === 0 || (t.assignee && selectedAssignees.includes(t.assignee.id)))
+      .filter((t) => !selectedClient || t.client === selectedClient)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
@@ -106,36 +136,52 @@ function KanbanPageInner() {
         </button>
       </div>
 
-      {/* Person filter */}
-      <div className="flex items-center gap-1.5 bg-surface border border-surface-3 rounded-xl p-1 mb-4 self-start">
-        <button
-          onClick={() => setAssigneeParam("all")}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-            !personFilter || personFilter === "all" ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
-          }`}
-        >
-          Todos
-        </button>
-        {users.map((u) => {
-          const isActive = personFilter === u.id;
-          return (
-            <button
-              key={u.id}
-              onClick={() => setAssigneeParam(isActive ? "all" : u.id)}
-              title={u.name || u.email}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                isActive ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
-              }`}
-            >
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                isActive ? "bg-o2-green/30 text-o2-green" : "bg-surface-3 text-ink-mid"
-              }`}>
-                {(u.name || u.email)[0].toUpperCase()}
-              </span>
-              {u.name?.split(" ")[0] || u.email}
-            </button>
-          );
-        })}
+      {/* Person filter — multi-seleção: dá pra combinar mais de uma pessoa (ex: Felipe + Tainara) */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-1.5 bg-surface border border-surface-3 rounded-xl p-1 self-start">
+          <button
+            onClick={() => setParams({ assignee: "all" })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              selectedAssignees.length === 0 ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+            }`}
+          >
+            Todos
+          </button>
+          {users.map((u) => {
+            const isActive = selectedAssignees.includes(u.id);
+            return (
+              <button
+                key={u.id}
+                onClick={() => toggleAssignee(u.id)}
+                title={u.name || u.email}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  isActive ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+                }`}
+              >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                  isActive ? "bg-o2-green/30 text-o2-green" : "bg-surface-3 text-ink-mid"
+                }`}>
+                  {(u.name || u.email)[0].toUpperCase()}
+                </span>
+                {u.name?.split(" ")[0] || u.email}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Client filter — drill-down: só lista clientes das pessoas já selecionadas acima */}
+        {clientOptions.length > 0 && (
+          <select
+            value={selectedClient ?? "all"}
+            onChange={(e) => setParams({ client: e.target.value })}
+            className="bg-surface border border-surface-3 rounded-xl px-3 py-2 text-xs font-medium text-ink-mid focus:outline-none focus:border-o2-green/50"
+          >
+            <option value="all">Todos os clientes</option>
+            {clientOptions.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="flex gap-4 flex-1 overflow-x-auto pb-4">

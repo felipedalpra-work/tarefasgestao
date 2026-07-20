@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
       title: body.title,
       description: body.description || null,
       priority: body.priority || "medium",
-      assigneeId: body.assigneeId || session.user.id,
+      // noAssignee: true = intencionalmente sem responsável (ex: tarefa atribuída ao cliente,
+      // via deliverTo), não cai no padrão de "quem clicou criou/aceitou"
+      assigneeId: body.noAssignee ? null : body.assigneeId || session.user.id,
       createdById: session.user.id,
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       source: body.source || "manual",
