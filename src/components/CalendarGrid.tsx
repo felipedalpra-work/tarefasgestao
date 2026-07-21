@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Calendar, Users, Package, LayoutGrid, List } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, Calendar, Users, Package, LayoutGrid, List, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
@@ -16,6 +17,7 @@ type Task = {
   title: string;
   status: string;
   dueDate: string | null;
+  client?: string | null;
   assignee: { name: string | null } | null;
 };
 
@@ -69,10 +71,12 @@ export function CalendarGrid({
   year,
   month,
   events,
+  tasks,
 }: {
   year: number;
   month: number;
   events: CalendarEvent[];
+  tasks: Task[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
@@ -101,9 +105,15 @@ export function CalendarGrid({
     return events.filter(e => sameDay(new Date(e.startAt), day));
   }
 
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-  );
+  function tasksForDay(day: Date) {
+    return tasks.filter(t => t.dueDate && sameDay(new Date(t.dueDate), day));
+  }
+
+  // agenda = um item por dia com conteúdo (reunião e/ou tarefa com prazo), não só reunião
+  const agendaDays = days
+    .filter(d => d.getMonth() === month - 1)
+    .map(day => ({ day, dayEvents: eventsForDay(day), dayTasks: tasksForDay(day) }))
+    .filter(d => d.dayEvents.length > 0 || d.dayTasks.length > 0);
 
   return (
     <div className="flex flex-1 gap-0 min-h-0">
@@ -179,6 +189,9 @@ export function CalendarGrid({
                 const isToday = sameDay(day, today);
                 const isPast = day < today && !isToday;
                 const dayEvents = eventsForDay(day);
+                const dayTasks = tasksForDay(day);
+                const visibleTasks = dayTasks.slice(0, 3);
+                const hiddenTaskCount = dayTasks.length - visibleTasks.length;
 
                 return (
                   <div
@@ -228,65 +241,130 @@ export function CalendarGrid({
                         </button>
                       );
                     })}
+
+                    {/* Tasks with due date this day */}
+                    {visibleTasks.map(task => {
+                      const isDone = task.status === "done";
+                      const isOverdue = !isDone && isPast;
+                      return (
+                        <Link
+                          key={task.id}
+                          href={`/tasks?task=${task.id}`}
+                          className={cn(
+                            "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] truncate transition-colors",
+                            isDone
+                              ? "text-ink-ghost line-through"
+                              : isOverdue
+                              ? "text-red-400 bg-red-400/8 hover:bg-red-400/15"
+                              : "text-blue-400 bg-blue-400/8 hover:bg-blue-400/15"
+                          )}
+                        >
+                          <CheckSquare size={9} className="shrink-0" />
+                          <span className="truncate">{task.title}</span>
+                        </Link>
+                      );
+                    })}
+                    {hiddenTaskCount > 0 && (
+                      <span className="text-[9px] text-ink-ghost pl-1">+{hiddenTaskCount} tarefa{hiddenTaskCount > 1 ? "s" : ""}</span>
+                    )}
                   </div>
                 );
               })}
             </div>
           </>
         ) : (
-          /* Agenda view */
-          <div className="flex-1 overflow-y-auto space-y-1.5">
-            {sortedEvents.length === 0 && (
+          /* Agenda view — um bloco por dia com reunião e/ou tarefa com prazo */
+          <div className="flex-1 overflow-y-auto space-y-2">
+            {agendaDays.length === 0 && (
               <div className="text-center py-16 text-ink-faint">
                 <Calendar size={22} className="mx-auto mb-2 text-surface-3" />
-                <p className="text-sm">Nenhuma reunião neste mês</p>
+                <p className="text-sm">Nada agendado neste mês</p>
               </div>
             )}
-            {sortedEvents.map((event) => {
-              const start = new Date(event.startAt);
-              const isPast = start < today && !sameDay(start, today);
-              const isEventToday = sameDay(start, today);
-              const total = event.o2Tasks.length + event.clientTasks.length;
-              const isSelected = selected?.id === event.id;
+            {agendaDays.map(({ day, dayEvents, dayTasks }) => {
+              const isPast = day < today && !sameDay(day, today);
+              const isDayToday = sameDay(day, today);
               return (
-                <button
-                  key={event.id}
-                  onClick={() => setSelected(isSelected ? null : event)}
+                <div
+                  key={day.toISOString()}
                   className={cn(
-                    "w-full flex items-center gap-4 text-left rounded-xl border px-4 py-3 transition-all",
-                    isPast
-                      ? "bg-panel border-surface-2 hover:border-border"
-                      : "bg-surface border-surface-3 hover:border-o2-green/30",
-                    isEventToday && "border-o2-green/30 bg-green-wash",
-                    isSelected && "border-o2-green/50 ring-1 ring-o2-green/15"
+                    "rounded-xl border px-4 py-3 transition-all",
+                    isPast ? "bg-panel border-surface-2" : "bg-surface border-surface-3",
+                    isDayToday && "border-o2-green/30 bg-green-wash"
                   )}
                 >
-                  <div className="flex flex-col items-center w-12 shrink-0">
-                    <span className={cn(
-                      "text-lg font-bold leading-none",
-                      isEventToday ? "text-o2-green" : isPast ? "text-ink-ghost" : "text-ink"
-                    )}>
-                      {start.getDate()}
-                    </span>
-                    <span className="text-[10px] text-ink-faint uppercase mt-0.5">
-                      {start.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}
-                    </span>
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div className="flex flex-col items-center w-9 shrink-0">
+                      <span className={cn(
+                        "text-base font-bold leading-none",
+                        isDayToday ? "text-o2-green" : isPast ? "text-ink-ghost" : "text-ink"
+                      )}>
+                        {day.getDate()}
+                      </span>
+                      <span className="text-[9px] text-ink-faint uppercase mt-0.5">
+                        {day.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")}
+                      </span>
+                    </div>
+                    <div className="h-px flex-1 bg-surface-3" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn("text-sm font-semibold truncate", isPast ? "text-ink-faint" : "text-ink")}>
-                      {event.client}
-                    </p>
-                    <p className="text-xs text-ink-dim truncate mt-0.5">{event.title}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={cn("text-xs font-medium", isPast ? "text-ink-faint" : "text-ink-soft")}>
-                      {formatTime(event.startAt)}
-                    </p>
-                    {total > 0 && (
-                      <p className="text-[10px] text-o2-green mt-0.5">{total} entrega{total > 1 ? "s" : ""}</p>
-                    )}
-                  </div>
-                </button>
+
+                  {dayEvents.length > 0 && (
+                    <div className="space-y-1.5 mb-1.5">
+                      {dayEvents.map(event => {
+                        const total = event.o2Tasks.length + event.clientTasks.length;
+                        const isSelected = selected?.id === event.id;
+                        return (
+                          <button
+                            key={event.id}
+                            onClick={() => setSelected(isSelected ? null : event)}
+                            className={cn(
+                              "w-full flex items-center gap-2.5 text-left rounded-lg px-2.5 py-1.5 transition-all",
+                              isSelected ? "bg-o2-green/15 ring-1 ring-o2-green/25" : "hover:bg-surface-2"
+                            )}
+                          >
+                            <Calendar size={13} className="text-o2-green shrink-0" />
+                            <span className={cn("text-xs font-semibold truncate flex-1", isPast ? "text-ink-faint" : "text-ink")}>
+                              {event.client}
+                            </span>
+                            <span className={cn("text-[11px] shrink-0", isPast ? "text-ink-faint" : "text-ink-soft")}>
+                              {formatTime(event.startAt)}
+                            </span>
+                            {total > 0 && (
+                              <span className="text-[10px] text-o2-green shrink-0">{total} entrega{total > 1 ? "s" : ""}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {dayTasks.length > 0 && (
+                    <div className="space-y-1">
+                      {dayTasks.map(task => {
+                        const isDone = task.status === "done";
+                        const isOverdue = !isDone && isPast;
+                        return (
+                          <Link
+                            key={task.id}
+                            href={`/tasks?task=${task.id}`}
+                            className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-surface-2 transition-colors"
+                          >
+                            <CheckSquare size={13} className={cn("shrink-0", isDone ? "text-ink-ghost" : isOverdue ? "text-red-400" : "text-blue-400")} />
+                            <span className={cn("text-xs truncate flex-1", isDone ? "text-ink-ghost line-through" : isOverdue ? "text-red-400" : "text-ink-soft")}>
+                              {task.title}
+                            </span>
+                            {task.client && (
+                              <span className="text-[10px] text-ink-faint shrink-0 truncate max-w-[100px]">{task.client}</span>
+                            )}
+                            {task.assignee?.name && (
+                              <span className="text-[10px] text-ink-faint shrink-0">{task.assignee.name}</span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-21 (calendário mostra todas as tarefas do dia, não só entregas ligadas a reunião)
+
+- Antes, `/calendar` só mostrava tarefa dentro do painel de uma reunião (e só se o cliente da tarefa batesse com o cliente da reunião do dia). Tarefa sem cliente, ou com cliente sem reunião marcada, nunca aparecia no calendário.
+- `getCalendarData` (`src/app/(app)/calendar/page.tsx`) agora também monta uma lista de **todas** as tarefas com prazo no mês visível, independente de cliente/reunião — passada como prop `tasks` pro `CalendarGrid`.
+- Visão Mês: cada dia mostra até 3 tarefas com prazo naquele dia (ícone de check, título, cor por estado — azul pendente, vermelho atrasada, cinza riscado se concluída), com "+N tarefas" se passar disso. Clicar leva pra `/tasks?task=<id>` (mesmo deep-link que notificação e Slack já usam).
+- Visão Agenda: reescrita de "uma linha por reunião" pra "um bloco por dia" — assim um dia só com tarefa (sem reunião nenhuma) também aparece, não só dias com reunião.
+- Testado contra o banco real (script descartável, só leitura): 5 das 11 tarefas existentes têm prazo no mês corrente e caem nos dias certos.
+
 ## 2026-07-21 (botão de lembrete no Slack por tarefa)
 
 - Cada tarefa com responsável ganhou um botão "Lembrar" ao lado do nome dele no detalhe da tarefa (`TaskDetailPanel`) — manda uma DM no Slack cobrando a tarefa, sob demanda (diferente da notificação automática que já existia só na atribuição/conclusão).
