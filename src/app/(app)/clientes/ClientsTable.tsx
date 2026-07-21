@@ -58,6 +58,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
   const [rows, setRows] = useState(clients);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState<string | null>(null);
+  const deleteTarget = rows.find((r) => r.name === confirmingDelete) ?? null;
 
   async function deleteClient(row: ClientRow) {
     setDeletingName(row.name);
@@ -201,39 +202,51 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                 />
               </td>
               <td className="px-4 py-2.5">
-                {confirmingDelete === c.name ? (
-                  <div className="flex items-center gap-1 whitespace-nowrap">
-                    <span className="text-xs text-ink-mid">
-                      Apagar {c.tasks} tarefa(s), {c.meetings} reunião(ões) e {c.recaps} recap(s)?
-                    </span>
-                    <button
-                      onClick={() => deleteClient(c)}
-                      disabled={deletingName === c.name}
-                      className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 shrink-0"
-                    >
-                      {deletingName === c.name ? "..." : "Sim"}
-                    </button>
-                    <button
-                      onClick={() => setConfirmingDelete(null)}
-                      className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-2 border border-border text-ink-mid hover:text-ink shrink-0"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmingDelete(c.name)}
-                    className="p-1.5 text-ink-faint hover:text-red-400 transition-colors"
-                    title="Excluir cliente"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
+                <button
+                  onClick={() => setConfirmingDelete(c.name)}
+                  className="p-1.5 text-ink-faint hover:text-red-400 transition-colors"
+                  title="Excluir cliente"
+                >
+                  <Trash2 size={14} />
+                </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setConfirmingDelete(null)}
+        >
+          <div
+            className="bg-panel border border-surface-3 rounded-2xl p-6 max-w-sm w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-ink mb-3">Excluir cliente?</h3>
+            <p className="text-xs text-ink-soft mb-5">
+              Isso apaga <span className="text-ink font-medium">{deleteTarget.name}</span> e{" "}
+              {deleteTarget.tasks} tarefa(s), {deleteTarget.meetings} reunião(ões), {deleteTarget.recaps} recap(s). Não pode ser desfeito.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmingDelete(null)}
+                className="text-xs px-4 py-2 rounded-lg font-medium text-ink-dim hover:text-ink transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteClient(deleteTarget)}
+                disabled={deletingName === deleteTarget.name}
+                className="bg-red-500/10 text-red-400 hover:bg-red-500/20 px-4 py-2 rounded-lg font-bold text-xs disabled:opacity-50"
+              >
+                {deletingName === deleteTarget.name ? "Excluindo..." : "Excluir definitivamente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

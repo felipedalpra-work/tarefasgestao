@@ -82,6 +82,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
     setTab("comments");
     setText("");
     setConfirmDelete(false);
+    setDeleting(false);
     setEditing(false);
     setStatusMenu(false);
     setShowLinkInput(false);
@@ -159,6 +160,8 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
       if (res.ok) {
         toast("Tarefa deletada", "success");
+        setDeleting(false);
+        setConfirmDelete(false);
         onDeleted?.(task.id);
         onClose();
       } else {
