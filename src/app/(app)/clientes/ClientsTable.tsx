@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 
@@ -56,6 +56,22 @@ function toDateInputValue(v: string | Date | null) {
 
 export function ClientsTable({ clients }: { clients: ClientRow[] }) {
   const [rows, setRows] = useState(clients);
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [deletingName, setDeletingName] = useState<string | null>(null);
+
+  async function deleteClient(row: ClientRow) {
+    setDeletingName(row.name);
+    const res = await fetch(`/api/clients/${encodeURIComponent(row.name)}`, { method: "DELETE" });
+    setDeletingName(null);
+    setConfirmingDelete(null);
+    if (res.ok) {
+      setRows((prev) => prev.filter((r) => r.name !== row.name));
+      toast("Cliente excluído", "success");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || "Erro ao excluir cliente", "error");
+    }
+  }
 
   async function patch(name: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/clients/${encodeURIComponent(name)}`, {
@@ -95,6 +111,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
             <th className="text-left px-4 py-3 font-medium">Últ. atualização</th>
             <th className="text-left px-4 py-3 font-medium">Tarefas abertas</th>
             <th className="text-left px-4 py-3 font-medium">Pendências na Oxy</th>
+            <th className="px-4 py-3 font-medium w-10"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-3">
@@ -182,6 +199,36 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                   }}
                   className="w-full bg-transparent border border-transparent hover:border-surface-3 focus:border-o2-green/50 rounded-lg px-2 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none transition-colors"
                 />
+              </td>
+              <td className="px-4 py-2.5">
+                {confirmingDelete === c.name ? (
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="text-xs text-ink-mid">
+                      Apagar {c.tasks} tarefa(s), {c.meetings} reunião(ões) e {c.recaps} recap(s)?
+                    </span>
+                    <button
+                      onClick={() => deleteClient(c)}
+                      disabled={deletingName === c.name}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 shrink-0"
+                    >
+                      {deletingName === c.name ? "..." : "Sim"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDelete(null)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-2 border border-border text-ink-mid hover:text-ink shrink-0"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDelete(c.name)}
+                    className="p-1.5 text-ink-faint hover:text-red-400 transition-colors"
+                    title="Excluir cliente"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </td>
             </tr>
           ))}

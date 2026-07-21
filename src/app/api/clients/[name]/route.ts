@@ -151,3 +151,33 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   return NextResponse.json(note);
 }
+
+// Exclui o cliente e tudo que aponta pro nome dele (client não é entidade própria,
+// é string espalhada em Task/CalendarEvent/MeetRecap/Tratativa/SetupMeeting/FechamentoMensal).
+// Ação destrutiva e irreversível — a confirmação fica a cargo da UI.
+export async function DELETE(_req: NextRequest, { params }: Params) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { name } = await params;
+  const client = decodeURIComponent(name);
+
+  await prisma.$transaction([
+    prisma.meetRecap.deleteMany({ where: { client } }), // cascade apaga RecapSuggestion junto
+    prisma.externalSuggestion.deleteMany({ where: { client } }),
+    prisma.task.deleteMany({ where: { client } }), // cascade apaga Subtask/TaskActivity/TaskLink/TaskComment junto
+    prisma.calendarEvent.deleteMany({ where: { client } }),
+    prisma.tratativa.deleteMany({ where: { client } }),
+    prisma.setupMeeting.deleteMany({ where: { client } }),
+    prisma.fechamentoMensal.deleteMany({ where: { client } }),
+    prisma.clientNote.deleteMany({ where: { client } }),
+  ]);
+
+  revalidateTag("clients", "max");
+  revalidateTag("calendar", "max");
+  revalidateTag("recaps", "max");
+  revalidateTag("tasks", "max");
+  revalidateTag("tratativas", "max");
+
+  return NextResponse.json({ ok: true });
+}

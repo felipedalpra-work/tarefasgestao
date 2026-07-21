@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-21 (excluir cliente)
+
+- Novo `DELETE /api/clients/[name]` — como "cliente" não é entidade própria (é string espalhada em `Task`/`CalendarEvent`/`MeetRecap`/`Tratativa`/`SetupMeeting`/`FechamentoMensal`, mais o perfil em `ClientNote`), excluir um cliente apaga, numa transação, todas as linhas dessas tabelas que apontam pro nome — inclui cascade de `Subtask`/`TaskActivity`/`TaskLink`/`TaskComment`/`RecapSuggestion`. Ação irreversível.
+- UI em dois lugares: ícone de lixeira por linha em `/clientes` (confirmação inline com contagem de tarefas/reuniões/recaps) e botão "Excluir cliente" no cabeçalho de `/clientes/[slug]` (confirmação mais forte — precisa digitar o nome do cliente, já que ali dá pra ver o volume completo de dados que seriam perdidos).
+- Testado direto contra o Postgres do Neon (script descartável, cliente fake `__TESTE_CLAUDE_DELETE_CLIENT__` sem colidir com dado real): criei uma linha em cada tabela afetada + filhos em cascade, rodei a transação de exclusão e confirmei zero sobras em todas elas.
+
 ## 2026-07-20 (rascunho de e-mail no Gmail do Felipe pra tarefa do cliente vencida)
 
 - Descoberta: `checkDeadlines` (`src/lib/deadline-check.ts`) só olha `task.assignee` — uma tarefa atribuída ao cliente (`assigneeId: null` + `deliverTo: "o2"`) nunca gerava alerta de prazo pra ninguém, mesmo vencida.

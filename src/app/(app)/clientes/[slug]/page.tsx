@@ -4,6 +4,7 @@ import { Building2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientTabs } from "./ClientTabs";
+import { DeleteClientButton } from "./DeleteClientButton";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -45,7 +46,7 @@ export default async function ClientePage({ params }: Props) {
         <div className="w-12 h-12 rounded-xl bg-o2-green/10 flex items-center justify-center shrink-0">
           <Building2 size={22} className="text-o2-green" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-ink">{client}</h1>
           {lastMeeting && (
             <p className="text-sm text-ink-dim mt-0.5">
@@ -53,6 +54,10 @@ export default async function ClientePage({ params }: Props) {
             </p>
           )}
         </div>
+        <DeleteClientButton
+          client={client}
+          counts={{ tasks: tasks.length, events: events.length, recaps: recaps.length, tratativas: tratativas.length }}
+        />
       </div>
 
       <ClientTabs
