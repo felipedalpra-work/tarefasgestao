@@ -109,6 +109,54 @@ export async function notifyTaskAssigned({
   await sendSlackDM(slackUserId, config.botToken, lines.join("\n"));
 }
 
+// DM manual disparada pela pessoa que abriu a tarefa, cobrando o responsável (botão "Lembrar" no detalhe da tarefa)
+export async function notifyTaskReminder({
+  assigneeDbId,
+  taskId,
+  taskTitle,
+  taskDescription,
+  priority,
+  dueDate,
+  client,
+  requestedBy,
+}: {
+  assigneeDbId: string;
+  taskId?: string;
+  taskTitle: string;
+  taskDescription?: string | null;
+  priority: string;
+  dueDate?: Date | null;
+  client?: string | null;
+  requestedBy?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const config = await getSlackConfig();
+  if (!config) return { ok: false, error: "Integração com Slack não configurada (Configurações → Slack)" };
+
+  const slackUserId = config.userMap[assigneeDbId];
+  if (!slackUserId) return { ok: false, error: "Responsável sem Slack User ID configurado (Configurações → Slack)" };
+
+  const priorityEmoji: Record<string, string> = {
+    high: "🔴",
+    medium: "🟡",
+    low: "🟢",
+  };
+
+  const lines: string[] = [
+    `🔔 *Lembrete de tarefa*${requestedBy ? ` — pedido por ${requestedBy}` : ""}`,
+    `*${taskTitle}*`,
+  ];
+  if (taskDescription) lines.push(taskDescription);
+  lines.push("");
+  lines.push(`${priorityEmoji[priority] ?? "⚪"} Prioridade: *${priority === "high" ? "Alta" : priority === "medium" ? "Média" : "Baixa"}*`);
+  if (client) lines.push(`🏢 Cliente: *${client}*`);
+  if (dueDate) lines.push(`📅 Prazo: *${new Date(dueDate).toLocaleDateString("pt-BR")}*`);
+  const link = taskId ? `${getBaseUrl()}/tasks?task=${taskId}` : `${getBaseUrl()}/kanban`;
+  lines.push("", `<${link}|Ver tarefa →>`);
+
+  const sent = await sendSlackDM(slackUserId, config.botToken, lines.join("\n"));
+  return sent ? { ok: true } : { ok: false, error: "Falha ao enviar mensagem no Slack" };
+}
+
 export async function notifyTaskCompleted({
   userDbId,
   taskTitle,

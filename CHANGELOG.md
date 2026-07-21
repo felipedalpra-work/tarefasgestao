@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-21 (botão de lembrete no Slack por tarefa)
+
+- Cada tarefa com responsável ganhou um botão "Lembrar" ao lado do nome dele no detalhe da tarefa (`TaskDetailPanel`) — manda uma DM no Slack cobrando a tarefa, sob demanda (diferente da notificação automática que já existia só na atribuição/conclusão).
+- Novo `notifyTaskReminder` em `src/lib/slack.ts` e `POST /api/tasks/[id]/remind`. Reaproveita a config de Slack já existente em Configurações (bot token + Slack User ID por pessoa) — se não tiver configurado pra aquela pessoa, retorna erro claro em vez de falhar silenciosamente.
+- Tarefa sem responsável (ex: `deliverTo: "o2"`, do cliente) não mostra o botão — não tem pra quem mandar.
+
 ## 2026-07-21 (pausar sugestões de tarefa vindas de Meet Recap)
 
 - O usuário quer, por enquanto, só tarefas vindas do workflow n8n — pediu pra desativar as sugestões que a IA gera a partir dos Meet Recaps do Gmail, com um jeito fácil de religar depois.
