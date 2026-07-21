@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-21 (detalhe da tarefa vira modal central, em vez de painel lateral)
+
+- `TaskDetailPanel` (usado em /kanban, /tasks e agora nos deep-links do calendário) deixou de deslizar da direita (`fixed right-0 h-full`) pra abrir centralizado na tela como modal (`max-w-lg max-h-[85vh]`), a pedido do usuário — achou melhor assim.
+- Estrutura interna não mudou (header fixo, meta/subtarefas fixos, aba de comentários/atividade com scroll próprio, formulário de comentário fixo embaixo) — só a moldura externa.
+
 ## 2026-07-21 (calendário mostra todas as tarefas do dia, não só entregas ligadas a reunião)
 
 - Antes, `/calendar` só mostrava tarefa dentro do painel de uma reunião (e só se o cliente da tarefa batesse com o cliente da reunião do dia). Tarefa sem cliente, ou com cliente sem reunião marcada, nunca aparecia no calendário.

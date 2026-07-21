@@ -269,12 +269,15 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   const doneCount = subtasks.filter((s) => s.done).length;
 
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 z-40 animate-fade-in" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-panel border-l border-surface-3 z-50 flex flex-col shadow-2xl animate-slide-in-right">
+    <div
+      className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      {/* Modal */}
+      <div
+        className="w-full max-w-lg max-h-[85vh] bg-panel border border-surface-3 rounded-2xl z-50 flex flex-col shadow-2xl animate-slide-in-up"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-surface-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -662,7 +665,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
           </form>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
