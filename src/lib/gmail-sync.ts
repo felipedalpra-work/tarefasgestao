@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { processRecap } from "./process-recap";
 import { google } from "googleapis";
 import { log } from "./logger";
+import { isMeetRecapSuggestionsEnabled } from "./settings";
 
 function extractTextFromParts(parts: any[]): string {
   let text = "";
@@ -61,7 +62,6 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
     const messages = listRes.data.messages || [];
     let synced = 0;
     let suggestionsExtracted = 0;
-    const newRecapIds: string[] = [];
 
     for (const msg of messages) {
       const existing = await prisma.meetRecap.findUnique({ where: { gmailId: msg.id! } });
@@ -82,17 +82,26 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
           : raw;
       }
 
-      const recap = await prisma.meetRecap.create({
+      await prisma.meetRecap.create({
         data: { gmailId: msg.id!, subject, body },
       });
 
-      newRecapIds.push(recap.id);
       synced++;
     }
 
-    for (const recapId of newRecapIds) {
-      const count = await processRecap(recapId);
-      suggestionsExtracted += count;
+    // sempre sincroniza o conteúdo do recap (histórico em /recaps); a extração de
+    // sugestão por IA é opcional e pode estar pausada (Configurações → Meet Recaps).
+    // Ao religar, isso também recupera o atraso: processa qualquer recap ainda sem
+    // processedAt, não só os sincronizados agora.
+    if (await isMeetRecapSuggestionsEnabled()) {
+      const pending = await prisma.meetRecap.findMany({
+        where: { processedAt: null },
+        select: { id: true },
+      });
+      for (const { id: recapId } of pending) {
+        const count = await processRecap(recapId);
+        suggestionsExtracted += count;
+      }
     }
 
     if (synced > 0) {

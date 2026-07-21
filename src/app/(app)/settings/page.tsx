@@ -2,7 +2,7 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, UserPlus, Trash2 } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, UserPlus, Trash2, Sparkles } from "lucide-react";
 import { toast } from "@/components/Toaster";
 
 type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null };
@@ -28,10 +28,18 @@ export default function SettingsPage() {
   const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "" });
   const [addingMember, setAddingMember] = useState(false);
 
+  // Meet Recap suggestions state
+  const [meetRecapEnabled, setMeetRecapEnabled] = useState(true);
+  const [meetRecapSaving, setMeetRecapSaving] = useState(false);
+
   useEffect(() => {
     fetch("/api/settings/google-status")
       .then((r) => r.json())
       .then((d) => { setGoogleConnected(d.connected); setLoading(false); });
+
+    fetch("/api/settings/meet-recap")
+      .then((r) => r.json())
+      .then((d) => setMeetRecapEnabled(d.enabled));
 
     // load squad users + slack settings in parallel
     Promise.all([
@@ -55,6 +63,24 @@ export default function SettingsPage() {
 
   async function connectGoogle() {
     await signIn("google", { callbackUrl: "/settings" });
+  }
+
+  async function toggleMeetRecap(enabled: boolean) {
+    setMeetRecapSaving(true);
+    const prev = meetRecapEnabled;
+    setMeetRecapEnabled(enabled);
+    const res = await fetch("/api/settings/meet-recap", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    setMeetRecapSaving(false);
+    if (res.ok) {
+      toast(enabled ? "Sugestões de Meet Recap reativadas" : "Sugestões de Meet Recap desativadas", "success");
+    } else {
+      setMeetRecapEnabled(prev);
+      toast("Erro ao salvar", "error");
+    }
   }
 
   async function saveSlack() {
@@ -214,6 +240,28 @@ export default function SettingsPage() {
             Conectar conta Google
           </button>
         )}
+      </div>
+
+      {/* Meet Recap suggestions */}
+      <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Meet Recaps (IA)</h2>
+        <p className="text-xs text-ink-mid mb-6">
+          Sugestão automática de tarefa a partir dos Meet Recaps do Gmail. Os recaps continuam sincronizando normalmente — isso só liga/desliga a IA gerar sugestões em <span className="text-ink-soft">/sugestoes-ia</span>. As tarefas do workflow n8n não são afetadas.
+        </p>
+        <label className="flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={meetRecapEnabled}
+            disabled={meetRecapSaving}
+            onChange={(e) => toggleMeetRecap(e.target.checked)}
+            className="accent-o2-green"
+          />
+          <Sparkles size={16} className={meetRecapEnabled ? "text-o2-green" : "text-ink-faint"} />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-ink">Gerar sugestões de tarefa dos Meet Recaps</p>
+            <p className="text-xs text-ink-dim">{meetRecapEnabled ? "Ativado" : "Desativado — nenhuma sugestão nova até religar"}</p>
+          </div>
+        </label>
       </div>
 
       {/* Slack Integration */}

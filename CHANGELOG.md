@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-21 (pausar sugestões de tarefa vindas de Meet Recap)
+
+- O usuário quer, por enquanto, só tarefas vindas do workflow n8n — pediu pra desativar as sugestões que a IA gera a partir dos Meet Recaps do Gmail, com um jeito fácil de religar depois.
+- Novo `Setting` (`meet_recap_suggestions_enabled`, helpers em `src/lib/settings.ts`) controla isso. **Já deixei desligado agora** (upsert direto no banco) — não esperei o clique no toggle.
+- `syncUserGmail` (`src/lib/gmail-sync.ts`) continua sincronizando o conteúdo dos Meet Recaps normalmente (histórico em `/recaps` intacto) — só pula a chamada de `processRecap` (extração via Groq) quando o flag está desligado. Recaps que chegarem enquanto tiver desligado ficam com `processedAt: null`; ao religar, a própria sincronização seguinte já processa todo o atraso automaticamente (não só os novos), sem precisar reprocessar um por um.
+- O botão manual "Reprocessar com a IA" em `/recaps` (`POST /api/recaps/[id]/process`) continua funcionando mesmo com o flag desligado — é uma ação explícita da pessoa, diferente do pipeline automático.
+- Toggle em Configurações → seção "Meet Recaps (IA)" (`/api/settings/meet-recap`, GET/PUT). Sugestões do n8n (`ExternalSuggestion`) e criação manual de tarefa não são afetadas — só o pipeline de IA do Meet Recap.
+
 ## 2026-07-21 (excluir cliente)
 
 - Novo `DELETE /api/clients/[name]` — como "cliente" não é entidade própria (é string espalhada em `Task`/`CalendarEvent`/`MeetRecap`/`Tratativa`/`SetupMeeting`/`FechamentoMensal`, mais o perfil em `ClientNote`), excluir um cliente apaga, numa transação, todas as linhas dessas tabelas que apontam pro nome — inclui cascade de `Subtask`/`TaskActivity`/`TaskLink`/`TaskComment`/`RecapSuggestion`. Ação irreversível.
