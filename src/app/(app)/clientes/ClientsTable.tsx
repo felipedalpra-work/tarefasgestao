@@ -99,70 +99,72 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-surface-3">
-      <table className="w-full text-sm min-w-[900px]">
+    <div className="rounded-xl border border-surface-3">
+      <table className="w-full text-sm table-fixed">
         <thead className="bg-surface-2 text-ink-dim text-xs uppercase tracking-wide">
           <tr>
-            <th className="text-left px-4 py-3 font-medium">Cliente</th>
-            <th className="text-left px-4 py-3 font-medium">Saúde</th>
-            <th className="text-left px-4 py-3 font-medium">ERP</th>
-            <th className="text-left px-4 py-3 font-medium">Status</th>
-            <th className="text-left px-4 py-3 font-medium">Implantação Oxy</th>
-            <th className="text-left px-4 py-3 font-medium">Importação</th>
-            <th className="text-left px-4 py-3 font-medium">Últ. atualização</th>
-            <th className="text-left px-4 py-3 font-medium">Tarefas abertas</th>
-            <th className="text-left px-4 py-3 font-medium">Pendências na Oxy</th>
-            <th className="px-4 py-3 font-medium w-10"></th>
+            <th className="text-left px-2.5 py-3 font-medium w-[15%]">Cliente</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[8%]">Saúde</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[9%]">ERP</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[8%]">Status</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[11%]">Implantação Oxy</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[9%]">Importação</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[10%]">Últ. atualização</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[9%]">Tarefas abertas</th>
+            <th className="text-left px-2.5 py-3 font-medium w-[17%]">Pendências na Oxy</th>
+            <th className="px-2.5 py-3 font-medium w-[4%]"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-3">
           {rows.map((c) => (
             <tr key={c.name} className="hover:bg-surface-2/50 transition-colors">
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <Link
                   href={`/clientes/${encodeURIComponent(c.name)}`}
-                  className="group flex items-center gap-2 text-ink hover:text-o2-green transition-colors"
+                  title={c.name}
+                  className="group flex items-center gap-1.5 text-ink hover:text-o2-green transition-colors min-w-0"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-o2-green/10 flex items-center justify-center shrink-0">
-                    <Building2 size={13} className="text-o2-green" />
+                  <div className="w-6 h-6 rounded-lg bg-o2-green/10 flex items-center justify-center shrink-0">
+                    <Building2 size={12} className="text-o2-green" />
                   </div>
-                  <span className="font-medium truncate max-w-[200px]">{c.name}</span>
+                  <span className="font-medium truncate min-w-0 flex-1">{c.name}</span>
                   <ChevronRight size={14} className="text-ink-ghost group-hover:text-o2-green transition-colors shrink-0" />
                 </Link>
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <Select
                   value={c.healthStatus}
                   options={HEALTH_OPTIONS}
                   onChange={(v) => handleChange(c.name, "healthStatus", v)}
                 />
               </td>
-              <td className="px-4 py-2.5 min-w-[160px]">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <input
                   type="text"
                   defaultValue={c.erp ?? ""}
                   placeholder="Ex: Omie"
+                  title={c.erp ?? ""}
                   onBlur={(e) => {
                     if (e.target.value !== (c.erp ?? "")) handleChange(c.name, "erp", e.target.value);
                   }}
-                  className="w-full bg-transparent border border-transparent hover:border-surface-3 focus:border-o2-green/50 rounded-lg px-2 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none transition-colors"
+                  className="w-full bg-transparent border border-transparent hover:border-surface-3 focus:border-o2-green/50 rounded-lg px-2 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none transition-colors truncate"
                 />
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <Select
                   value={c.status}
                   options={STATUS_OPTIONS}
                   onChange={(v) => handleChange(c.name, "status", v)}
                 />
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <Select
                   value={c.oxyStage}
                   options={OXY_STAGE_OPTIONS}
                   onChange={(v) => handleChange(c.name, "oxyStage", v)}
                 />
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <Select
                   value={c.importType ?? ""}
                   options={IMPORT_TYPE_OPTIONS}
@@ -170,19 +172,19 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                   plain
                 />
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <input
                   type="date"
                   value={toDateInputValue(c.lastDataUpdate)}
                   onChange={(e) => handleChange(c.name, "lastDataUpdate", e.target.value)}
-                  className="bg-surface border border-surface-3 rounded-lg px-2 py-1.5 text-xs text-ink-soft focus:outline-none focus:border-o2-green/50"
+                  className="w-full bg-surface border border-surface-3 rounded-lg px-2 py-1.5 text-xs text-ink-soft focus:outline-none focus:border-o2-green/50"
                 />
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 {c.openTasks > 0 ? (
                   <Link
                     href={`/clientes/${encodeURIComponent(c.name)}`}
-                    className="text-xs font-medium text-o2-green bg-o2-green/10 px-2 py-1 rounded-full hover:bg-o2-green/20 transition-colors"
+                    className="inline-block truncate max-w-full text-xs font-medium text-o2-green bg-o2-green/10 px-2 py-1 rounded-full hover:bg-o2-green/20 transition-colors"
                   >
                     {c.openTasks} em aberto
                   </Link>
@@ -190,18 +192,19 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                   <span className="text-xs text-ink-faint">Nenhuma</span>
                 )}
               </td>
-              <td className="px-4 py-2.5 min-w-[220px]">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <input
                   type="text"
                   defaultValue={c.oxyPendencies ?? ""}
                   placeholder="Ex: acesso ao ERP pendente"
+                  title={c.oxyPendencies ?? ""}
                   onBlur={(e) => {
                     if (e.target.value !== (c.oxyPendencies ?? "")) handleChange(c.name, "oxyPendencies", e.target.value);
                   }}
-                  className="w-full bg-transparent border border-transparent hover:border-surface-3 focus:border-o2-green/50 rounded-lg px-2 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none transition-colors"
+                  className="w-full bg-transparent border border-transparent hover:border-surface-3 focus:border-o2-green/50 rounded-lg px-2 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none transition-colors truncate"
                 />
               </td>
-              <td className="px-4 py-2.5">
+              <td className="px-2.5 py-2.5 overflow-hidden">
                 <button
                   onClick={() => setConfirmingDelete(c.name)}
                   className="p-1.5 text-ink-faint hover:text-red-400 transition-colors"
@@ -267,8 +270,9 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      title={current?.label}
       className={cn(
-        "text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:outline-none focus:ring-1 focus:ring-o2-green/50 cursor-pointer appearance-none",
+        "w-full max-w-full truncate text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:outline-none focus:ring-1 focus:ring-o2-green/50 cursor-pointer appearance-none",
         plain ? "bg-surface-3 text-ink-soft" : current?.className ?? "bg-surface-3 text-ink-soft"
       )}
     >
