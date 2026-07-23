@@ -3,32 +3,63 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles, ChevronDown } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationsBell } from "./NotificationsBell";
 import { LogoIcon } from "./LogoIcon";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/week", label: "Minha Semana", icon: CalendarRange },
-  { href: "/tasks", label: "Tarefas", icon: CheckSquare },
-  { href: "/kanban", label: "Kanban", icon: Kanban },
-  { href: "/calendar", label: "Calendário", icon: CalendarDays },
-  { href: "/recaps", label: "Meet Recaps", icon: FileText },
-  { href: "/sugestoes-ia", label: "Sugestões da IA", icon: Sparkles },
-  { href: "/clientes", label: "Clientes", icon: Building2 },
-  { href: "/tratativas", label: "Tratativas", icon: ShieldAlert },
-  { href: "/logs", label: "Logs", icon: ScrollText },
-  { href: "/settings", label: "Configurações", icon: Settings },
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
+type NavGroup = { id: string; label: string; items: NavItem[] };
+
+const topLevel: NavItem = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard };
+
+const navGroups: NavGroup[] = [
+  {
+    id: "tarefas",
+    label: "Tarefas",
+    items: [
+      { href: "/week", label: "Minha Semana", icon: CalendarRange },
+      { href: "/tasks", label: "Tarefas", icon: CheckSquare },
+      { href: "/kanban", label: "Kanban", icon: Kanban },
+      { href: "/calendar", label: "Calendário", icon: CalendarDays },
+    ],
+  },
+  {
+    id: "clientes",
+    label: "Clientes",
+    items: [
+      { href: "/clientes", label: "Clientes", icon: Building2 },
+      { href: "/tratativas", label: "Tratativas", icon: ShieldAlert },
+    ],
+  },
+  {
+    id: "ia",
+    label: "IA",
+    items: [
+      { href: "/recaps", label: "Meet Recaps", icon: FileText },
+      { href: "/sugestoes-ia", label: "Sugestões da IA", icon: Sparkles },
+    ],
+  },
+  {
+    id: "sistema",
+    label: "Sistema",
+    items: [
+      { href: "/logs", label: "Logs", icon: ScrollText },
+      { href: "/settings", label: "Configurações", icon: Settings },
+    ],
+  },
 ];
+
+const STORAGE_KEY = "sidebar-open-groups";
 
 export function Sidebar() {
   const path = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -51,6 +82,47 @@ export function Sidebar() {
 
   // fecha o drawer ao navegar
   useEffect(() => { setMobileOpen(false); }, [path]);
+
+  // restaura os blocos que o usuário deixou abertos manualmente
+  useEffect(() => {
+    try {
+      const stored: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      if (stored.length) setOpenGroups((prev) => new Set([...prev, ...stored]));
+    } catch {}
+  }, []);
+
+  function toggleGroup(id: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  function renderItem({ href, label, icon: Icon }: NavItem) {
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={cn(
+          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+          path === href
+            ? "bg-o2-green/10 text-o2-green"
+            : "text-ink-mid hover:text-ink hover:bg-surface-3"
+        )}
+      >
+        <Icon size={16} />
+        {label}
+        {href === "/sugestoes-ia" && pendingSuggestions > 0 && (
+          <span className="ml-auto text-xs bg-o2-green/20 text-o2-green px-1.5 py-0.5 rounded-full">
+            {pendingSuggestions}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   const content = (
     <>
@@ -84,26 +156,36 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {nav.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-              path === href
-                ? "bg-o2-green/10 text-o2-green"
-                : "text-ink-mid hover:text-ink hover:bg-surface-3"
-            )}
-          >
-            <Icon size={16} />
-            {label}
-            {href === "/sugestoes-ia" && pendingSuggestions > 0 && (
-              <span className="ml-auto text-xs bg-o2-green/20 text-o2-green px-1.5 py-0.5 rounded-full">
-                {pendingSuggestions}
-              </span>
-            )}
-          </Link>
-        ))}
+        {renderItem(topLevel)}
+
+        {navGroups.map((group) => {
+          const hasActive = group.items.some((i) => i.href === path);
+          const isOpen = hasActive || openGroups.has(group.id);
+          return (
+            <div key={group.id} className="pt-1">
+              <button
+                onClick={() => toggleGroup(group.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide transition-all",
+                  hasActive ? "text-o2-green" : "text-ink-faint hover:text-ink-mid"
+                )}
+              >
+                <ChevronDown size={12} className={cn("shrink-0 transition-transform", !isOpen && "-rotate-90")} />
+                <span className="flex-1 text-left">{group.label}</span>
+                {group.id === "ia" && pendingSuggestions > 0 && !isOpen && (
+                  <span className="text-[10px] bg-o2-green/20 text-o2-green px-1.5 py-0.5 rounded-full normal-case font-medium">
+                    {pendingSuggestions}
+                  </span>
+                )}
+              </button>
+              {isOpen && (
+                <div className="ml-3 pl-3 border-l border-surface-3 space-y-1 mt-1">
+                  {group.items.map((item) => renderItem(item))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Sign out */}

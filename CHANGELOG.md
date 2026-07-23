@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-23 (sidebar vira blocos com drill-down, pra não poluir a tela)
+
+- A sidebar tinha 11 itens soltos numa lista só. Agora só `Dashboard` fica solto no topo; o resto virou 4 blocos colapsáveis (accordion): **Tarefas** (Minha Semana, Tarefas, Kanban, Calendário), **Clientes** (Clientes, Tratativas), **IA** (Meet Recaps, Sugestões da IA) e **Sistema** (Logs, Configurações).
+- Por padrão todos os blocos vêm fechados — só abre o bloco que contém a página atual (calculado a partir da rota, não fica salvo). Cliques manuais em outros blocos ficam lembrados via `localStorage` entre sessões. Mais de um bloco pode ficar aberto ao mesmo tempo (não é accordion exclusivo).
+- `src/components/Sidebar.tsx`: array `nav` virou `topLevel` (Dashboard) + `navGroups` (os 4 blocos). Badge de sugestões pendentes da IA (que antes só aparecia no item "Sugestões da IA") agora também aparece no cabeçalho do bloco "IA" quando ele está fechado, pra não sumir o aviso.
+
 ## 2026-07-21 (detalhe da tarefa vira modal central, em vez de painel lateral)
 
 - `TaskDetailPanel` (usado em /kanban, /tasks e agora nos deep-links do calendário) deixou de deslizar da direita (`fixed right-0 h-full`) pra abrir centralizado na tela como modal (`max-w-lg max-h-[85vh]`), a pedido do usuário — achou melhor assim.
