@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn, priorityColor, priorityLabel, statusLabel } from "@/lib/utils";
+import { cn, priorityColor, priorityLabel, statusLabel, dueDateOnly, isTaskOverdue } from "@/lib/utils";
 import { toast } from "./Toaster";
 import type { TaskListItem, UserOption } from "@/types/task";
 
@@ -265,7 +265,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   if (!task) return null;
 
   const StatusIcon = STATUS_ICONS[task.status] ?? Circle;
-  const isOverdue = task.dueDate && task.status !== "done" && new Date(task.dueDate) < new Date();
+  const isOverdue = isTaskOverdue(task.dueDate, task.status);
   const doneCount = subtasks.filter((s) => s.done).length;
 
   return (
@@ -429,7 +429,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
               {task.dueDate && (
                 <MetaRow icon={Calendar} label="Prazo">
                   <span className={cn("text-xs", isOverdue ? "text-red-400" : "text-ink-soft")}>
-                    {format(new Date(task.dueDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                    {format(dueDateOnly(task.dueDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                     {isOverdue && " · Atrasada"}
                   </span>
                 </MetaRow>

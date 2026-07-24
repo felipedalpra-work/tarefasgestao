@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { OnboardingTab } from "./OnboardingTab";
 import { FechamentoTab } from "./FechamentoTab";
@@ -395,7 +395,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                     </span>
                     {t.dueDate && (
                       <span className="text-xs text-ink-faint">
-                        · {new Date(t.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                        · {dueDateOnly(t.dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                       </span>
                     )}
                   </div>

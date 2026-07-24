@@ -46,3 +46,21 @@ export function priorityLabel(priority: string) {
   };
   return map[priority] || priority;
 }
+
+// dueDate representa só um dia (sem hora), mas fica salvo no banco como meia-noite UTC
+// (o <input type="date"> manda "2026-07-28", e `new Date("2026-07-28")` sempre parseia como UTC).
+// Ler os componentes com os getters locais (como o date-fns `format` e `toLocaleDateString` fazem)
+// desloca o dia em fusos atrás de UTC — ex: Brasília (UTC-3) mostra o dia anterior.
+// Esta função lê os componentes em UTC e reconstrói como meia-noite local, pra exibir/comparar
+// o dia certo em qualquer fuso.
+export function dueDateOnly(date: string | Date): Date {
+  const d = new Date(date);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+export function isTaskOverdue(dueDate: string | Date | null | undefined, status: string): boolean {
+  if (!dueDate || status === "done") return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return dueDateOnly(dueDate) < today;
+}

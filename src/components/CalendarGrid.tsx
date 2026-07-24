@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Calendar, Users, Package, LayoutGrid, List, CheckSquare } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, dueDateOnly } from "@/lib/utils";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
@@ -106,7 +106,7 @@ export function CalendarGrid({
   }
 
   function tasksForDay(day: Date) {
-    return tasks.filter(t => t.dueDate && sameDay(new Date(t.dueDate), day));
+    return tasks.filter(t => t.dueDate && sameDay(dueDateOnly(t.dueDate), day));
   }
 
   // agenda = um item por dia com conteúdo (reunião e/ou tarefa com prazo), não só reunião
@@ -423,7 +423,7 @@ export function CalendarGrid({
                           )}
                           {task.dueDate && (
                             <p className="text-[10px] text-ink-ghost mt-0.5">
-                              prazo: {new Date(task.dueDate).toLocaleDateString("pt-BR")}
+                              prazo: {dueDateOnly(task.dueDate).toLocaleDateString("pt-BR")}
                             </p>
                           )}
                         </div>
@@ -455,7 +455,7 @@ export function CalendarGrid({
                           )}
                           {task.dueDate && (
                             <p className="text-[10px] text-ink-ghost mt-0.5">
-                              prazo: {new Date(task.dueDate).toLocaleDateString("pt-BR")}
+                              prazo: {dueDateOnly(task.dueDate).toLocaleDateString("pt-BR")}
                             </p>
                           )}
                         </div>

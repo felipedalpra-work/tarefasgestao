@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, AlertCircle, Circle, CheckCircle2, Clock, ListChecks, Link2, MessageSquare, Repeat } from "lucide-react";
-import { cn, priorityLabel } from "@/lib/utils";
+import { cn, priorityLabel, dueDateOnly, isTaskOverdue } from "@/lib/utils";
 import { UserAvatar } from "./UserAvatar";
 import type { TaskListItem } from "@/types/task";
 
@@ -14,8 +14,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 };
 
 export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem; onStatusChange?: (id: string, status: string) => void; onClick?: (task: TaskListItem) => void }) {
-  const isOverdue =
-    task.dueDate && task.status !== "done" && new Date(task.dueDate) < new Date();
+  const isOverdue = isTaskOverdue(task.dueDate, task.status);
 
   const StatusIcon =
     task.status === "done"
@@ -134,7 +133,7 @@ export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem
           {task.dueDate && (
             <div className={cn("flex items-center gap-1 text-xs", isOverdue ? "text-red-400" : "text-ink-dim")}>
               <Calendar size={11} />
-              {format(new Date(task.dueDate), "dd MMM", { locale: ptBR })}
+              {format(dueDateOnly(task.dueDate), "dd MMM", { locale: ptBR })}
             </div>
           )}
           {task.assignee ? (

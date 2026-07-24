@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle } from "lucide-react";
+import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle, Pencil, Check } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
@@ -56,6 +56,16 @@ type Tab = "pending" | "duplicate";
 // valor sentinela pro select de responsável — indica "atribuir ao cliente" em vez de uma pessoa do squad
 const CLIENT_CHOICE = "__client__";
 
+// campos da sugestão que dá pra editar antes de mandar pro Kanban (mesmo conjunto do lapizinho de TaskDetailPanel)
+type EditableFields = {
+  title: string;
+  description: string;
+  priority: string;
+  dueDate: string; // yyyy-mm-dd ou ""
+  client: string;
+  assigneeId: string; // "" = padrão (quem clicar em Adicionar), ou id de usuário, ou CLIENT_CHOICE
+};
+
 export default function SugestoesIaPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -63,7 +73,9 @@ export default function SugestoesIaPage() {
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [deadlinePrompt, setDeadlinePrompt] = useState<Row | null>(null);
   const [tab, setTab] = useState<Tab>("pending");
-  const [assigneeChoice, setAssigneeChoice] = useState<Record<string, string>>({});
+  const [overrides, setOverrides] = useState<Record<string, EditableFields>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<EditableFields | null>(null);
 
   async function load() {
     const [recapsRes, usersRes, externalRes] = await Promise.all([
@@ -109,48 +121,106 @@ export default function SugestoesIaPage() {
     return found?.id ?? null;
   }
 
+  // valores originais da sugestão, como a IA extraiu (sem nenhuma edição manual)
+  function originalEditable(row: Row): EditableFields {
+    if (row.kind === "recap") {
+      const s = row.suggestion;
+      return {
+        title: s.title,
+        description: s.description ?? "",
+        priority: s.priority || "medium",
+        dueDate: s.dueDate ? s.dueDate.slice(0, 10) : "",
+        client: row.recap.client ?? "",
+        assigneeId: matchAssigneeId(s.assignee) ?? "",
+      };
+    }
+    const s = row.suggestion;
+    return {
+      title: s.title,
+      description: s.description ?? "",
+      priority: s.priority || "medium",
+      dueDate: s.dueDate ? s.dueDate.slice(0, 10) : "",
+      client: s.client ?? "",
+      assigneeId: "",
+    };
+  }
+
+  // valor efetivo (editado, se a pessoa já mexeu; senão o original da IA)
+  function getEditable(row: Row): EditableFields {
+    return overrides[row.suggestion.id] ?? originalEditable(row);
+  }
+
+  function assigneeLabel(editable: EditableFields, row: Row): string | null {
+    if (editable.assigneeId === CLIENT_CHOICE) return "Cliente";
+    if (editable.assigneeId) {
+      const u = users.find((x) => x.id === editable.assigneeId);
+      return u?.name || u?.email || null;
+    }
+    if (row.kind === "recap" && row.suggestion.assignee) return row.suggestion.assignee;
+    return null;
+  }
+
+  function startEdit(row: Row) {
+    setEditingId(row.suggestion.id);
+    setDraft(getEditable(row));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(null);
+  }
+
+  function saveEdit(row: Row) {
+    if (!draft) return;
+    setOverrides((prev) => ({ ...prev, [row.suggestion.id]: draft }));
+    setEditingId(null);
+    setDraft(null);
+  }
+
   async function accept(row: Row, dueDate: string | null) {
     const key = row.suggestion.id;
     setActingKey(key);
-    const originalDate = row.suggestion.dueDate ? row.suggestion.dueDate.slice(0, 10) : null;
-    const edited = dueDate !== originalDate;
+    const original = originalEditable(row);
+    const current = getEditable(row);
+    const edited =
+      current.title !== original.title ||
+      current.description !== original.description ||
+      current.priority !== original.priority ||
+      current.client !== original.client ||
+      current.assigneeId !== original.assigneeId ||
+      dueDate !== (original.dueDate || null);
+
+    const isClientChoice = current.assigneeId === CLIENT_CHOICE;
+    const commonFields = {
+      title: current.title,
+      description: current.description || null,
+      priority: current.priority || "medium",
+      assigneeId: current.assigneeId && !isClientChoice ? current.assigneeId : null,
+      noAssignee: isClientChoice,
+      deliverTo: isClientChoice ? "o2" : null,
+      dueDate,
+      client: current.client || null,
+      suggestionEdited: edited,
+    };
 
     const body =
       row.kind === "recap"
         ? {
-            title: row.suggestion.title,
-            description: row.suggestion.description,
-            priority: row.suggestion.priority || "medium",
-            assigneeId: matchAssigneeId(row.suggestion.assignee),
-            dueDate,
+            ...commonFields,
             source: "meet_recap",
             sourceRef: row.recap.id,
-            client: row.recap.client ?? null,
             meetingTitle: row.recap.subject,
             meetingDate: row.recap.createdAt,
             recapSuggestionId: row.suggestion.id,
-            suggestionEdited: edited,
           }
-        : (() => {
-            const choice = assigneeChoice[row.suggestion.id] || "";
-            const isClient = choice === CLIENT_CHOICE;
-            return {
-              title: row.suggestion.title,
-              description: row.suggestion.description,
-              priority: row.suggestion.priority || "medium",
-              assigneeId: choice && !isClient ? choice : null,
-              noAssignee: isClient,
-              deliverTo: isClient ? "o2" : null,
-              dueDate,
-              source: "n8n",
-              sourceRef: row.suggestion.sourceRef,
-              client: row.suggestion.client,
-              meetingTitle: row.suggestion.meetingTitle ?? null,
-              meetingDate: row.suggestion.meetingDate ?? null,
-              externalSuggestionId: row.suggestion.id,
-              suggestionEdited: edited,
-            };
-          })();
+        : {
+            ...commonFields,
+            source: "n8n",
+            sourceRef: row.suggestion.sourceRef,
+            meetingTitle: row.suggestion.meetingTitle ?? null,
+            meetingDate: row.suggestion.meetingDate ?? null,
+            externalSuggestionId: row.suggestion.id,
+          };
 
     const res = await fetch("/api/tasks", {
       method: "POST",
@@ -160,6 +230,7 @@ export default function SugestoesIaPage() {
     setActingKey(null);
     if (res.ok) {
       setRows((prev) => prev.filter((r) => r.suggestion.id !== key));
+      setOverrides((prev) => { const rest = { ...prev }; delete rest[key]; return rest; });
       toast("Tarefa adicionada ao Kanban", "success");
     } else {
       toast("Erro ao adicionar a tarefa", "error");
@@ -181,6 +252,7 @@ export default function SugestoesIaPage() {
     setActingKey(null);
     if (res.ok) {
       setRows((prev) => prev.filter((r) => r.suggestion.id !== key));
+      setOverrides((prev) => { const rest = { ...prev }; delete rest[key]; return rest; });
     } else {
       toast("Erro ao salvar", "error");
     }
@@ -235,6 +307,8 @@ export default function SugestoesIaPage() {
           {visibleRows.map((row) => {
             const { suggestion } = row;
             const acting = actingKey === suggestion.id;
+            const isEditing = editingId === suggestion.id;
+            const editable = isEditing && draft ? draft : getEditable(row);
             return (
               <div key={suggestion.id} className="bg-surface border border-surface-3 rounded-xl p-4">
                 <div className="flex items-center justify-between gap-3 mb-2.5">
@@ -258,70 +332,145 @@ export default function SugestoesIaPage() {
                   )}
                 </div>
 
-                <p className="text-sm font-medium text-ink">{suggestion.title}</p>
-                {suggestion.description && <p className="text-xs text-ink-mid mt-1">{suggestion.description}</p>}
-                {tab === "duplicate" && suggestion.duplicateNote && (
-                  <p className="flex items-start gap-1.5 text-xs text-yellow-400 bg-yellow-500/10 rounded-lg px-2.5 py-1.5 mt-2">
-                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                    {suggestion.duplicateNote}
-                  </p>
-                )}
-
-                {row.kind === "external" && (
-                  <div className="flex items-center gap-2 mt-2.5">
-                    <label className="text-xs text-ink-faint shrink-0">Responsável:</label>
-                    <select
-                      value={assigneeChoice[suggestion.id] || ""}
-                      onChange={(e) => setAssigneeChoice((prev) => ({ ...prev, [suggestion.id]: e.target.value }))}
-                      className="text-xs bg-surface-2 border border-border rounded-lg px-2 py-1 text-ink focus:outline-none focus:border-o2-green/50"
-                    >
-                      <option value="">Quem adicionar (padrão)</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name || u.email}</option>
-                      ))}
-                      {row.suggestion.client && (
-                        <option value={CLIENT_CHOICE}>Cliente ({row.suggestion.client})</option>
-                      )}
-                    </select>
+                {isEditing && draft ? (
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-xs text-ink-dim block mb-1">Título</label>
+                      <input
+                        value={draft.title}
+                        onChange={(e) => setDraft((d) => d && { ...d, title: e.target.value })}
+                        className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-ink-dim block mb-1">Descrição</label>
+                      <textarea
+                        value={draft.description}
+                        onChange={(e) => setDraft((d) => d && { ...d, description: e.target.value })}
+                        rows={2}
+                        className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 resize-none"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs text-ink-dim block mb-1">Prioridade</label>
+                        <select
+                          value={draft.priority}
+                          onChange={(e) => setDraft((d) => d && { ...d, priority: e.target.value })}
+                          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                        >
+                          <option value="high">Alta</option>
+                          <option value="medium">Média</option>
+                          <option value="low">Baixa</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-ink-dim block mb-1">Prazo</label>
+                        <input
+                          type="date"
+                          value={draft.dueDate}
+                          onChange={(e) => setDraft((d) => d && { ...d, dueDate: e.target.value })}
+                          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs text-ink-dim block mb-1">Cliente</label>
+                        <input
+                          value={draft.client}
+                          onChange={(e) => setDraft((d) => d && { ...d, client: e.target.value })}
+                          placeholder="Nome do cliente"
+                          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-ink-dim block mb-1">Responsável</label>
+                        <select
+                          value={draft.assigneeId}
+                          onChange={(e) => setDraft((d) => d && { ...d, assigneeId: e.target.value })}
+                          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                        >
+                          <option value="">Padrão (quem adicionar)</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                          ))}
+                          {draft.client && <option value={CLIENT_CHOICE}>Cliente ({draft.client})</option>}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button onClick={cancelEdit} className="text-xs px-3 py-1.5 text-ink-dim hover:text-ink transition-colors">
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => saveEdit(row)}
+                        disabled={!draft.title.trim()}
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-o2-green text-bg font-semibold rounded-lg hover:bg-o2-green-bright disabled:opacity-50 transition-colors"
+                      >
+                        <Check size={13} />
+                        Salvar
+                      </button>
+                    </div>
                   </div>
-                )}
-
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex items-center gap-2">
-                    {row.kind === "recap" && row.suggestion.assignee && (
-                      <span className="text-xs text-ink-dim">→ {row.suggestion.assignee}</span>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-ink">{editable.title}</p>
+                    {editable.description && <p className="text-xs text-ink-mid mt-1">{editable.description}</p>}
+                    {tab === "duplicate" && suggestion.duplicateNote && (
+                      <p className="flex items-start gap-1.5 text-xs text-yellow-400 bg-yellow-500/10 rounded-lg px-2.5 py-1.5 mt-2">
+                        <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                        {suggestion.duplicateNote}
+                      </p>
                     )}
-                    <span
-                      className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
-                        suggestion.priority === "high"
-                          ? "bg-red-500/20 text-red-400"
-                          : suggestion.priority === "low"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {suggestion.priority || "média"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => reject(row)}
-                      disabled={acting}
-                      className="text-ink-faint hover:text-red-400 p-1.5 transition-colors disabled:opacity-50"
-                      title="Descartar sugestão"
-                    >
-                      <XCircle size={14} />
-                    </button>
-                    <button
-                      onClick={() => setDeadlinePrompt(row)}
-                      disabled={acting}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
-                    >
-                      <Plus size={12} />
-                      {acting ? "Adicionando…" : tab === "duplicate" ? "Adicionar mesmo assim" : "Adicionar"}
-                    </button>
-                  </div>
-                </div>
+
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {assigneeLabel(editable, row) && (
+                          <span className="text-xs text-ink-dim">→ {assigneeLabel(editable, row)}</span>
+                        )}
+                        <span
+                          className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
+                            editable.priority === "high"
+                              ? "bg-red-500/20 text-red-400"
+                              : editable.priority === "low"
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-yellow-500/20 text-yellow-400"
+                          }`}
+                        >
+                          {editable.priority || "média"}
+                        </span>
+                        {editable.client && <span className="text-xs text-ink-faint">· {editable.client}</span>}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => reject(row)}
+                          disabled={acting}
+                          className="text-ink-faint hover:text-red-400 p-1.5 transition-colors disabled:opacity-50"
+                          title="Descartar sugestão"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                        <button
+                          onClick={() => startEdit(row)}
+                          disabled={acting}
+                          className="text-ink-faint hover:text-o2-green p-1.5 transition-colors disabled:opacity-50"
+                          title="Editar antes de adicionar"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => setDeadlinePrompt(row)}
+                          disabled={acting}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
+                        >
+                          <Plus size={12} />
+                          {acting ? "Adicionando…" : tab === "duplicate" ? "Adicionar mesmo assim" : "Adicionar"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}
@@ -330,8 +479,8 @@ export default function SugestoesIaPage() {
 
       {deadlinePrompt && (
         <DeadlineConfirmModal
-          title={deadlinePrompt.suggestion.title}
-          initialDate={deadlinePrompt.suggestion.dueDate}
+          title={getEditable(deadlinePrompt).title}
+          initialDate={getEditable(deadlinePrompt).dueDate || null}
           onCancel={() => setDeadlinePrompt(null)}
           onConfirm={(date) => {
             accept(deadlinePrompt, date);

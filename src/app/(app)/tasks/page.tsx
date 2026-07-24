@@ -2,14 +2,26 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Filter } from "lucide-react";
+import { Plus, Filter, Building2, Calendar } from "lucide-react";
+import { isToday, isBefore, startOfDay, addDays, parseISO, endOfDay } from "date-fns";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskModal } from "@/components/NewTaskModal";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { useSession } from "next-auth/react";
+import { dueDateOnly } from "@/lib/utils";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 const PAGE_SIZE = 50;
+
+type DueFilter = "all" | "overdue" | "today" | "week" | "none" | "custom";
+
+const DUE_PRESETS: { value: DueFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "overdue", label: "Atrasadas" },
+  { value: "today", label: "Hoje" },
+  { value: "week", label: "Esta semana" },
+  { value: "none", label: "Sem prazo" },
+];
 
 function TasksPageInner() {
   const { data: session } = useSession();
@@ -18,6 +30,7 @@ function TasksPageInner() {
 
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskListItem | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
@@ -25,6 +38,10 @@ function TasksPageInner() {
   // filtros vêm da URL (compartilháveis e sobrevivem a refresh)
   const personFilter = searchParams.get("assignee"); // null = ainda não definido, "all" = todos
   const statusFilter = searchParams.get("status") ?? "all";
+  const clientFilter = searchParams.get("client") ?? "all";
+  const dueFilter = (searchParams.get("due") ?? "all") as DueFilter;
+  const dueFrom = searchParams.get("dueFrom");
+  const dueTo = searchParams.get("dueTo");
   const taskParam = searchParams.get("task");
 
   const setParams = useCallback((updates: Record<string, string | null>) => {
@@ -37,12 +54,14 @@ function TasksPageInner() {
   }, [searchParams, router]);
 
   async function load() {
-    const [tasksRes, usersRes] = await Promise.all([
+    const [tasksRes, usersRes, clientsRes] = await Promise.all([
       fetch("/api/tasks"),
       fetch("/api/users"),
+      fetch("/api/clients"),
     ]);
     setTasks(await tasksRes.json());
     setUsers(await usersRes.json());
+    setClientOptions(await clientsRes.json());
   }
 
   useEffect(() => { load(); }, []);
@@ -83,10 +102,32 @@ function TasksPageInner() {
     load();
   }
 
+  function matchesDueFilter(t: TaskListItem): boolean {
+    const due = t.dueDate ? dueDateOnly(t.dueDate) : null;
+    switch (dueFilter) {
+      case "all":
+        return true;
+      case "none":
+        return !due;
+      case "overdue":
+        return !!due && t.status !== "done" && isBefore(due, startOfDay(new Date()));
+      case "today":
+        return !!due && isToday(due);
+      case "week":
+        return !!due && due >= startOfDay(new Date()) && due <= endOfDay(addDays(new Date(), 7));
+      case "custom":
+        if (!due) return false;
+        if (dueFrom && due < startOfDay(parseISO(dueFrom))) return false;
+        if (dueTo && due > endOfDay(parseISO(dueTo))) return false;
+        return true;
+    }
+  }
+
   const filtered = tasks.filter((t) => {
     const personOk = !personFilter || personFilter === "all" || t.assignee?.id === personFilter;
     const statusOk = statusFilter === "all" || t.status === statusFilter;
-    return personOk && statusOk;
+    const clientOk = clientFilter === "all" || t.client === clientFilter;
+    return personOk && statusOk && clientOk && matchesDueFilter(t);
   });
 
   const shown = filtered.slice(0, visible);
@@ -167,6 +208,67 @@ function TasksPageInner() {
             </button>
           ))}
         </div>
+
+        {/* Client filter — lista a carteira completa, independente dos outros filtros */}
+        {clientOptions.length > 0 && (
+          <div className="flex items-center gap-1.5 bg-surface border border-surface-3 rounded-xl px-2 py-1">
+            <Building2 size={13} className="text-ink-faint shrink-0" />
+            <select
+              value={clientFilter}
+              onChange={(e) => setParams({ client: e.target.value === "all" ? null : e.target.value })}
+              className="bg-transparent text-xs font-medium text-ink-mid focus:outline-none py-1"
+            >
+              <option value="all">Todos os clientes</option>
+              {clientOptions.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Due date filter: atalhos + período customizado */}
+        <div className="flex items-center gap-1 bg-surface border border-surface-3 rounded-xl p-1">
+          <Calendar size={13} className="text-ink-faint ml-2" />
+          {DUE_PRESETS.map((d) => (
+            <button
+              key={d.value}
+              onClick={() => setParams({ due: d.value === "all" ? null : d.value, dueFrom: null, dueTo: null })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                dueFilter === d.value
+                  ? "bg-o2-green/10 text-o2-green"
+                  : "text-ink-mid hover:text-ink"
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setParams({ due: "custom" })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              dueFilter === "custom" ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+            }`}
+          >
+            Período
+          </button>
+        </div>
+
+        {dueFilter === "custom" && (
+          <div className="flex items-center gap-2 bg-surface border border-surface-3 rounded-xl px-3 py-1.5">
+            <input
+              type="date"
+              value={dueFrom ?? ""}
+              onChange={(e) => setParams({ due: "custom", dueFrom: e.target.value || null })}
+              className="bg-transparent text-xs text-ink-mid focus:outline-none"
+            />
+            <span className="text-ink-faint text-xs">até</span>
+            <input
+              type="date"
+              value={dueTo ?? ""}
+              onChange={(e) => setParams({ due: "custom", dueTo: e.target.value || null })}
+              className="bg-transparent text-xs text-ink-mid focus:outline-none"
+            />
+          </div>
+        )}
       </div>
 
       {/* Task list */}

@@ -4,7 +4,7 @@ import { getAllTasks } from "@/lib/queries";
 import { format, isToday, isTomorrow, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AlertCircle, Calendar, CheckCircle2, Circle, Clock, Inbox } from "lucide-react";
-import { cn, priorityLabel } from "@/lib/utils";
+import { cn, priorityLabel, dueDateOnly } from "@/lib/utils";
 
 const STATUS_ICON: Record<string, React.ElementType> = {
   done: CheckCircle2,
@@ -45,7 +45,7 @@ export default async function WeekPage() {
 
   for (const t of mine) {
     if (!t.dueDate) { noDate.push(t); continue; }
-    const due = new Date(t.dueDate);
+    const due = dueDateOnly(t.dueDate);
     if (due < today) overdue.push(t);
     else if (isToday(due)) dueToday.push(t);
     else if (isTomorrow(due)) dueTomorrow.push(t);
@@ -120,7 +120,7 @@ export default async function WeekPage() {
                           section.urgent ? "text-red-400" : "text-ink-dim"
                         )}>
                           <Calendar size={11} />
-                          {format(new Date(t.dueDate), "dd MMM", { locale: ptBR })}
+                          {format(dueDateOnly(t.dueDate), "dd MMM", { locale: ptBR })}
                         </span>
                       )}
                     </Link>

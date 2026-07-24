@@ -4,6 +4,38 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-24 (link "Ver tarefa" do Slack não abria — apontava pra localhost)
+
+- Causa: `getBaseUrl()` (`src/lib/base-url.ts`) só olhava `APP_URL`/`NEXT_PUBLIC_APP_URL`; sem essas variáveis configuradas na Vercel, caía direto no fallback `http://localhost:3000` — daí o link do Slack (e de qualquer outro lugar que usa `getBaseUrl()`: comentário com @menção, briefing de reunião, digest semanal) virar um link morto pra quem não está com o servidor local rodando.
+- Adicionei um fallback antes do localhost: `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL`, variáveis que a própria Vercel injeta automaticamente em todo deploy — então o link funciona em produção mesmo que ninguém tenha configurado `APP_URL` manualmente.
+- Recomendo mesmo assim configurar `APP_URL` nas variáveis de ambiente do projeto na Vercel, apontando pro domínio customizado (se tiver um) — sem isso, o link vai usar o domínio padrão `*.vercel.app` da Vercel, que funciona mas não é o mais bonito. Não tenho acesso ao painel da Vercel pra fazer essa parte.
+
+## 2026-07-24 (corrige prazo de tarefa aparecendo um dia antes)
+
+- Causa raiz: o `<input type="date">` manda "2026-07-28", e `new Date("2026-07-28")` sempre interpreta isso como meia-noite **UTC**. Ao exibir com `format()`/`toLocaleDateString()` (que leem a data no fuso local do navegador), qualquer fuso atrás de UTC — como Brasília, UTC-3 — mostra o dia anterior, porque meia-noite UTC do dia 28 já é 21h do dia 27 em Brasília.
+- Adicionei `dueDateOnly()` em `src/lib/utils.ts`: lê os componentes ano/mês/dia em UTC e reconstrói como meia-noite local, garantindo que o dia exibido/comparado seja sempre o que a pessoa digitou, em qualquer fuso. Também padronizei `isTaskOverdue()` (antes cada tela reimplementava o cálculo de forma ligeiramente diferente).
+- Apliquei nos pontos onde o `dueDate` era lido com `new Date(...)`/`toLocaleDateString` puro: `TaskCard`, `TaskDetailPanel` (cartões e modal usados em Kanban e Tarefas), `CalendarGrid` (o bug reportado — tarefa do dia 28 caindo na célula do dia 27), `/tasks` (filtro de prazo), `/week` (Minha Semana) e `/dashboard`, e a lista de tarefas em `/clientes/[slug]`.
+- Não mexi nos e-mails/Slack automáticos (`email.ts`, `slack.ts`, `deadline-check.ts`, `weekly-digest.ts`) — esses rodam via cron no servidor (Vercel, fuso UTC), então não apresentam esse sintoma hoje, e a matemática de prazo/dias restantes ali é lógica de negócio (quando disparar o lembrete), não só exibição — não quis arriscar mudar o timing dos lembretes automáticos sem isso ter sido pedido.
+- Não precisou de migração de dado: o valor salvo no banco (meia-noite UTC) já estava certo, o bug era só na hora de ler/exibir.
+
+## 2026-07-24 (filtro de cliente e de prazo na listagem de Tarefas)
+
+- `/tasks` só tinha filtro de responsável e de status. Agora tem também filtro de **cliente** (dropdown com a carteira completa, via `/api/clients` — mesma fonte já usada no Kanban após a correção de hoje) e de **prazo**.
+- Filtro de prazo tem atalhos (Todos, Atrasadas, Hoje, Esta semana, Sem prazo — mesmo vocabulário já usado em `/week`) e um modo "Período" com dois campos de data (de/até) pra faixa customizada.
+- Todos os filtros continuam na URL (`?client=`, `?due=`, `?dueFrom=`, `?dueTo=`), então dá pra compartilhar o link já filtrado ou dar refresh sem perder o filtro — mesmo padrão dos filtros existentes.
+
+## 2026-07-24 (lapizinho de edição nas Sugestões da IA, antes de adicionar ao Kanban)
+
+- Antes, ao revisar uma sugestão vinda de Meet Recap ou do workflow n8n em `/sugestoes-ia`, só dava pra ajustar o prazo (no modal que aparece ao clicar "Adicionar") e, no caso do n8n, escolher o responsável. Título, descrição, prioridade e cliente vinham travados como a IA extraiu — se a IA errou algo, só dava pra aceitar torto ou descartar.
+- `src/app/(app)/sugestoes-ia/page.tsx`: cada sugestão ganhou um lapizinho (mesmo padrão do `TaskDetailPanel` usado em Kanban/Tarefas) que abre um formulário inline pra editar título, descrição, prioridade, prazo, cliente e responsável antes de adicionar. As opções de responsável (pessoa do squad ou "Cliente") agora valem tanto pra sugestão de Meet Recap quanto de n8n — antes só o n8n tinha esse seletor.
+- Edição fica só no estado local até clicar "Adicionar" — nada é salvo na sugestão original até esse momento. Se qualquer campo for alterado (incluindo o prazo, como já era antes), a sugestão de origem (`RecapSuggestion`/`ExternalSuggestion`) é marcada como `edited` em vez de `accepted` ao vincular a tarefa criada — mesmo controle de precisão da IA que já existia, só que agora cobre todos os campos editáveis, não só o prazo.
+
+## 2026-07-24 (corrige filtro de cliente no Kanban, que só listava 3 opções)
+
+- No `/kanban`, o dropdown de clientes era um drill-down: só listava clientes que apareciam nas tarefas dos responsáveis já selecionados no filtro acima. Como a página pré-seleciona o usuário logado como responsável ao carregar, o dropdown acabava mostrando só os clientes das tarefas atribuídas a ele mesmo (ex: 3 de 23 clientes da carteira).
+- `src/app/(app)/kanban/page.tsx`: lista de clientes agora vem de `GET /api/clients` (mesma fonte usada no `NewTaskModal`, que junta `ClientNote` + eventos + recaps + tarefas — a carteira completa), independente de quem está selecionado no filtro de responsável.
+- Testado contra o banco real (script descartável, só leitura): confirmado que o usuário "Felipe" via só 3 clientes com a lógica antiga; com a correção, os 23 clientes da carteira aparecem.
+
 ## 2026-07-23 (sidebar vira blocos com drill-down, pra não poluir a tela)
 
 - A sidebar tinha 11 itens soltos numa lista só. Agora só `Dashboard` fica solto no topo; o resto virou 4 blocos colapsáveis (accordion): **Tarefas** (Minha Semana, Tarefas, Kanban, Calendário), **Clientes** (Clientes, Tratativas), **IA** (Meet Recaps, Sugestões da IA) e **Sistema** (Logs, Configurações).

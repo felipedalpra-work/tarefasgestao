@@ -24,6 +24,7 @@ function KanbanPageInner() {
 
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ col: string; index: number } | null>(null);
@@ -51,22 +52,15 @@ function KanbanPageInner() {
     setParams({ assignee: next.length ? next.join(",") : "all" });
   }
 
-  // drill-down: só mostra clientes que aparecem nas tarefas das pessoas já selecionadas
-  const clientOptions = useMemo(() => {
-    const relevant = selectedAssignees.length
-      ? tasks.filter((t) => t.assignee && selectedAssignees.includes(t.assignee.id))
-      : tasks;
-    const set = new Set(relevant.map((t) => t.client).filter((c): c is string => !!c));
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [tasks, selectedAssignees]);
-
   async function load() {
-    const [tasksRes, usersRes] = await Promise.all([
+    const [tasksRes, usersRes, clientsRes] = await Promise.all([
       fetch("/api/tasks"),
       fetch("/api/users"),
+      fetch("/api/clients"),
     ]);
     setTasks(await tasksRes.json());
     setUsers(await usersRes.json());
+    setClientOptions(await clientsRes.json());
   }
 
   useEffect(() => { load(); }, []);
@@ -75,9 +69,9 @@ function KanbanPageInner() {
     if (session?.user?.id && assigneeParam === null) setParams({ assignee: session.user.id });
   }, [session?.user?.id, assigneeParam, setParams]);
 
-  // drill-down: se o cliente selecionado deixou de existir entre as pessoas escolhidas, limpa
+  // se o cliente selecionado deixou de existir na carteira, limpa o filtro
   useEffect(() => {
-    if (selectedClient && !clientOptions.includes(selectedClient)) setParams({ client: "all" });
+    if (selectedClient && clientOptions.length > 0 && !clientOptions.includes(selectedClient)) setParams({ client: "all" });
   }, [selectedClient, clientOptions, setParams]);
 
   // Optimistic update: muda local na hora, persiste em background
@@ -169,7 +163,7 @@ function KanbanPageInner() {
           })}
         </div>
 
-        {/* Client filter — drill-down: só lista clientes das pessoas já selecionadas acima */}
+        {/* Client filter — lista a carteira completa de clientes, independente do filtro de responsável */}
         {clientOptions.length > 0 && (
           <select
             value={selectedClient ?? "all"}

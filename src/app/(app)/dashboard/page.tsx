@@ -6,7 +6,7 @@ import { DeadlineCheckButton } from "@/components/DeadlineCheckButton";
 import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, AlertCircle, Circle, TrendingUp, BarChart2, Building2, Flame, ArrowRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, dueDateOnly, isTaskOverdue } from "@/lib/utils";
 
 async function getStats(userId: string) {
   const [allTasks, users, clients] = await Promise.all([getAllTasks(), getUsers(), getClientsOverview()]);
@@ -19,7 +19,7 @@ async function getStats(userId: string) {
     const uTasks = allTasks.filter(t => t.assigneeId === u.id);
     const completedThisWeek = uTasks.filter(t => t.status === "done" && new Date(t.updatedAt) >= weekAgo).length;
     const open = uTasks.filter(t => t.status !== "done").length;
-    const overdue = uTasks.filter(t => t.dueDate && t.status !== "done" && new Date(t.dueDate) < new Date()).length;
+    const overdue = uTasks.filter(t => isTaskOverdue(t.dueDate, t.status)).length;
     return { user: u, completedThisWeek, open, overdue, total: uTasks.length };
   });
 
@@ -55,7 +55,7 @@ export default async function DashboardPage() {
   // seção acionável: atrasadas + vencendo em até 2 dias
   const needsAttention = myTasks
     .filter((t) => t.status !== "done" && t.dueDate)
-    .filter((t) => differenceInCalendarDays(new Date(t.dueDate!), today) <= 2)
+    .filter((t) => differenceInCalendarDays(dueDateOnly(t.dueDate!), today) <= 2)
     .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
     .slice(0, 6);
 
@@ -103,7 +103,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid sm:grid-cols-2 gap-2">
             {needsAttention.map((t) => {
-              const due = new Date(t.dueDate!);
+              const due = dueDateOnly(t.dueDate!);
               const isOverdue = due < today;
               const daysDiff = differenceInCalendarDays(due, today);
               const dueLabel = isOverdue
