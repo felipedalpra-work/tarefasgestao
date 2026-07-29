@@ -35,7 +35,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "title é obrigatório" }, { status: 400 });
   }
 
-  const duplicateNote = await findDuplicateNote(body.title, body.client || null);
+  const duplicateNote = await findDuplicateNote(
+    body.title,
+    body.client || null,
+    body.dueDate ? new Date(body.dueDate) : null
+  );
 
   const suggestion = await prisma.externalSuggestion.create({
     data: {

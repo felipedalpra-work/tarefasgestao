@@ -145,7 +145,9 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
 
     const validTasks = tasks.filter((t) => t.title?.trim());
     if (validTasks.length > 0) {
-      const duplicateNotes = await Promise.all(validTasks.map((t) => findDuplicateNote(t.title!, client)));
+      const duplicateNotes = await Promise.all(
+        validTasks.map((t) => findDuplicateNote(t.title!, client, t.dueDate ? new Date(t.dueDate) : null))
+      );
       await prisma.recapSuggestion.createMany({
         data: validTasks.map((t, index) => ({
           recapId,

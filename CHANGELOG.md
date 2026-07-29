@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-24 (detecção de duplicidade não considerava reuniões recorrentes)
+
+- `findDuplicateNote` (`src/lib/duplicate-detection.ts`) marcava como duplicada qualquer sugestão com título normalizado + cliente iguais a uma tarefa aberta ou sugestão pendente — sem olhar quando isso aconteceu. Reuniões recorrentes (semanais/mensais) com o mesmo cliente tendem a gerar o mesmo título genérico toda vez ("Enviar relatório mensal", "Follow-up com cliente"), então toda ocorrência nova virava "duplicada" de uma antiga, mesmo sendo semanas ou meses depois.
+- Critério escolhido: além de título+cliente baterem, agora também exige que as datas estejam próximas — dentro de ~2 semanas (prazo da sugestão, ou data de criação quando não tem prazo). `findDuplicateNote` passou a receber um terceiro parâmetro opcional (`dueDate`) para essa comparação; atualizado nos dois pontos que chamam a função (`process-recap.ts` e `webhooks/n8n/route.ts`).
+- Validado com script descartável (só leitura) contra o banco real + teste isolado da janela de tempo: 5 dias de diferença ainda conta como duplicata, 30 dias (ocorrência do mês seguinte) não conta mais.
+
 ## 2026-07-24 (link "Ver tarefa" do Slack não abria — apontava pra localhost)
 
 - Causa: `getBaseUrl()` (`src/lib/base-url.ts`) só olhava `APP_URL`/`NEXT_PUBLIC_APP_URL`; sem essas variáveis configuradas na Vercel, caía direto no fallback `http://localhost:3000` — daí o link do Slack (e de qualquer outro lugar que usa `getBaseUrl()`: comentário com @menção, briefing de reunião, digest semanal) virar um link morto pra quem não está com o servidor local rodando.
