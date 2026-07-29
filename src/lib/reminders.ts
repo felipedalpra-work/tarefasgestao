@@ -114,7 +114,7 @@ export async function checkFechamentoIncompleto(): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `📋 Fechamento de ${String(p.month).padStart(2, "0")}/${p.year} de ${c.client} está incompleto`;
-      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, true);
+      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, false);
       alerted++;
     }
   }

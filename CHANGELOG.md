@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-24 (lembrete de fechamento incompleto para de mandar no Slack)
+
+- `checkFechamentoIncompleto` (`src/lib/reminders.ts`), parte do job `deadlines` (roda 8h e 17h BRT via GitHub Actions), mandava `📋 Fechamento de MM/AAAA de {cliente} está incompleto` todo dia pro Slack de todo o squad, a pedido do usuário parou de fazer barulho.
+- Mudou só o último argumento de `broadcast(...)` de `true` pra `false` — mesmo padrão já usado em `checkOnboardingDelays` pra lembretes menos críticos. Continua criando a notificação in-app (sino) normalmente, só não dispara mais DM no Slack.
+
 ## 2026-07-24 (detecção de duplicidade não considerava reuniões recorrentes)
 
 - `findDuplicateNote` (`src/lib/duplicate-detection.ts`) marcava como duplicada qualquer sugestão com título normalizado + cliente iguais a uma tarefa aberta ou sugestão pendente — sem olhar quando isso aconteceu. Reuniões recorrentes (semanais/mensais) com o mesmo cliente tendem a gerar o mesmo título genérico toda vez ("Enviar relatório mensal", "Follow-up com cliente"), então toda ocorrência nova virava "duplicada" de uma antiga, mesmo sendo semanas ou meses depois.
