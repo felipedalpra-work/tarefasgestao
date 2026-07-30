@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (adicionar cliente manualmente em /clientes)
+
+- Antes, um cliente só aparecia na tabela depois de gerar alguma atividade (tarefa, reunião ou recap) ou de alguém mexer numa linha já existente — não tinha como cadastrar um cliente novo do zero direto na plataforma. Botão "Adicionar Cliente" em `/clientes` (`ClientsTable.tsx`) abre um modal só com o nome; o resto das colunas (Saúde, ERP, Status, Implantação Oxy etc.) fica com os defaults de sempre (`ativo` / `não iniciado` / `verde`) pra preencher depois na própria tabela.
+- Novo `POST /api/clients`: valida duplicidade **sem diferenciar maiúsculas/minúsculas contra as 4 fontes** que compõem a carteira (ClientNote + eventos + recaps + tarefas) — não só contra outros ClientNote — porque cliente não é entidade própria, é string espalhada em várias tabelas; sem essa checagem ampla, "fismatek" e "Fismatek" virariam dois clientes diferentes na tabela.
+- Estado vazio da página (antes só em `page.tsx`) migrou pra dentro de `ClientsTable`, porque agora o botão de adicionar precisa aparecer mesmo com a carteira zerada.
+- Validado contra o banco real (script descartável): duplicidade com case diferente detectada corretamente, criação com os defaults certos, segunda tentativa do mesmo nome bloqueada, e o registro de teste removido no final — banco voltou ao estado original.
+
 ## 2026-07-30 (estatísticas no painel de Automações)
 
 - `/automacoes` ganhou uma visão geral: execuções nos últimos 30 dias, taxa de sucesso, contagem de erros e a automação mais usada (por total de execuções) — a pedido do usuário, que queria enxergar quantas vezes cada rotina já rodou, erros e qual é mais usada.
