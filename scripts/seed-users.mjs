@@ -17,7 +17,7 @@ const prisma = new PrismaClient({ adapter });
 const users = [
   { name: "Felipe", email: "felipe.dalpra@o2inc.com.br", password: "o2squad2024" },
   { name: "Gustavo", email: "gustavo.cochlar@o2inc.com.br", password: "o2squad2024" },
-  { name: "Humberto", email: "humberto.behs@o2inc.com.br", password: "o2squad2024" },
+  { name: "Tainara Konzen", email: "tainara.konzen@o2inc.com.br", password: "o2squad2024" },
 ];
 
 for (const u of users) {

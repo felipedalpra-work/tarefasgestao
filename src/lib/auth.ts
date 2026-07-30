@@ -40,6 +40,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           prompt: "consent",
         },
       },
+      // "Adicionar membro" (Configurações → Equipe / POST /api/users) cria a linha em User
+      // sem senha — é assim que se convida alguém novo pro squad, esperando que a pessoa
+      // entre direto com o Google. Sem essa flag, o NextAuth recusa o primeiro login porque
+      // já existe um User com esse email mas nenhuma Account do Google ainda vinculada
+      // (erro "OAuthAccountNotLinked", que a tela de login mostra como "sem acesso").
+      // Seguro aqui porque o callback signIn abaixo já funciona como allowlist: só libera
+      // e-mails que já têm uma linha em User — ninguém entra só por ter uma conta Google.
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   session: { strategy: "jwt" },

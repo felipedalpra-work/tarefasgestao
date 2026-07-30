@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (Tainara não conseguia logar — "Adicionar membro" não dava acesso de verdade)
+
+- Causa: "Adicionar membro" em Configurações → Equipe (`POST /api/users`) cria a linha em `User` só com nome/e-mail/cargo, sem senha — a ideia é a pessoa entrar direto pelo Google, já que o callback `signIn` (`src/lib/auth.ts`) libera qualquer e-mail que já tenha uma linha em `User`. Só que sem `allowDangerousEmailAccountLinking`, o NextAuth recusava esse primeiro login (existe `User` com esse e-mail, mas nenhuma `Account` do Google ainda vinculada) — erro `OAuthAccountNotLinked`, que a tela de `/login` mostra como a mensagem genérica "Esse e-mail ainda não tem acesso liberado no squad." Todo mundo adicionado só por esse formulário (não pelo script inicial de senha) ficava nessa situação, não só a Tainara.
+- Correção: `allowDangerousEmailAccountLinking: true` no provider do Google (`src/lib/auth.ts`) — seguro aqui porque o callback `signIn` já funciona como allowlist (só libera e-mail com `User` pré-cadastrado; não abre a porta pra qualquer conta Google).
+- Desbloqueio imediato: defini a senha inicial padrão do squad (`o2squad2024`, mesma dos outros) direto no banco pra Tainara — validado com `bcrypt.compare` antes de avisar que estava resolvido.
+- Atualizei `scripts/seed-users.mjs` (estava com Humberto, que já saiu) pra refletir o squad atual.
+
 ## 2026-07-30 (adicionar cliente manualmente em /clientes)
 
 - Antes, um cliente só aparecia na tabela depois de gerar alguma atividade (tarefa, reunião ou recap) ou de alguém mexer numa linha já existente — não tinha como cadastrar um cliente novo do zero direto na plataforma. Botão "Adicionar Cliente" em `/clientes` (`ClientsTable.tsx`) abre um modal só com o nome; o resto das colunas (Saúde, ERP, Status, Implantação Oxy etc.) fica com os defaults de sempre (`ativo` / `não iniciado` / `verde`) pra preencher depois na própria tabela.
