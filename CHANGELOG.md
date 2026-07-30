@@ -4,6 +4,10 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (filtro Tudo/Reuniões/Tarefas em /calendar)
+
+- Além do filtro por pessoa, `/calendar` (`CalendarGrid.tsx`) ganhou um segundo filtro pra alternar entre ver tudo, só reuniões (eventos do Google Calendar) ou só tarefas — os dois filtros combinam (ex: só as tarefas do Felipe, ou só as reuniões da Tainara).
+
 ## 2026-07-30 (filtro por pessoa em /calendar — cruza reunião e tarefa)
 
 - Pedido do usuário: poder ver a agenda de cada um (ou de 2-3 pessoas juntas), cruzando reuniões do Google Calendar com tarefas, num mesmo filtro — mesmo padrão de multi-seleção já usado em Kanban/Tarefas.
