@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (painel de Automações — visibilidade + controle das rotinas Oxy)
+
+- Código recebido via patch de outra sessão (Claude Cowork), aplicado com `git am` na branch `feature/automacoes-painel` pra preservar a autoria, revisado (typecheck com Prisma Client regenerado localmente + lint) e mesclado na `main` depois de confirmar com o usuário.
+- Novos modelos `Automation`, `AutomationRun`, `AutomationCommand` (`prisma/schema.prisma`) — guardam só o status reportado pelas rotinas externas (GetConnect/Babyland → Oxy CFO Hub, lembrete Zé do Flor), que hoje rodam como tarefas agendadas do Claude/Cowork fora deste app.
+- `POST /api/automations/report`: a rotina externa reporta status (sucesso/erro) ao final de cada execução. `GET /api/automations`: alimenta a página `/automacoes` (nova, com item no Sidebar → grupo Sistema). `POST /api/automations/[id]/commands`: o painel dispara "Rodar agora"/"Pausar"/"Reativar". `GET .../commands/pending` + `POST .../ack`: uma tarefa-ponte do Claude consome a fila e confirma quando processa.
+- Autenticação: ações do painel exigem sessão (qualquer pessoa do squad); as chamadas da rotina/bridge externa usam bearer token via nova env `AUTOMATIONS_SECRET` (mesmo padrão do `N8N_WEBHOOK_SECRET` — escopo isolado, não toca em Task/Cliente/Usuário).
+- **Pendente pra terminar de funcionar**: configurar `AUTOMATIONS_SECRET` nas env vars da Vercel (Settings → Environment Variables) e rodar `npx prisma db push` pra criar as tabelas novas no banco — nenhum dos dois foi feito ainda por falta de acesso a partir daqui.
+
 ## 2026-07-24 (lembrete de fechamento incompleto para de mandar no Slack)
 
 - `checkFechamentoIncompleto` (`src/lib/reminders.ts`), parte do job `deadlines` (roda 8h e 17h BRT via GitHub Actions), mandava `📋 Fechamento de MM/AAAA de {cliente} está incompleto` todo dia pro Slack de todo o squad, a pedido do usuário parou de fazer barulho.
