@@ -1,4 +1,4 @@
-import { getCalendarEvents, getAllTasks } from "@/lib/queries";
+import { getCalendarEvents, getAllTasks, getUsers } from "@/lib/queries";
 import { CalendarGrid } from "@/components/CalendarGrid";
 
 const MONTHS = [
@@ -26,6 +26,7 @@ async function getCalendarData(year: number, month: number) {
     startAt: new Date(event.startAt).toISOString(),
     endAt: new Date(event.endAt).toISOString(),
     briefingSent: event.briefingSent,
+    attendeeUserIds: event.attendeeUserIds,
     o2Tasks: deliveryTasks
       .filter(t => t.client === event.client && t.deliverTo === "client")
       .map(t => ({
@@ -74,7 +75,10 @@ export default async function CalendarPage({
   const year = parseInt(params.year ?? String(now.getFullYear()));
   const month = parseInt(params.month ?? String(now.getMonth() + 1));
 
-  const { events, tasks } = await getCalendarData(year, month);
+  const [{ events, tasks }, users] = await Promise.all([
+    getCalendarData(year, month),
+    getUsers(),
+  ]);
 
   return (
     <div className="p-4 md:p-6 flex flex-col h-full">
@@ -89,6 +93,7 @@ export default async function CalendarPage({
         month={month}
         events={events}
         tasks={tasks}
+        users={users}
       />
     </div>
   );

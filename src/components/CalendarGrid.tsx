@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Calendar, Users, Package, LayoutGrid, List, CheckSquare } from "lucide-react";
 import { cn, dueDateOnly } from "@/lib/utils";
+import type { UserOption } from "@/types/task";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
@@ -18,7 +19,7 @@ type Task = {
   status: string;
   dueDate: string | null;
   client?: string | null;
-  assignee: { name: string | null } | null;
+  assignee: { id: string; name: string | null } | null;
 };
 
 type CalendarEvent = {
@@ -28,6 +29,7 @@ type CalendarEvent = {
   startAt: string;
   endAt: string;
   briefingSent: boolean;
+  attendeeUserIds: string[];
   o2Tasks: Task[];
   clientTasks: Task[];
 };
@@ -72,15 +74,30 @@ export function CalendarGrid({
   month,
   events,
   tasks,
+  users,
 }: {
   year: number;
   month: number;
   events: CalendarEvent[];
   tasks: Task[];
+  users: UserOption[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
   const [view, setView] = useState<"month" | "agenda">("month");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+  function toggleUser(userId: string) {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  }
+
+  // filtro vazio = mostra todo mundo; senão só reunião/tarefa de quem está selecionado
+  function matchesPeople(candidateIds: string[]) {
+    if (selectedUserIds.length === 0) return true;
+    return candidateIds.some((id) => selectedUserIds.includes(id));
+  }
 
   function navigate(deltaMonths: number) {
     let y = year;
@@ -102,11 +119,11 @@ export function CalendarGrid({
   today.setHours(0, 0, 0, 0);
 
   function eventsForDay(day: Date) {
-    return events.filter(e => sameDay(new Date(e.startAt), day));
+    return events.filter(e => sameDay(new Date(e.startAt), day) && matchesPeople(e.attendeeUserIds));
   }
 
   function tasksForDay(day: Date) {
-    return tasks.filter(t => t.dueDate && sameDay(dueDateOnly(t.dueDate), day));
+    return tasks.filter(t => t.dueDate && sameDay(dueDateOnly(t.dueDate), day) && matchesPeople(t.assignee ? [t.assignee.id] : []));
   }
 
   // agenda = um item por dia com conteúdo (reunião e/ou tarefa com prazo), não só reunião
@@ -170,6 +187,43 @@ export function CalendarGrid({
             </button>
           </div>
         </div>
+
+        {/* Person filter — multi-seleção: cruza reuniões (participantes) e tarefas (responsável) */}
+        {users.length > 0 && (
+          <div className="flex items-center gap-1.5 bg-surface border border-surface-3 rounded-xl p-1 mb-4 self-start flex-wrap">
+            <button
+              onClick={() => setSelectedUserIds([])}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                selectedUserIds.length === 0 ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+              )}
+            >
+              Todos
+            </button>
+            {users.map((u) => {
+              const isActive = selectedUserIds.includes(u.id);
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => toggleUser(u.id)}
+                  title={u.name || u.email}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                    isActive ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+                  )}
+                >
+                  <span className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                    isActive ? "bg-o2-green/30 text-o2-green" : "bg-surface-3 text-ink-mid"
+                  )}>
+                    {(u.name || u.email)[0].toUpperCase()}
+                  </span>
+                  {u.name?.split(" ")[0] || u.email}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {view === "month" ? (
           <>

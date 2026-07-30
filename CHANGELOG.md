@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (filtro por pessoa em /calendar — cruza reunião e tarefa)
+
+- Pedido do usuário: poder ver a agenda de cada um (ou de 2-3 pessoas juntas), cruzando reuniões do Google Calendar com tarefas, num mesmo filtro — mesmo padrão de multi-seleção já usado em Kanban/Tarefas.
+- Problema de base: `CalendarEvent` não guardava **quem** do squad participa de cada reunião — só `client`/`title`/datas. A sincronização (`calendar-sync.ts`) roda por usuário (`syncCalendarForUser`), mas nada registrava isso na tabela.
+- Novo campo `attendeeUserIds String[]` em `CalendarEvent`. Durante a sincronização, os e-mails da lista `attendees` do Google são casados (sem diferenciar maiúsculas/minúsculas) contra `User.email`; quem não é do squad (contato do cliente, por ex.) é ignorado. Quem sincronizou sempre entra na lista, mesmo que o Google não liste o dono do calendário como attendee.
+- `/calendar` (`CalendarGrid.tsx`) ganhou a mesma faixa de filtro multi-seleção do Kanban/Tarefas — filtra reunião (por `attendeeUserIds`) e tarefa (por responsável) juntas; vazio = mostra todo mundo.
+- Validado com dados sintéticos (banco real, removidos depois): resolução de e-mail case-insensitive com contato externo corretamente ignorado, array persistindo e relendo certo, e as 3 combinações do filtro (pessoa específica, pessoa não convidada, "Todos") bateram como esperado.
+
 ## 2026-07-30 (Tainara não conseguia logar — "Adicionar membro" não dava acesso de verdade)
 
 - Causa: "Adicionar membro" em Configurações → Equipe (`POST /api/users`) cria a linha em `User` só com nome/e-mail/cargo, sem senha — a ideia é a pessoa entrar direto pelo Google, já que o callback `signIn` (`src/lib/auth.ts`) libera qualquer e-mail que já tenha uma linha em `User`. Só que sem `allowDangerousEmailAccountLinking`, o NextAuth recusava esse primeiro login (existe `User` com esse e-mail, mas nenhuma `Account` do Google ainda vinculada) — erro `OAuthAccountNotLinked`, que a tela de `/login` mostra como a mensagem genérica "Esse e-mail ainda não tem acesso liberado no squad." Todo mundo adicionado só por esse formulário (não pelo script inicial de senha) ficava nessa situação, não só a Tainara.

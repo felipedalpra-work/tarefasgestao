@@ -23,11 +23,19 @@ export function extractMeetingTypeFromTitle(title: string): string | null {
   return null;
 }
 
-export async function syncCalendarForUser(userId: string): Promise<number> {
+// e-mail (minúsculo) → User.id, pra resolver os convidados de cada reunião contra o squad
+async function buildEmailToUserId(): Promise<Map<string, string>> {
+  const users = await prisma.user.findMany({ select: { id: true, email: true } });
+  return new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+}
+
+export async function syncCalendarForUser(userId: string, emailToUserId?: Map<string, string>): Promise<number> {
   const account = await prisma.account.findFirst({
     where: { userId, provider: "google" },
   });
   if (!account?.access_token) return 0;
+
+  const emailMap = emailToUserId ?? (await buildEmailToUserId());
 
   try {
     const oauth2 = new google.auth.OAuth2(
@@ -69,10 +77,21 @@ export async function syncCalendarForUser(userId: string): Promise<number> {
 
       const meetingType = extractMeetingTypeFromTitle(title);
 
+      // participantes conhecidos do squad (por e-mail) — quem sincronizou sempre entra,
+      // mesmo que o Google não liste o dono do calendário em "attendees"
+      const attendeeIds = new Set<string>();
+      attendeeIds.add(userId);
+      for (const attendee of event.attendees ?? []) {
+        const email = attendee.email?.toLowerCase();
+        const matchedId = email ? emailMap.get(email) : undefined;
+        if (matchedId) attendeeIds.add(matchedId);
+      }
+      const attendeeUserIds = [...attendeeIds];
+
       await prisma.calendarEvent.upsert({
         where: { googleId: event.id! },
-        update: { title, client, startAt, endAt, meetingType },
-        create: { googleId: event.id!, title, client, startAt, endAt, meetingType },
+        update: { title, client, startAt, endAt, meetingType, attendeeUserIds },
+        create: { googleId: event.id!, title, client, startAt, endAt, meetingType, attendeeUserIds },
       });
       synced++;
     }
@@ -98,8 +117,9 @@ export async function syncAllCalendars(): Promise<void> {
     distinct: ["userId"],
   });
 
+  const emailToUserId = await buildEmailToUserId();
   for (const { userId } of accounts) {
-    const count = await syncCalendarForUser(userId);
+    const count = await syncCalendarForUser(userId, emailToUserId);
     if (count > 0) console.log(`[calendar-sync] userId=${userId}: ${count} evento(s) sincronizado(s)`);
   }
 }

@@ -333,6 +333,7 @@ model CalendarEvent {
   nextSteps    String? // próximos passos validados pós-reunião
   attendanceConfirmed Boolean @default(false) // presença confirmada/corrigida
   registroConferido   Boolean @default(false) // registro (gravação/transcrição) conferido
+  attendeeUserIds     String[] @default([]) // User.id de quem do squad participa (e-mail do convidado casado com User.email), pro filtro por pessoa em /calendar
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
