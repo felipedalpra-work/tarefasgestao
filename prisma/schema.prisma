@@ -357,3 +357,62 @@ model FechamentoMensal {
   @@unique([client, year, month])
   @@index([client])
 }
+
+// Rotinas automatizadas fora do app (hoje rodam como tarefas agendadas do
+// Claude/Cowork: extração de relatório no ERP do cliente + upload na Oxy
+// CFO Hub). Este modelo só guarda o status reportado por elas — a execução
+// em si acontece fora do tarefasgestao.
+model Automation {
+  id            String    @id @default(cuid())
+  key           String    @unique // ex: "getconnect-oxy", "babyland-oxy", "zedoflor-lembrete"
+  name          String // ex: "GetConnect → Oxy CFO Hub"
+  client        String? // nome do cliente, casa com ClientNote.client quando existir
+  scheduleLabel String // ex: "Toda quarta, 14h" — texto livre, só pra exibição
+  enabled       Boolean   @default(true) // controlado pelo painel /automacoes
+  lastRunAt     DateTime?
+  lastStatus    String? // "success" | "error"
+  lastSummary   String?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  runs     AutomationRun[]
+  commands AutomationCommand[]
+
+  @@index([client])
+}
+
+// Histórico de execuções reportadas pela rotina externa (uma linha por rodada).
+model AutomationRun {
+  id           String    @id @default(cuid())
+  automationId String
+  status       String // "success" | "error"
+  summary      String?
+  detail       String?
+  startedAt    DateTime?
+  finishedAt   DateTime  @default(now())
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+  @@index([finishedAt])
+}
+
+// Fila de comandos vindos do painel /automacoes ("Rodar agora", "Pausar",
+// "Reativar"). Uma tarefa agendada do Claude (bridge) faz polling desses
+// comandos pendentes e executa do lado de fora, depois marca como concluído.
+model AutomationCommand {
+  id            String    @id @default(cuid())
+  automationId  String
+  type          String // "trigger" | "pause" | "resume"
+  status        String    @default("pending") // "pending" | "done" | "failed"
+  requestedById String?
+  resultDetail  String?
+  requestedAt   DateTime  @default(now())
+  processedAt   DateTime?
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId, status])
+  @@index([status])
+}
