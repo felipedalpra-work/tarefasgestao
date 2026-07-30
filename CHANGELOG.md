@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (estatísticas no painel de Automações)
+
+- `/automacoes` ganhou uma visão geral: execuções nos últimos 30 dias, taxa de sucesso, contagem de erros e a automação mais usada (por total de execuções) — a pedido do usuário, que queria enxergar quantas vezes cada rotina já rodou, erros e qual é mais usada.
+- Cada card de automação ganhou um histórico visual (últimos 10 runs como quadradinhos verde/vermelho, com tooltip de data e status) + contagem de sucesso/erro total.
+- Painel de "Erros recentes" (últimos 5, entre todas as automações) aparece só quando existe pelo menos um erro registrado.
+- Novo `GET /api/automations/stats` (protegido por sessão, separado do `GET /api/automations` que a página já fazia polling a cada 30s, pra não pesar esse ciclo com as agregações). Calcula tudo em memória a partir de `AutomationRun` (sem groupBy do Prisma) — simples de dar manutenção, e rápido o suficiente pro volume esperado (poucas dezenas de execuções por automação).
+- Validado com dados sintéticos criados e removidos via script descartável: taxa de sucesso, filtro de 30 dias, "mais usada" e lista de erros recentes bateram certo antes de eu limpar o banco de volta ao estado original.
+
 ## 2026-07-30 (painel de Automações — visibilidade + controle das rotinas Oxy)
 
 - Código recebido via patch de outra sessão (Claude Cowork), aplicado com `git am` na branch `feature/automacoes-painel` pra preservar a autoria, revisado (typecheck com Prisma Client regenerado localmente + lint) e mesclado na `main` depois de confirmar com o usuário.

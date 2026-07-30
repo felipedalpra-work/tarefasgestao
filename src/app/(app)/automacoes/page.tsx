@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, Play, Pause, PlayCircle, CheckCircle2, XCircle, Clock, Zap } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import {
+  RefreshCw, Play, Pause, PlayCircle, CheckCircle2, XCircle, Clock, Zap,
+  Activity, TrendingUp, AlertTriangle,
+} from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
+import { cn } from "@/lib/utils";
 
 type Automation = {
   id: string;
@@ -20,17 +24,40 @@ type Automation = {
   pendingCommand: string | null;
 };
 
+type AutomationStat = {
+  key: string;
+  name: string;
+  totalRuns: number;
+  successCount: number;
+  errorCount: number;
+  recentRuns: { status: string; finishedAt: string }[];
+};
+
+type Stats = {
+  totalRuns30d: number;
+  successRate30d: number | null;
+  errorRuns30d: number;
+  mostUsed: { name: string; key: string; totalRuns: number } | null;
+  perAutomation: AutomationStat[];
+  recentErrors: { automationName: string; finishedAt: string; summary: string | null; detail: string | null }[];
+};
+
 export default function AutomacoesPage() {
   const [items, setItems] = useState<Automation[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/automations");
+      const [res, statsRes] = await Promise.all([
+        fetch("/api/automations"),
+        fetch("/api/automations/stats"),
+      ]);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
+      if (statsRes.ok) setStats(await statsRes.json());
     } catch (err) {
       console.error("[automacoes]", err);
     } finally {
@@ -90,8 +117,62 @@ export default function AutomacoesPage() {
         </button>
       </div>
 
+      {stats && (
+        <div className="bg-surface border border-surface-3 rounded-xl px-5 py-4 mb-6 flex items-center gap-6 md:gap-10 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <Activity size={15} className="text-ink-mid" />
+            <span className="text-xl font-bold text-ink">{stats.totalRuns30d}</span>
+            <span className="text-xs text-ink-mid">Execuções (30d)</span>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={15} className={stats.errorRuns30d > 0 ? "text-yellow-400" : "text-o2-green"} />
+            <span className="text-xl font-bold text-ink">
+              {stats.successRate30d === null ? "—" : `${stats.successRate30d}%`}
+            </span>
+            <span className="text-xs text-ink-mid">Taxa de sucesso (30d)</span>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <XCircle size={15} className={stats.errorRuns30d > 0 ? "text-red-400" : "text-ink-faint"} />
+            <span className="text-xl font-bold text-ink">{stats.errorRuns30d}</span>
+            <span className="text-xs text-ink-mid">Erros (30d)</span>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <TrendingUp size={15} className="text-ink-mid" />
+            <span className="text-xl font-bold text-ink truncate max-w-[160px]">
+              {stats.mostUsed ? stats.mostUsed.name : "—"}
+            </span>
+            <span className="text-xs text-ink-mid">
+              Mais usada{stats.mostUsed ? ` (${stats.mostUsed.totalRuns}x)` : ""}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {stats && stats.recentErrors.length > 0 && (
+        <div className="bg-surface border border-red-500/20 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle size={13} className="text-red-400" />
+            <h2 className="text-xs font-semibold text-ink-mid uppercase tracking-wide">Erros recentes</h2>
+          </div>
+          <div className="space-y-2">
+            {stats.recentErrors.map((e, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs">
+                <span className="text-ink font-medium shrink-0">{e.automationName}</span>
+                <span className="text-ink-faint shrink-0">
+                  {formatDistanceToNow(new Date(e.finishedAt), { addSuffix: true, locale: ptBR })}
+                </span>
+                {(e.detail || e.summary) && (
+                  <span className="text-red-400 truncate">{e.detail || e.summary}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         {items.map((a) => {
+          const cardStats = stats?.perAutomation.find((s) => s.key === a.key);
           const isBusy = busyId === a.id;
           const statusBadge = !a.enabled
             ? { label: "Pausada", cls: "bg-surface-3 text-ink-faint", Icon: Pause }
@@ -129,6 +210,26 @@ export default function AutomacoesPage() {
                       Última execução {formatDistanceToNow(new Date(a.lastRunAt), { addSuffix: true, locale: ptBR })}
                       {a.lastStatus === "error" && a.lastError ? `: ${a.lastError}` : a.lastSummary ? ` — ${a.lastSummary}` : ""}
                     </p>
+                  )}
+                  {cardStats && cardStats.totalRuns > 0 && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <div className="flex items-center gap-0.5">
+                        {[...cardStats.recentRuns].reverse().map((r, i) => (
+                          <span
+                            key={i}
+                            title={`${r.status === "success" ? "Sucesso" : "Erro"} · ${format(new Date(r.finishedAt), "dd/MM/yyyy HH:mm")}`}
+                            className={cn(
+                              "w-2 h-2 rounded-sm",
+                              r.status === "success" ? "bg-o2-green" : "bg-red-400"
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-ink-faint">
+                        {cardStats.successCount}/{cardStats.totalRuns} sucesso
+                        {cardStats.errorCount > 0 && ` · ${cardStats.errorCount} erro${cardStats.errorCount > 1 ? "s" : ""}`}
+                      </span>
+                    </div>
                   )}
                 </div>
 
