@@ -153,7 +153,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 // Exclui o cliente e tudo que aponta pro nome dele (client não é entidade própria,
-// é string espalhada em Task/CalendarEvent/MeetRecap/Tratativa/SetupMeeting/FechamentoMensal).
+// é string espalhada em Task/CalendarEvent/MeetRecap/Tratativa/SetupMeeting/FechamentoMensal/ClientLogin).
 // Ação destrutiva e irreversível — a confirmação fica a cargo da UI.
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth();
@@ -170,6 +170,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     prisma.tratativa.deleteMany({ where: { client } }),
     prisma.setupMeeting.deleteMany({ where: { client } }),
     prisma.fechamentoMensal.deleteMany({ where: { client } }),
+    prisma.clientLogin.deleteMany({ where: { client } }),
     prisma.clientNote.deleteMany({ where: { client } }),
   ]);
 

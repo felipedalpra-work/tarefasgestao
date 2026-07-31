@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck } from "lucide-react";
+import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck, Plus, X } from "lucide-react";
 import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { OnboardingTab } from "./OnboardingTab";
@@ -75,7 +75,6 @@ const TEMPERATURE_INFO: Record<string, { className: string }> = {
 };
 
 type OxyFields = {
-  accessMode: string;
   updateFrequency: string;
   updateResponsible: string;
   routineWhat: string;
@@ -86,7 +85,6 @@ type OxyFields = {
 };
 
 const EMPTY_OXY: OxyFields = {
-  accessMode: "",
   updateFrequency: "",
   updateResponsible: "",
   routineWhat: "",
@@ -94,6 +92,14 @@ const EMPTY_OXY: OxyFields = {
   routineWhen: "",
   oxyPendencies: "",
   pendencyWho: "",
+};
+
+// Acesso ao ERP/Oxy de uma empresa do cliente — lista, pra atender cliente com mais de um CNPJ
+type ClientLogin = {
+  id: string;
+  empresa: string;
+  erp: string | null;
+  accessMode: string | null;
 };
 
 export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
@@ -108,6 +114,9 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
   const [oxy, setOxy] = useState<OxyFields>(EMPTY_OXY);
   const [oxyLoaded, setOxyLoaded] = useState(false);
   const [savingOxy, setSavingOxy] = useState(false);
+  const [logins, setLogins] = useState<ClientLogin[]>([]);
+  const [loginsLoaded, setLoginsLoaded] = useState(false);
+  const [addingLogin, setAddingLogin] = useState(false);
 
   const myTasks = tasks.filter((t) => t.assignee?.id === currentUserId);
   const shownTasks = taskFilter === "mine" ? myTasks : tasks;
@@ -128,7 +137,6 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
         .then((r) => r.json())
         .then((data) => {
           setOxy({
-            accessMode: data.accessMode ?? "",
             updateFrequency: data.updateFrequency ?? "",
             updateResponsible: data.updateResponsible ?? "",
             routineWhat: data.routineWhat ?? "",
@@ -141,7 +149,16 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
         })
         .catch(() => setOxyLoaded(true));
     }
-  }, [tab, notesLoaded, oxyLoaded, client]);
+    if (tab === "oxy" && !loginsLoaded) {
+      fetch(`/api/clients/${encodeURIComponent(client)}/logins`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) setLogins(data);
+          setLoginsLoaded(true);
+        })
+        .catch(() => setLoginsLoaded(true));
+    }
+  }, [tab, notesLoaded, oxyLoaded, loginsLoaded, client]);
 
   async function saveNotes() {
     setSavingNotes(true);
@@ -161,7 +178,6 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        accessMode: oxy.accessMode || null,
         updateFrequency: oxy.updateFrequency || null,
         updateResponsible: oxy.updateResponsible || null,
         routineWhat: oxy.routineWhat || null,
@@ -174,6 +190,42 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     setSavingOxy(false);
     if (res.ok) toast("Dados da Oxy salvos", "success");
     else toast("Erro ao salvar", "error");
+  }
+
+  async function addLogin() {
+    setAddingLogin(true);
+    const res = await fetch(`/api/clients/${encodeURIComponent(client)}/logins`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ empresa: "", erp: null, accessMode: null }),
+    });
+    setAddingLogin(false);
+    if (res.ok) {
+      const created = await res.json();
+      setLogins((prev) => [...prev, created]);
+    } else {
+      toast("Erro ao adicionar acesso", "error");
+    }
+  }
+
+  async function updateLogin(id: string, field: keyof Omit<ClientLogin, "id">, value: string) {
+    setLogins((prev) => prev.map((l) => (l.id === id ? { ...l, [field]: value || null } : l)));
+    const res = await fetch(`/api/clients/${encodeURIComponent(client)}/logins/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value || null }),
+    });
+    if (!res.ok) toast("Erro ao salvar acesso", "error");
+  }
+
+  async function removeLogin(id: string) {
+    const prev = logins;
+    setLogins((p) => p.filter((l) => l.id !== id));
+    const res = await fetch(`/api/clients/${encodeURIComponent(client)}/logins/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      setLogins(prev);
+      toast("Erro ao remover acesso", "error");
+    }
   }
 
   async function updateEvent(eventId: string, field: keyof CalendarEvent, value: string | boolean) {
@@ -444,14 +496,66 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
           ) : (
             <>
               <div>
-                <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Modo de acesso</label>
-                <input
-                  type="text"
-                  value={oxy.accessMode}
-                  onChange={(e) => setOxy((o) => ({ ...o, accessMode: e.target.value }))}
-                  placeholder="Ex: login e senha compartilhados, API, acesso remoto…"
-                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Acessos (ERP / login)</label>
+                  <button
+                    onClick={addLogin}
+                    disabled={addingLogin}
+                    className="flex items-center gap-1 text-xs text-o2-green hover:text-o2-green-bright disabled:opacity-50 transition-colors"
+                  >
+                    <Plus size={12} />
+                    Adicionar
+                  </button>
+                </div>
+                {!loginsLoaded ? (
+                  <p className="text-xs text-ink-faint">Carregando…</p>
+                ) : logins.length === 0 ? (
+                  <p className="text-xs text-ink-ghost">Nenhum acesso cadastrado ainda — útil pra clientes com mais de uma empresa/CNPJ.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {logins.map((login) => (
+                      <div
+                        key={login.id}
+                        className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center bg-surface-2 border border-surface-3 rounded-xl p-2.5"
+                      >
+                        <input
+                          type="text"
+                          defaultValue={login.empresa}
+                          placeholder="Empresa"
+                          onBlur={(e) => {
+                            if (e.target.value !== login.empresa) updateLogin(login.id, "empresa", e.target.value);
+                          }}
+                          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                        />
+                        <input
+                          type="text"
+                          defaultValue={login.erp ?? ""}
+                          placeholder="ERP"
+                          onBlur={(e) => {
+                            if (e.target.value !== (login.erp ?? "")) updateLogin(login.id, "erp", e.target.value);
+                          }}
+                          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                        />
+                        <input
+                          type="text"
+                          defaultValue={login.accessMode ?? ""}
+                          placeholder="Modo de acesso (login/senha, API…)"
+                          onBlur={(e) => {
+                            if (e.target.value !== (login.accessMode ?? "")) updateLogin(login.id, "accessMode", e.target.value);
+                          }}
+                          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                        />
+                        <button
+                          onClick={() => removeLogin(login.id)}
+                          className="p-2 text-ink-faint hover:text-red-400 transition-colors justify-self-end sm:justify-self-auto"
+                          title="Remover acesso"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

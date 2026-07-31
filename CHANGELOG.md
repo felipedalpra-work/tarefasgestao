@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (múltiplos acessos por cliente na aba Oxy)
+
+- Antes, a aba "Oxy" de cada cliente tinha um único campo "Modo de acesso" (nunca preenchido por ninguém — conferi no banco: 0 clientes com esse campo usado). Não dava pra representar cliente com mais de uma empresa/CNPJ, cada uma com seu próprio ERP e forma de acesso — e olhando os dados reais de ERP, isso já era um problema de verdade: vários clientes têm valores tipo "Lince / Próximo ERP em estudo" ou "Agrodados (loja) / SellSoft + CATU (legado)" espremidos num campo só.
+- Novo modelo `ClientLogin` (empresa, ERP, modo de acesso) — lista, não campo único. Nova seção "Acessos (ERP / login)" na aba Oxy: adiciona quantas linhas precisar, cada uma editável e removível independente. `GET/POST /api/clients/[name]/logins` + `PATCH/DELETE /api/clients/[name]/logins/[id]`, mesmo padrão de rotas aninhadas já usado pra Subtasks de tarefa.
+- Exclusão de cliente (`DELETE /api/clients/[name]`) agora também apaga os `ClientLogin` daquele cliente — senão ficariam órfãos no banco.
+- Validado com dados sintéticos (criados e removidos depois): duas empresas pro mesmo cliente, listagem, edição e o cascade delete todos bateram certo.
+
 ## 2026-07-30 (filtro Tudo/Reuniões/Tarefas em /calendar)
 
 - Além do filtro por pessoa, `/calendar` (`CalendarGrid.tsx`) ganhou um segundo filtro pra alternar entre ver tudo, só reuniões (eventos do Google Calendar) ou só tarefas — os dois filtros combinam (ex: só as tarefas do Felipe, ou só as reuniões da Tainara).
