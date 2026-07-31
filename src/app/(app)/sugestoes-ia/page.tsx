@@ -177,11 +177,23 @@ export default function SugestoesIaPage() {
     setDraft(null);
   }
 
-  async function accept(row: Row, dueDate: string | null) {
+  // salva a edição e já cria a tarefa num clique só — usa o prazo do próprio
+  // formulário de edição, sem passar pelo modal de confirmação de prazo (redundante
+  // aqui, já que o campo "Prazo" acabou de ser editado ali em cima)
+  function saveAndAdd(row: Row) {
+    if (!draft) return;
+    setOverrides((prev) => ({ ...prev, [row.suggestion.id]: draft }));
+    setEditingId(null);
+    const finalDraft = draft;
+    setDraft(null);
+    accept(row, finalDraft.dueDate || null, finalDraft);
+  }
+
+  async function accept(row: Row, dueDate: string | null, currentOverride?: EditableFields) {
     const key = row.suggestion.id;
     setActingKey(key);
     const original = originalEditable(row);
-    const current = getEditable(row);
+    const current = currentOverride ?? getEditable(row);
     const edited =
       current.title !== original.title ||
       current.description !== original.description ||
@@ -406,10 +418,18 @@ export default function SugestoesIaPage() {
                       <button
                         onClick={() => saveEdit(row)}
                         disabled={!draft.title.trim()}
-                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-o2-green text-bg font-semibold rounded-lg hover:bg-o2-green-bright disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-surface-3 text-ink-mid font-semibold rounded-lg hover:text-ink disabled:opacity-50 transition-colors"
                       >
                         <Check size={13} />
                         Salvar
+                      </button>
+                      <button
+                        onClick={() => saveAndAdd(row)}
+                        disabled={!draft.title.trim() || acting}
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 bg-o2-green text-bg font-semibold rounded-lg hover:bg-o2-green-bright disabled:opacity-50 transition-colors"
+                      >
+                        <Plus size={13} />
+                        {acting ? "Adicionando…" : "Salvar e adicionar"}
                       </button>
                     </div>
                   </div>

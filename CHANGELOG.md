@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (botão "Salvar e adicionar" nas Sugestões da IA)
+
+- Editar uma sugestão exigia dois passos: Editar → Salvar → (sair do modo edição) → Adicionar → confirmar prazo num modal separado. Novo botão "Salvar e adicionar" no próprio formulário de edição faz tudo num clique — usa o prazo que acabou de ser editado ali em cima, sem reabrir o modal de confirmação (redundante nesse caso).
+- `accept()` (`src/app/(app)/sugestoes-ia/page.tsx`) ganhou um parâmetro opcional (`currentOverride`) pra usar o rascunho recém-editado direto, em vez de reler do estado `overrides` — evitava um bug sutil de state assíncrono (o `setOverrides` do clique não estaria refletido ainda se `accept` lesse do state na mesma função).
+- O botão "Salvar" sozinho continua existindo (só comita a edição, sem criar a tarefa ainda) — útil pra quem quer editar várias sugestões antes de decidir quais adicionar.
+
 ## 2026-07-30 (desligar notificação do Slack por tipo, em Configurações → Integração Slack)
 
 - A pedido do usuário: cada tipo de notificação do Slack agora liga/desliga independente, em vez de tudo-ou-nada. Lista completa (10 tipos, agrupados em Tarefas / Lembretes automáticos / Resumos): tarefa atribuída, tarefa concluída, lembrete manual ("Lembrar"), menção em comentário, tratativa vencida, onboarding atrasado, fechamento incompleto, sugestões da IA paradas, resumo semanal, briefing de reunião.
