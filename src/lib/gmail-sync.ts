@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import { processRecap } from "./process-recap";
 import { google } from "googleapis";
 import { log } from "./logger";
-import { isMeetRecapSuggestionsEnabled } from "./settings";
+import { isMeetRecapSuggestionsEnabled, getMeetRecapGmailUserId } from "./settings";
 
 function extractTextFromParts(parts: any[]): string {
   let text = "";
@@ -35,6 +35,13 @@ function extractTextFromParts(parts: any[]): string {
 }
 
 export async function syncUserGmail(userId: string): Promise<{ synced: number; suggestionsExtracted: number }> {
+  // se houver uma conta designada pra sincronizar Meet Recaps, qualquer outra conta
+  // não faz nada aqui — evita o mesmo recap chegando duplicado de duas caixas diferentes
+  const designatedUserId = await getMeetRecapGmailUserId();
+  if (designatedUserId && userId !== designatedUserId) {
+    return { synced: 0, suggestionsExtracted: 0 };
+  }
+
   const account = await prisma.account.findFirst({
     where: { userId, provider: "google" },
   });

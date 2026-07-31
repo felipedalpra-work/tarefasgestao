@@ -31,6 +31,8 @@ export default function SettingsPage() {
   // Meet Recap suggestions state
   const [meetRecapEnabled, setMeetRecapEnabled] = useState(true);
   const [meetRecapSaving, setMeetRecapSaving] = useState(false);
+  const [meetRecapGmailUserId, setMeetRecapGmailUserId] = useState<string | null>(null);
+  const [meetRecapGmailSaving, setMeetRecapGmailSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/google-status")
@@ -39,7 +41,7 @@ export default function SettingsPage() {
 
     fetch("/api/settings/meet-recap")
       .then((r) => r.json())
-      .then((d) => setMeetRecapEnabled(d.enabled));
+      .then((d) => { setMeetRecapEnabled(d.enabled); setMeetRecapGmailUserId(d.gmailUserId ?? null); });
 
     // load squad users + slack settings in parallel
     Promise.all([
@@ -79,6 +81,24 @@ export default function SettingsPage() {
       toast(enabled ? "Sugestões de Meet Recap reativadas" : "Sugestões de Meet Recap desativadas", "success");
     } else {
       setMeetRecapEnabled(prev);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function saveMeetRecapGmailUser(userId: string | null) {
+    setMeetRecapGmailSaving(true);
+    const prev = meetRecapGmailUserId;
+    setMeetRecapGmailUserId(userId);
+    const res = await fetch("/api/settings/meet-recap", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gmailUserId: userId }),
+    });
+    setMeetRecapGmailSaving(false);
+    if (res.ok) {
+      toast(userId ? "Conta de sincronização atualizada" : "Voltou a sincronizar de todas as contas", "success");
+    } else {
+      setMeetRecapGmailUserId(prev);
       toast("Erro ao salvar", "error");
     }
   }
@@ -262,6 +282,24 @@ export default function SettingsPage() {
             <p className="text-xs text-ink-dim">{meetRecapEnabled ? "Ativado" : "Desativado — nenhuma sugestão nova até religar"}</p>
           </div>
         </label>
+
+        <div className="mt-4 pt-4 border-t border-surface-3">
+          <label className="block text-xs text-ink-mid mb-1.5">Conta Gmail sincronizada</label>
+          <p className="text-xs text-ink-faint mb-2">
+            Se mais de uma conta sincronizar, o mesmo recap chega duplicado (uma cópia em cada caixa) e pode gerar sugestões divergentes. Recomendado manter só uma conta.
+          </p>
+          <select
+            value={meetRecapGmailUserId ?? ""}
+            disabled={meetRecapGmailSaving}
+            onChange={(e) => saveMeetRecapGmailUser(e.target.value || null)}
+            className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+          >
+            <option value="">Todas as contas conectadas (não recomendado)</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.name || u.email}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Slack Integration */}

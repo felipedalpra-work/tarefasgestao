@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (Meet Recaps sincronizam só de uma conta Gmail)
+
+- Problema levantado pelo usuário: agora que a Tainara também conectou o Google, `syncAllUsers` (gmail-sync) passou a buscar Meet Recaps na caixa de todo mundo com conta ligada. Um mesmo e-mail de recap (reunião com mais de uma pessoa do squad convidada) chega em cada caixa com `gmailId` diferente — vira dois `MeetRecap` separados pro mesmo encontro, com sugestão de tarefa extraída duas vezes, potencialmente divergente. Gera duplicidade e ruído em `/recaps` e `/sugestoes-ia`.
+- Correção: nova configuração "Conta Gmail sincronizada" (Configurações → Meet Recaps (IA)) — quando definida, `syncUserGmail` (`src/lib/gmail-sync.ts`) não faz nada pras demais contas. Sem configurar, mantém o comportamento antigo (sincroniza de todas), mesmo padrão de "ausência de Setting = comportamento histórico" já usado no toggle de sugestões.
+- Já apliquei direto no banco (sem esperar o clique na tela): só a conta da Tainara sincroniza Meet Recaps a partir de agora — é quem de fato participa das reuniões de cliente.
+
 ## 2026-07-30 (filtro de prazo no Kanban)
 
 - `/kanban` ganhou o mesmo filtro de prazo já usado em `/tasks`: atalhos (Todos/Atrasadas/Hoje/Esta semana/Sem prazo) + período customizado, combinando com os filtros de responsável e cliente que já existiam. `setParams` do Kanban passou a aceitar `null` pra remover parâmetro da URL (igual `/tasks`), necessário pra limpar `dueFrom`/`dueTo` ao trocar de atalho.
