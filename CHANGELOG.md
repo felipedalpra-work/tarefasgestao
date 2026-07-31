@@ -4,6 +4,10 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (filtro de prazo no Kanban)
+
+- `/kanban` ganhou o mesmo filtro de prazo já usado em `/tasks`: atalhos (Todos/Atrasadas/Hoje/Esta semana/Sem prazo) + período customizado, combinando com os filtros de responsável e cliente que já existiam. `setParams` do Kanban passou a aceitar `null` pra remover parâmetro da URL (igual `/tasks`), necessário pra limpar `dueFrom`/`dueTo` ao trocar de atalho.
+
 ## 2026-07-30 (múltiplos acessos por cliente na aba Oxy)
 
 - Antes, a aba "Oxy" de cada cliente tinha um único campo "Modo de acesso" (nunca preenchido por ninguém — conferi no banco: 0 clientes com esse campo usado). Não dava pra representar cliente com mais de uma empresa/CNPJ, cada uma com seu próprio ERP e forma de acesso — e olhando os dados reais de ERP, isso já era um problema de verdade: vários clientes têm valores tipo "Lince / Próximo ERP em estudo" ou "Agrodados (loja) / SellSoft + CATU (legado)" espremidos num campo só.

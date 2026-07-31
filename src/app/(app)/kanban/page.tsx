@@ -2,12 +2,13 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Calendar } from "lucide-react";
+import { isToday, isBefore, startOfDay, addDays, parseISO, endOfDay } from "date-fns";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskModal } from "@/components/NewTaskModal";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { useSession } from "next-auth/react";
-import { cn } from "@/lib/utils";
+import { cn, dueDateOnly } from "@/lib/utils";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 const COLUMNS = [
@@ -15,6 +16,16 @@ const COLUMNS = [
   { id: "in_progress", label: "Em andamento", color: "border-blue-400" },
   { id: "blocked", label: "Bloqueado", color: "border-red-400" },
   { id: "done", label: "Concluído", color: "border-o2-green" },
+];
+
+type DueFilter = "all" | "overdue" | "today" | "week" | "none" | "custom";
+
+const DUE_PRESETS: { value: DueFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "overdue", label: "Atrasadas" },
+  { value: "today", label: "Hoje" },
+  { value: "week", label: "Esta semana" },
+  { value: "none", label: "Sem prazo" },
 ];
 
 function KanbanPageInner() {
@@ -32,6 +43,9 @@ function KanbanPageInner() {
 
   const assigneeParam = searchParams.get("assignee"); // null = não definido, "all" = todos, ou lista separada por vírgula
   const clientParam = searchParams.get("client"); // null/"all" = todos os clientes
+  const dueFilter = (searchParams.get("due") ?? "all") as DueFilter;
+  const dueFrom = searchParams.get("dueFrom");
+  const dueTo = searchParams.get("dueTo");
 
   const selectedAssignees = useMemo(
     () => (assigneeParam && assigneeParam !== "all" ? assigneeParam.split(",").filter(Boolean) : []),
@@ -39,9 +53,12 @@ function KanbanPageInner() {
   );
   const selectedClient = clientParam && clientParam !== "all" ? clientParam : null;
 
-  const setParams = useCallback((updates: Record<string, string>) => {
+  const setParams = useCallback((updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([k, v]) => params.set(k, v));
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v === null) params.delete(k);
+      else params.set(k, v);
+    });
     router.replace(`/kanban?${params.toString()}`, { scroll: false });
   }, [searchParams, router]);
 
@@ -88,11 +105,33 @@ function KanbanPageInner() {
     patchTask(id, { status });
   }
 
+  function matchesDueFilter(t: TaskListItem): boolean {
+    const due = t.dueDate ? dueDateOnly(t.dueDate) : null;
+    switch (dueFilter) {
+      case "all":
+        return true;
+      case "none":
+        return !due;
+      case "overdue":
+        return !!due && t.status !== "done" && isBefore(due, startOfDay(new Date()));
+      case "today":
+        return !!due && isToday(due);
+      case "week":
+        return !!due && due >= startOfDay(new Date()) && due <= endOfDay(addDays(new Date(), 7));
+      case "custom":
+        if (!due) return false;
+        if (dueFrom && due < startOfDay(parseISO(dueFrom))) return false;
+        if (dueTo && due > endOfDay(parseISO(dueTo))) return false;
+        return true;
+    }
+  }
+
   function colTasksOf(colId: string) {
     return tasks
       .filter((t) => t.status === colId)
       .filter((t) => selectedAssignees.length === 0 || (t.assignee && selectedAssignees.includes(t.assignee.id)))
       .filter((t) => !selectedClient || t.client === selectedClient)
+      .filter(matchesDueFilter)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
@@ -175,6 +214,50 @@ function KanbanPageInner() {
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
+        )}
+
+        {/* Due date filter: atalhos + período customizado */}
+        <div className="flex items-center gap-1 bg-surface border border-surface-3 rounded-xl p-1">
+          <Calendar size={13} className="text-ink-faint ml-2" />
+          {DUE_PRESETS.map((d) => (
+            <button
+              key={d.value}
+              onClick={() => setParams({ due: d.value === "all" ? null : d.value, dueFrom: null, dueTo: null })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                dueFilter === d.value
+                  ? "bg-o2-green/10 text-o2-green"
+                  : "text-ink-mid hover:text-ink"
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setParams({ due: "custom" })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              dueFilter === "custom" ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+            }`}
+          >
+            Período
+          </button>
+        </div>
+
+        {dueFilter === "custom" && (
+          <div className="flex items-center gap-2 bg-surface border border-surface-3 rounded-xl px-3 py-1.5">
+            <input
+              type="date"
+              value={dueFrom ?? ""}
+              onChange={(e) => setParams({ due: "custom", dueFrom: e.target.value || null })}
+              className="bg-transparent text-xs text-ink-mid focus:outline-none"
+            />
+            <span className="text-ink-faint text-xs">até</span>
+            <input
+              type="date"
+              value={dueTo ?? ""}
+              onChange={(e) => setParams({ due: "custom", dueTo: e.target.value || null })}
+              className="bg-transparent text-xs text-ink-mid focus:outline-none"
+            />
+          </div>
         )}
       </div>
 
