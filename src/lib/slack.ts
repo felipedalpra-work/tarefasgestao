@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { log } from "./logger";
 import { getBaseUrl } from "./base-url";
+import { isNotificationEnabled } from "./settings";
 
 type SlackConfig = {
   botToken: string;
@@ -81,6 +82,8 @@ export async function notifyTaskAssigned({
   createdBy?: string | null;
   client?: string | null;
 }): Promise<void> {
+  if (!(await isNotificationEnabled("taskAssigned"))) return;
+
   const config = await getSlackConfig();
   if (!config) return;
 
@@ -129,6 +132,10 @@ export async function notifyTaskReminder({
   client?: string | null;
   requestedBy?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
+  if (!(await isNotificationEnabled("taskReminder"))) {
+    return { ok: false, error: "Lembretes de tarefa via Slack estão desativados (Configurações → Integração Slack)" };
+  }
+
   const config = await getSlackConfig();
   if (!config) return { ok: false, error: "Integração com Slack não configurada (Configurações → Slack)" };
 
@@ -166,6 +173,8 @@ export async function notifyTaskCompleted({
   taskTitle: string;
   client?: string | null;
 }): Promise<void> {
+  if (!(await isNotificationEnabled("taskCompleted"))) return;
+
   const config = await getSlackConfig();
   if (!config) return;
 

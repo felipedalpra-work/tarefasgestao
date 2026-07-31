@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { notifyUser } from "./slack";
+import { isNotificationEnabled } from "./settings";
 
 // Evita re-notificar todo mundo toda vez que o cron roda (2x/dia) — só 1 aviso
 // por dia pra cada combinação (type + link).
@@ -12,8 +13,8 @@ async function alreadyNotifiedToday(type: string, link: string): Promise<boolean
   return !!existing;
 }
 
-// sendSlack=false: só notificação in-app (sino) — reservado pros lembretes menos
-// críticos, pra não gerar ruído em excesso no Slack do squad.
+// sendSlack: normalmente vem de isNotificationEnabled(tipo) — a notificação in-app (sino)
+// acontece sempre; o Slack é o canal que dá pra desligar por tipo em Configurações.
 async function broadcast(users: { id: string }[], type: string, message: string, link: string, sendSlack: boolean) {
   if (await alreadyNotifiedToday(type, link)) return;
   for (const u of users) {
@@ -56,7 +57,7 @@ export async function checkOnboardingDelays(): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `⏰ Onboarding atrasado: "${m.label}" de ${c.client} venceu em ${target.toLocaleDateString("pt-BR")}`;
-      await broadcast(users, `onboarding_atraso_${m.key}`, message, link, false);
+      await broadcast(users, `onboarding_atraso_${m.key}`, message, link, await isNotificationEnabled("onboardingDelay"));
       alerted++;
     }
   }
@@ -72,13 +73,14 @@ export async function checkTratativasOverdue(): Promise<number> {
     prisma.user.findMany({ select: { id: true } }),
   ]);
 
+  const tratativaSlackEnabled = await isNotificationEnabled("tratativaOverdue");
   for (const t of tratativas) {
     const link = `/tratativas`;
     const message = `⚠️ Tratativa com prazo vencido: "${t.motivo}" (${t.client}) — previsto pra ${new Date(t.dataPrevistaFinalizacao!).toLocaleDateString("pt-BR")}`;
     if (t.responsavelId) {
-      await notifyOne(t.responsavelId, `tratativa_atraso_${t.id}`, message, link, true);
+      await notifyOne(t.responsavelId, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
     } else {
-      await broadcast(users, `tratativa_atraso_${t.id}`, message, link, true);
+      await broadcast(users, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
     }
   }
   return tratativas.length;
@@ -114,7 +116,7 @@ export async function checkFechamentoIncompleto(): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `📋 Fechamento de ${String(p.month).padStart(2, "0")}/${p.year} de ${c.client} está incompleto`;
-      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, false);
+      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, await isNotificationEnabled("fechamentoIncomplete"));
       alerted++;
     }
   }
@@ -133,7 +135,7 @@ export async function checkStaleRecapSuggestions(): Promise<number> {
   if (count === 0) return 0;
 
   const message = `🤖 ${count} sugestão(ões) da IA aguardando revisão há mais de 3 dias`;
-  await broadcast(users, "recap_pendente", message, "/sugestoes-ia", false);
+  await broadcast(users, "recap_pendente", message, "/sugestoes-ia", await isNotificationEnabled("staleRecapSuggestions"));
   return count;
 }
 

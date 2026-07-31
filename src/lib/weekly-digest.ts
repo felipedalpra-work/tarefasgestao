@@ -2,8 +2,11 @@ import { prisma } from "./prisma";
 import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
 import { getBaseUrl } from "./base-url";
+import { isNotificationEnabled } from "./settings";
 
 export async function sendWeeklyDigest(): Promise<void> {
+  if (!(await isNotificationEnabled("weeklyDigest"))) { console.log("[digest] Desativado em Configurações, pulando."); return; }
+
   const config = await getSlackConfig();
   if (!config) { console.log("[digest] Slack não configurado, pulando."); return; }
 

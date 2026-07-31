@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
 import { getBaseUrl } from "./base-url";
+import { isNotificationEnabled } from "./settings";
 
 let resend: Resend | null = null;
 function getResend() {
@@ -163,7 +164,7 @@ export async function sendMeetingBriefings(): Promise<void> {
     }
 
     // Slack briefing
-    const slackConfig = await getSlackConfig();
+    const slackConfig = (await isNotificationEnabled("meetingBriefing")) ? await getSlackConfig() : null;
     if (slackConfig) {
       const slackLines = [
         `📅 *Reunião amanhã: O2 Inc & ${client}*`,

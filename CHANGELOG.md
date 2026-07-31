@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-30 (desligar notificação do Slack por tipo, em Configurações → Integração Slack)
+
+- A pedido do usuário: cada tipo de notificação do Slack agora liga/desliga independente, em vez de tudo-ou-nada. Lista completa (10 tipos, agrupados em Tarefas / Lembretes automáticos / Resumos): tarefa atribuída, tarefa concluída, lembrete manual ("Lembrar"), menção em comentário, tratativa vencida, onboarding atrasado, fechamento incompleto, sugestões da IA paradas, resumo semanal, briefing de reunião.
+- Guardado num JSON só (`notification_slack_prefs` em `Setting`) em vez de uma linha por tipo — mais fácil de adicionar tipo novo depois sem função nova. Cada tipo tem um default que reproduz o comportamento de hoje (ex: fechamento incompleto já nasce desligado, porque foi desligado antes a pedido do usuário) — ligar o painel não muda nada até alguém mexer.
+- Desligar um tipo só afeta a mensagem no **Slack** — a notificação in-app (sino) continua normal em todos os casos; isso é intencional, o pedido era especificamente sobre o Slack.
+- `notifyTaskReminder` (o botão "Lembrar" manual) retorna um erro explicativo se estiver desligado, em vez de falhar silenciosamente — é uma ação que a pessoa clica de propósito, então precisa saber por que não foi.
+- Validado com dados sintéticos direto no banco (liga/desliga um tipo, confere que os outros ficam intactos) e restaurado ao estado original depois.
+
 ## 2026-07-30 (Meet Recaps sincronizam só de uma conta Gmail)
 
 - Problema levantado pelo usuário: agora que a Tainara também conectou o Google, `syncAllUsers` (gmail-sync) passou a buscar Meet Recaps na caixa de todo mundo com conta ligada. Um mesmo e-mail de recap (reunião com mais de uma pessoa do squad convidada) chega em cada caixa com `gmailId` diferente — vira dois `MeetRecap` separados pro mesmo encontro, com sugestão de tarefa extraída duas vezes, potencialmente divergente. Gera duplicidade e ruído em `/recaps` e `/sugestoes-ia`.

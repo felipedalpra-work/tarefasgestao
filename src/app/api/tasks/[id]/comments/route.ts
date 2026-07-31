@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyUser } from "@/lib/slack";
 import { getBaseUrl } from "@/lib/base-url";
+import { isNotificationEnabled } from "@/lib/settings";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -33,13 +34,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     include: { user: { select: { id: true, name: true, image: true } } },
   });
 
-  // menções @nome → notificação in-app + DM no Slack
+  // menções @nome → notificação in-app + DM no Slack (Slack dá pra desligar em Configurações)
   const mentioned = content.match(/@([\p{L}]+)/gu);
   if (mentioned?.length) {
     const task = await prisma.task.findUnique({ where: { id }, select: { title: true } });
     const users = await prisma.user.findMany({ select: { id: true, name: true } });
     const authorFirst = session.user.name?.split(" ")[0] ?? "Alguém";
     const notified = new Set<string>();
+    const slackEnabled = await isNotificationEnabled("commentMention");
 
     for (const raw of mentioned) {
       const name = raw.slice(1).toLowerCase();
@@ -58,10 +60,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
       }).catch((e) => console.error("[notification]", e));
 
-      notifyUser(
-        target.id,
-        `💬 *${authorFirst} mencionou você* em _${task?.title ?? "uma tarefa"}_:\n> ${content.trim()}\n\n<${getBaseUrl()}/tasks?task=${id}|Ver tarefa →>`
-      ).catch((e) => console.error("[slack] menção:", e));
+      if (slackEnabled) {
+        notifyUser(
+          target.id,
+          `💬 *${authorFirst} mencionou você* em _${task?.title ?? "uma tarefa"}_:\n> ${content.trim()}\n\n<${getBaseUrl()}/tasks?task=${id}|Ver tarefa →>`
+        ).catch((e) => console.error("[slack] menção:", e));
+      }
     }
   }
 

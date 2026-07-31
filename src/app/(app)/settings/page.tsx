@@ -7,6 +7,49 @@ import { toast } from "@/components/Toaster";
 
 type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null };
 
+// Espelha NOTIFICATION_TYPES/DEFAULT_NOTIFICATION_PREFS de src/lib/settings.ts — duplicado
+// aqui (não importado) porque aquele arquivo puxa o Prisma, que não pode ir pro bundle do client.
+const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
+  taskAssigned: true,
+  taskCompleted: true,
+  taskReminder: true,
+  commentMention: true,
+  tratativaOverdue: true,
+  onboardingDelay: false,
+  fechamentoIncomplete: false,
+  staleRecapSuggestions: false,
+  weeklyDigest: true,
+  meetingBriefing: true,
+};
+
+const NOTIFICATION_GROUPS: { title: string; items: { key: string; label: string; desc: string }[] }[] = [
+  {
+    title: "Tarefas",
+    items: [
+      { key: "taskAssigned", label: "Tarefa atribuída", desc: "Quando uma tarefa nova é atribuída a você" },
+      { key: "taskCompleted", label: "Tarefa concluída", desc: "Parabenizando quem concluiu a tarefa" },
+      { key: "taskReminder", label: "Lembrete manual", desc: "Botão \"Lembrar\" no detalhe da tarefa" },
+      { key: "commentMention", label: "Menção em comentário", desc: "Quando alguém te marca com @nome" },
+    ],
+  },
+  {
+    title: "Lembretes automáticos",
+    items: [
+      { key: "tratativaOverdue", label: "Tratativa vencida", desc: "Prazo previsto de finalização vencido" },
+      { key: "onboardingDelay", label: "Onboarding atrasado", desc: "Marco de onboarding (D+2..D+90) vencido" },
+      { key: "fechamentoIncomplete", label: "Fechamento incompleto", desc: "Checklist do mês ainda pendente" },
+      { key: "staleRecapSuggestions", label: "Sugestões da IA paradas", desc: "Pendente de revisão há mais de 3 dias" },
+    ],
+  },
+  {
+    title: "Resumos",
+    items: [
+      { key: "weeklyDigest", label: "Resumo semanal", desc: "Toda segunda de manhã" },
+      { key: "meetingBriefing", label: "Briefing de reunião", desc: "Um dia antes de reunião com cliente" },
+    ],
+  },
+];
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -20,6 +63,8 @@ export default function SettingsPage() {
   const [slackSaving, setSlackSaving] = useState(false);
   const [slackMsg, setSlackMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>(DEFAULT_NOTIFICATION_PREFS);
+  const [notifSavingKey, setNotifSavingKey] = useState<string | null>(null);
 
   // Equipe state
   const [cargoDrafts, setCargoDrafts] = useState<Record<string, string>>({});
@@ -42,6 +87,10 @@ export default function SettingsPage() {
     fetch("/api/settings/meet-recap")
       .then((r) => r.json())
       .then((d) => { setMeetRecapEnabled(d.enabled); setMeetRecapGmailUserId(d.gmailUserId ?? null); });
+
+    fetch("/api/settings/notifications")
+      .then((r) => r.json())
+      .then((d) => setNotificationPrefs((prev) => ({ ...prev, ...d })));
 
     // load squad users + slack settings in parallel
     Promise.all([
@@ -99,6 +148,22 @@ export default function SettingsPage() {
       toast(userId ? "Conta de sincronização atualizada" : "Voltou a sincronizar de todas as contas", "success");
     } else {
       setMeetRecapGmailUserId(prev);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function toggleNotification(key: string, enabled: boolean) {
+    setNotifSavingKey(key);
+    const prev = notificationPrefs[key];
+    setNotificationPrefs((p) => ({ ...p, [key]: enabled }));
+    const res = await fetch("/api/settings/notifications", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: key, enabled }),
+    });
+    setNotifSavingKey(null);
+    if (!res.ok) {
+      setNotificationPrefs((p) => ({ ...p, [key]: prev }));
       toast("Erro ao salvar", "error");
     }
   }
@@ -369,6 +434,38 @@ export default function SettingsPage() {
             {slackMsg.text}
           </div>
         )}
+
+        {/* Notificações por tipo */}
+        <div className="border-t border-surface-3 pt-5 mb-5">
+          <h3 className="text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Notificações por tipo</h3>
+          <p className="text-xs text-ink-faint mb-4">
+            Desative o que não quiser mais receber no Slack. A notificação in-app (sino) continua normalmente — isso só liga/desliga a mensagem no Slack.
+          </p>
+          <div className="space-y-5">
+            {NOTIFICATION_GROUPS.map((group) => (
+              <div key={group.title}>
+                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-2">{group.title}</p>
+                <div className="space-y-1.5">
+                  {group.items.map((item) => (
+                    <label key={item.key} className="flex items-center gap-3 bg-surface-2 rounded-lg px-3 py-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationPrefs[item.key]}
+                        disabled={notifSavingKey === item.key}
+                        onChange={(e) => toggleNotification(item.key, e.target.checked)}
+                        className="accent-o2-green"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-ink">{item.label}</p>
+                        <p className="text-[10px] text-ink-dim">{item.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Save button */}
         <button
