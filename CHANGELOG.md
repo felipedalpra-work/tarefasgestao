@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-07-31 (barra de abas do cliente cortada)
+
+- A barra de 8 abas em `/clientes/[nome]` (Reuniões/Meet Recaps/Tarefas/Onboarding/Tratativas/Fechamento/Oxy/Notas) usava `flex-1` sem `overflow-x-auto` no container — cada aba tenta dividir a largura igualmente, mas não encolhe abaixo do próprio conteúdo (ícone + rótulo + contador), e a página não tinha rolagem horizontal pra sobra. Resultado: cortava.
+- `src/app/(app)/clientes/[slug]/ClientTabs.tsx`: cada aba passou de `flex-1` pra `shrink-0 whitespace-nowrap` (fica do tamanho do próprio conteúdo, não estica nem quebra o texto) e o container ganhou `overflow-x-auto` (rola horizontalmente se ainda assim não couber tudo, em vez de cortar).
+
 ## 2026-07-30 (botão "Salvar e adicionar" nas Sugestões da IA)
 
 - Editar uma sugestão exigia dois passos: Editar → Salvar → (sair do modo edição) → Adicionar → confirmar prazo num modal separado. Novo botão "Salvar e adicionar" no próprio formulário de edição faz tudo num clique — usa o prazo que acabou de ser editado ali em cima, sem reabrir o modal de confirmação (redundante nesse caso).

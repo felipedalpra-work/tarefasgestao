@@ -256,14 +256,17 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
 
   return (
     <div>
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-surface border border-surface-3 rounded-xl p-1 mb-6">
+      {/* Tab bar — 8 abas não cabem lado a lado forçando largura igual (flex-1 sem
+          min-width:0 não encolhe abaixo do conteúdo, e a página não tem scroll
+          horizontal — sobra cortava). Cada aba fica do tamanho do próprio conteúdo,
+          e a barra rola horizontalmente se ainda assim não couber tudo. */}
+      <div className="flex gap-1 bg-surface border border-surface-3 rounded-xl p-1 mb-6 overflow-x-auto">
         {tabs.map(({ key, label, icon: Icon, count }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all",
+              "shrink-0 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
               tab === key
                 ? "bg-o2-green/10 text-o2-green"
                 : "text-ink-dim hover:text-ink hover:bg-surface-2"
