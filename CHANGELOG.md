@@ -4,6 +4,20 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-03 (aba "Excluídos" nas Sugestões da IA)
+
+- Pedido do usuário: até então, descartar uma sugestão (Meet Recap ou n8n) tirava ela da tela pra sempre (`reject()` só filtrava do estado local) — sem forma de ver o que foi descartado nem de desfazer um descarte por engano.
+- As rotas `PATCH /api/recaps/[id]/suggestions/[suggestionId]` e `PATCH /api/suggestions/external/[id]` já aceitavam `status: "rejected"` e até tinham `STATUS_VALUES` prevendo volta pra `"pending"` — só faltava expor isso na UI, nenhuma mudança de backend foi necessária.
+- Nova aba "Excluídos" em `/sugestoes-ia`, ao lado de Pendentes/Duplicadas, listando sugestões com `status: "rejected"`. Cada card lá mostra só um botão "Restaurar" (volta pra Pendentes, de onde dá pra editar/adicionar normalmente de novo). `reject()` passou a atualizar o status local em vez de remover a sugestão da lista (`withStatus`), então ela migra de aba na hora sem precisar recarregar.
+- Validado com `npx tsc` e `npx eslint` limpos (só o warning pré-existente de `useEffect`/`load()` que já existia antes nesse arquivo).
+
+## 2026-08-03 (filtro "Cliente" no responsável, em Tarefas e Kanban)
+
+- Pedido do usuário: nas telas de Tarefas e Kanban, o filtro de responsável só listava pessoas do squad — não dava pra filtrar as tarefas que o próprio cliente entrega (`deliverTo: "o2"`, sem `assignee`), que hoje só apareciam misturadas com "sem responsável".
+- Novo botão "Cliente" (ícone de prédio) ao lado dos avatares de responsável, usando o mesmo padrão de sentinela já existente em Sugestões da IA (`CLIENT_CHOICE`) — aqui como `CLIENT_FILTER_ID = "__client__"`. Em `/tasks` entra no `<select>`/toggle único de responsável; em `/kanban` entra no multi-select de responsáveis (`toggleAssignee`), já que lá dá pra combinar vários.
+- `src/app/(app)/tasks/page.tsx`: `matchesPerson()` trata o sentinela como "sem assignee e deliverTo === 'o2'". `src/app/(app)/kanban/page.tsx`: mesma lógica em `matchesAssignee()`, aplicada em `colTasksOf`.
+- Validado com `npx tsc` e `npx eslint` limpos (só os warnings pré-existentes de `useEffect`/`load()` já presentes nesses dois arquivos antes desta mudança).
+
 ## 2026-07-31 (barra de abas do cliente cortada)
 
 - A barra de 8 abas em `/clientes/[nome]` (Reuniões/Meet Recaps/Tarefas/Onboarding/Tratativas/Fechamento/Oxy/Notas) usava `flex-1` sem `overflow-x-auto` no container — cada aba tenta dividir a largura igualmente, mas não encolhe abaixo do próprio conteúdo (ícone + rótulo + contador), e a página não tinha rolagem horizontal pra sobra. Resultado: cortava.

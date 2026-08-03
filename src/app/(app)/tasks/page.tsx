@@ -13,6 +13,10 @@ import type { TaskListItem, UserOption } from "@/types/task";
 
 const PAGE_SIZE = 50;
 
+// sentinela no filtro de responsável — representa tarefas sem responsável humano,
+// onde quem entrega é o próprio cliente (deliverTo "o2"), ao lado das pessoas do squad
+const CLIENT_FILTER_ID = "__client__";
+
 type DueFilter = "all" | "overdue" | "today" | "week" | "none" | "custom";
 
 const DUE_PRESETS: { value: DueFilter; label: string }[] = [
@@ -123,11 +127,16 @@ function TasksPageInner() {
     }
   }
 
+  function matchesPerson(t: TaskListItem): boolean {
+    if (!personFilter || personFilter === "all") return true;
+    if (personFilter === CLIENT_FILTER_ID) return !t.assignee && t.deliverTo === "o2";
+    return t.assignee?.id === personFilter;
+  }
+
   const filtered = tasks.filter((t) => {
-    const personOk = !personFilter || personFilter === "all" || t.assignee?.id === personFilter;
     const statusOk = statusFilter === "all" || t.status === statusFilter;
     const clientOk = clientFilter === "all" || t.client === clientFilter;
-    return personOk && statusOk && clientOk && matchesDueFilter(t);
+    return matchesPerson(t) && statusOk && clientOk && matchesDueFilter(t);
   });
 
   const shown = filtered.slice(0, visible);
@@ -189,6 +198,20 @@ function TasksPageInner() {
               </button>
             );
           })}
+          <button
+            onClick={() => setParams({ assignee: personFilter === CLIENT_FILTER_ID ? "all" : CLIENT_FILTER_ID })}
+            title="Tarefas que o próprio cliente entrega"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              personFilter === CLIENT_FILTER_ID ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center ${
+              personFilter === CLIENT_FILTER_ID ? "bg-o2-green/30 text-o2-green" : "bg-surface-3 text-ink-mid"
+            }`}>
+              <Building2 size={11} />
+            </span>
+            Cliente
+          </button>
         </div>
 
         {/* Status filter */}

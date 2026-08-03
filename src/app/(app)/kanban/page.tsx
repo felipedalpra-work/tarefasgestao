@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Calendar } from "lucide-react";
+import { Plus, Calendar, Building2 } from "lucide-react";
 import { isToday, isBefore, startOfDay, addDays, parseISO, endOfDay } from "date-fns";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskModal } from "@/components/NewTaskModal";
@@ -10,6 +10,10 @@ import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { useSession } from "next-auth/react";
 import { cn, dueDateOnly } from "@/lib/utils";
 import type { TaskListItem, UserOption } from "@/types/task";
+
+// sentinela no filtro de responsável — representa tarefas sem responsável humano,
+// onde quem entrega é o próprio cliente (deliverTo "o2"), ao lado das pessoas do squad
+const CLIENT_FILTER_ID = "__client__";
 
 const COLUMNS = [
   { id: "todo", label: "A fazer", color: "border-ink-faint" },
@@ -126,10 +130,17 @@ function KanbanPageInner() {
     }
   }
 
+  // "Cliente" no filtro = tarefa sem responsável humano, que o próprio cliente entrega
+  function matchesAssignee(t: TaskListItem): boolean {
+    if (selectedAssignees.length === 0) return true;
+    if (t.assignee) return selectedAssignees.includes(t.assignee.id);
+    return selectedAssignees.includes(CLIENT_FILTER_ID) && t.deliverTo === "o2";
+  }
+
   function colTasksOf(colId: string) {
     return tasks
       .filter((t) => t.status === colId)
-      .filter((t) => selectedAssignees.length === 0 || (t.assignee && selectedAssignees.includes(t.assignee.id)))
+      .filter(matchesAssignee)
       .filter((t) => !selectedClient || t.client === selectedClient)
       .filter(matchesDueFilter)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -200,6 +211,20 @@ function KanbanPageInner() {
               </button>
             );
           })}
+          <button
+            onClick={() => toggleAssignee(CLIENT_FILTER_ID)}
+            title="Tarefas que o próprio cliente entrega"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              selectedAssignees.includes(CLIENT_FILTER_ID) ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center ${
+              selectedAssignees.includes(CLIENT_FILTER_ID) ? "bg-o2-green/30 text-o2-green" : "bg-surface-3 text-ink-mid"
+            }`}>
+              <Building2 size={11} />
+            </span>
+            Cliente
+          </button>
         </div>
 
         {/* Client filter — lista a carteira completa de clientes, independente do filtro de responsável */}

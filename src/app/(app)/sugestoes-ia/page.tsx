@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle, Pencil, Check } from "lucide-react";
+import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle, Pencil, Check, Trash2, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
@@ -51,7 +51,7 @@ type Row =
   | { kind: "recap"; recap: Recap; suggestion: Suggestion; sortDate: string }
   | { kind: "external"; suggestion: ExternalSuggestion; sortDate: string };
 
-type Tab = "pending" | "duplicate";
+type Tab = "pending" | "duplicate" | "rejected";
 
 // valor sentinela pro select de responsável — indica "atribuir ao cliente" em vez de uma pessoa do squad
 const CLIENT_CHOICE = "__client__";
@@ -91,14 +91,14 @@ export default function SugestoesIaPage() {
     const flat: Row[] = [];
     for (const recap of recaps) {
       for (const suggestion of recap.suggestions) {
-        if (suggestion.status === "pending" || suggestion.status === "duplicate") {
+        if (suggestion.status === "pending" || suggestion.status === "duplicate" || suggestion.status === "rejected") {
           flat.push({ kind: "recap", recap, suggestion, sortDate: recap.createdAt });
         }
       }
     }
     if (Array.isArray(external)) {
       for (const suggestion of external) {
-        if (suggestion.status === "pending" || suggestion.status === "duplicate") {
+        if (suggestion.status === "pending" || suggestion.status === "duplicate" || suggestion.status === "rejected") {
           flat.push({ kind: "external", suggestion, sortDate: suggestion.createdAt });
         }
       }
@@ -112,7 +112,18 @@ export default function SugestoesIaPage() {
 
   const pendingRows = useMemo(() => rows.filter((r) => r.suggestion.status === "pending"), [rows]);
   const duplicateRows = useMemo(() => rows.filter((r) => r.suggestion.status === "duplicate"), [rows]);
-  const visibleRows = tab === "pending" ? pendingRows : duplicateRows;
+  const rejectedRows = useMemo(() => rows.filter((r) => r.suggestion.status === "rejected"), [rows]);
+  const visibleRows = tab === "pending" ? pendingRows : tab === "duplicate" ? duplicateRows : rejectedRows;
+
+  // troca o status localmente (sem refetch) — assim a sugestão migra na hora entre as
+  // abas (Pendente/Duplicada ↔ Excluídos), preservando o resto do estado local
+  function withStatus(prev: Row[], id: string, status: SuggestionStatus): Row[] {
+    return prev.map((r) => {
+      if (r.suggestion.id !== id) return r;
+      if (r.kind === "recap") return { ...r, suggestion: { ...r.suggestion, status } };
+      return { ...r, suggestion: { ...r.suggestion, status } };
+    });
+  }
 
   function matchAssigneeId(name: string | null): string | null {
     if (!name) return null;
@@ -263,10 +274,33 @@ export default function SugestoesIaPage() {
     });
     setActingKey(null);
     if (res.ok) {
-      setRows((prev) => prev.filter((r) => r.suggestion.id !== key));
+      setRows((prev) => withStatus(prev, key, "rejected"));
       setOverrides((prev) => { const rest = { ...prev }; delete rest[key]; return rest; });
+      toast("Sugestão descartada", "success");
     } else {
       toast("Erro ao salvar", "error");
+    }
+  }
+
+  // desfaz o descarte — volta pra "Pendentes", de onde já dá pra editar/aceitar normalmente
+  async function restore(row: Row) {
+    const key = row.suggestion.id;
+    setActingKey(key);
+    const url =
+      row.kind === "recap"
+        ? `/api/recaps/${row.recap.id}/suggestions/${row.suggestion.id}`
+        : `/api/suggestions/external/${row.suggestion.id}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "pending" }),
+    });
+    setActingKey(null);
+    if (res.ok) {
+      setRows((prev) => withStatus(prev, key, "pending"));
+      toast("Sugestão restaurada — voltou pra Pendentes", "success");
+    } else {
+      toast("Erro ao restaurar", "error");
     }
   }
 
@@ -300,6 +334,15 @@ export default function SugestoesIaPage() {
           <AlertTriangle size={11} />
           Duplicadas {loaded && `(${duplicateRows.length})`}
         </button>
+        <button
+          onClick={() => setTab("rejected")}
+          className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+            tab === "rejected" ? "bg-red-500/15 text-red-400" : "bg-surface-2 text-ink-mid hover:text-ink"
+          }`}
+        >
+          <Trash2 size={11} />
+          Excluídos {loaded && `(${rejectedRows.length})`}
+        </button>
       </div>
 
       {!loaded ? (
@@ -308,10 +351,10 @@ export default function SugestoesIaPage() {
         <div className="flex flex-col items-center py-24 text-center">
           <Sparkles size={40} className="text-border mb-4" />
           <p className="text-ink-faint text-sm">
-            {tab === "pending" ? "Nenhuma sugestão pendente." : "Nenhuma duplicada encontrada."}
+            {tab === "pending" ? "Nenhuma sugestão pendente." : tab === "duplicate" ? "Nenhuma duplicada encontrada." : "Nenhuma sugestão excluída."}
           </p>
           <p className="text-ink-ghost text-xs mt-1">
-            {tab === "pending" ? "Tudo revisado — bom trabalho." : "A IA não descartou nada por duplicidade."}
+            {tab === "pending" ? "Tudo revisado — bom trabalho." : tab === "duplicate" ? "A IA não descartou nada por duplicidade." : "Nada foi descartado ainda."}
           </p>
         </div>
       ) : (
@@ -463,30 +506,43 @@ export default function SugestoesIaPage() {
                         {editable.client && <span className="text-xs text-ink-faint">· {editable.client}</span>}
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => reject(row)}
-                          disabled={acting}
-                          className="text-ink-faint hover:text-red-400 p-1.5 transition-colors disabled:opacity-50"
-                          title="Descartar sugestão"
-                        >
-                          <XCircle size={14} />
-                        </button>
-                        <button
-                          onClick={() => startEdit(row)}
-                          disabled={acting}
-                          className="text-ink-faint hover:text-o2-green p-1.5 transition-colors disabled:opacity-50"
-                          title="Editar antes de adicionar"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => setDeadlinePrompt(row)}
-                          disabled={acting}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
-                        >
-                          <Plus size={12} />
-                          {acting ? "Adicionando…" : tab === "duplicate" ? "Adicionar mesmo assim" : "Adicionar"}
-                        </button>
+                        {tab === "rejected" ? (
+                          <button
+                            onClick={() => restore(row)}
+                            disabled={acting}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-surface-3 text-ink-mid hover:text-ink disabled:opacity-50"
+                          >
+                            <RotateCcw size={12} />
+                            {acting ? "Restaurando…" : "Restaurar"}
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => reject(row)}
+                              disabled={acting}
+                              className="text-ink-faint hover:text-red-400 p-1.5 transition-colors disabled:opacity-50"
+                              title="Descartar sugestão"
+                            >
+                              <XCircle size={14} />
+                            </button>
+                            <button
+                              onClick={() => startEdit(row)}
+                              disabled={acting}
+                              className="text-ink-faint hover:text-o2-green p-1.5 transition-colors disabled:opacity-50"
+                              title="Editar antes de adicionar"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDeadlinePrompt(row)}
+                              disabled={acting}
+                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all font-medium bg-o2-green/10 text-o2-green hover:bg-o2-green/20 disabled:opacity-70"
+                            >
+                              <Plus size={12} />
+                              {acting ? "Adicionando…" : tab === "duplicate" ? "Adicionar mesmo assim" : "Adicionar"}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </>
