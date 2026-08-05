@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-05 (Meet Recaps da Tainara não sincronizavam)
+
+- Bug relatado pelo usuário: depois de restringir a sincronização de Meet Recaps a uma única conta (2026-07-30), a conta da Tainara parou de trazer recaps novos — sem erro visível na tela.
+- Causa raiz: `syncUserGmail` (`src/lib/gmail-sync.ts`) buscava mensagens com `q: "label:Meet_Recap"` (underscore) — uma string fixa, herdada de quando só a conta do Felipe sincronizava, cujo rótulo no Gmail dele é literalmente `Meet_Recap`. O Gmail não trata separador de nome de rótulo como equivalente entre si na busca por `label:`: uma conta com o rótulo escrito com espaço (`Meet Recap`, o caso da Tainara) só é encontrada com hífen ou aspas (`label:meet-recap` / `label:"Meet Recap"`), nunca com underscore. Resultado: a busca sempre retornava 0 mensagens pra Tainara — nenhuma exceção, nenhum log de erro, só nada sincronizado (por isso parecia "não estar rodando").
+- Confirmado direto contra as duas contas reais: `label:Meet_Recap` retorna 201 resultados na caixa do Felipe e 0 na da Tainara; `label:"Meet Recap"` é o inverso.
+- Correção: nova `findMeetRecapLabelId()` resolve o rótulo certo por nome normalizado (minúsculo, sem espaço/hífen/underscore) via `gmail.users.labels.list`, e a busca de mensagens passou a usar `labelIds: [id]` em vez de uma string de busca — independe de qual grafia a pessoa usou ao criar o rótulo na própria conta.
+- Validado rodando o job real (`GET /api/cron/gmail-sync` local, com `CRON_SECRET`): antes da correção a Tainara sincronizava 0 recaps; depois, 20 recaps novos e reais entraram no banco (de 18 pra 38 registros em `MeetRecap`) na primeira execução.
+
 ## 2026-08-03 (aba "Excluídos" nas Sugestões da IA)
 
 - Pedido do usuário: até então, descartar uma sugestão (Meet Recap ou n8n) tirava ela da tela pra sempre (`reject()` só filtrava do estado local) — sem forma de ver o que foi descartado nem de desfazer um descarte por engano.

@@ -4,6 +4,20 @@ import { google } from "googleapis";
 import { log } from "./logger";
 import { isMeetRecapSuggestionsEnabled, getMeetRecapGmailUserId } from "./settings";
 
+// Gmail não normaliza separador de nome de label na busca por "q: label:X" — uma conta com
+// o rótulo "Meet Recap" (espaço) só é encontrada com hífen/aspas, e uma conta com "Meet_Recap"
+// (underscore) só é encontrada com underscore. Cada conta do squad criou o rótulo com uma
+// grafia diferente (ex.: a da Tainara usa espaço, a do Felipe usa underscore), então nenhuma
+// string fixa de busca cobre as duas — é por isso que a sincronização "parava de achar" ao
+// trocar de conta designada. Resolve o labelId pelo nome normalizado (sem espaço/hífen/underscore,
+// case-insensitive) e busca por labelIds, que não depende de grafia nenhuma.
+async function findMeetRecapLabelId(gmail: ReturnType<typeof google.gmail>): Promise<string | null> {
+  const { data } = await gmail.users.labels.list({ userId: "me" });
+  const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const match = data.labels?.find((l) => l.name && normalize(l.name) === "meetrecap");
+  return match?.id ?? null;
+}
+
 function extractTextFromParts(parts: any[]): string {
   let text = "";
   for (const part of parts) {
@@ -60,9 +74,15 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
 
     const gmail = google.gmail({ version: "v1", auth: oauth2 });
 
+    const labelId = await findMeetRecapLabelId(gmail);
+    if (!labelId) {
+      await log("gmail-sync", "Rótulo \"Meet Recap\" não encontrado nessa conta Gmail", { level: "error" });
+      return { synced: 0, suggestionsExtracted: 0 };
+    }
+
     const listRes = await gmail.users.messages.list({
       userId: "me",
-      q: "label:Meet_Recap",
+      labelIds: [labelId],
       maxResults: 20,
     });
 
