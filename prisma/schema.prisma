@@ -22,6 +22,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   tratativas         Tratativa[] @relation("TratativaResponsavel")
   createdTratativas  Tratativa[] @relation("TratativaCreatedBy")
+  uploadedRecaps     MeetRecap[] @relation("UploadedRecaps")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -245,7 +246,10 @@ model MeetRecap {
   id             String    @id @default(cuid())
   subject        String
   body           String
-  gmailId        String    @unique
+  gmailId        String?   @unique // null quando source = "manual" (não veio de um e-mail)
+  source         String    @default("gmail") // "gmail" | "manual" (upload de transcrição em /recaps)
+  uploadedById   String? // quem fez o upload manual; null pros recaps sincronizados do Gmail
+  uploadedBy     User?     @relation("UploadedRecaps", fields: [uploadedById], references: [id])
   client         String?
   processedAt    DateTime?
   suggestedTasks String?

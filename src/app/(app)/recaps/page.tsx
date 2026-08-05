@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { RefreshCw, Sparkles, ChevronDown, ChevronUp, Plus, Pencil, X, ThumbsUp, XCircle, Undo2, Mail } from "lucide-react";
+import { RefreshCw, Sparkles, ChevronDown, ChevronUp, Plus, Pencil, X, ThumbsUp, XCircle, Undo2, Mail, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
+import { UploadRecapModal } from "@/components/UploadRecapModal";
 
 type EditForm = {
   title: string;
@@ -36,6 +37,7 @@ type Recap = {
   createdAt: string;
   processedAt?: string | null;
   client?: string | null;
+  source?: string;
   suggestions: Suggestion[];
 };
 
@@ -62,6 +64,7 @@ function RecapsPageInner() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ title: "", description: "", assignee: "", priority: "medium" });
   const [deadlinePrompt, setDeadlinePrompt] = useState<{ recap: Recap; suggestion: Suggestion } | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function load() {
     const [recapsRes, usersRes, accuracyRes] = await Promise.all([
@@ -176,6 +179,18 @@ function RecapsPageInner() {
     }
   }
 
+  async function handleUploaded({ recapId, count }: { recapId: string; count: number }) {
+    setUploading(false);
+    toast(
+      count > 0
+        ? `${count} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`
+        : "Transcrição enviada — nenhuma tarefa identificada nela.",
+      count > 0 ? "success" : "info"
+    );
+    await load();
+    setExpanded(recapId);
+  }
+
   function startEdit(key: string, s: Suggestion) {
     setEditingKey(key);
     setEditForm({ title: s.title, description: s.description ?? "", assignee: s.assignee ?? "", priority: s.priority ?? "medium", dueDate: s.dueDate });
@@ -191,16 +206,25 @@ function RecapsPageInner() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-ink">Meet Recaps</h1>
-          <p className="text-ink-mid text-sm mt-0.5">Transcrições com label Meet_Recap do Gmail</p>
+          <p className="text-ink-mid text-sm mt-0.5">Transcrições do Gmail (label Meet_Recap) ou enviadas manualmente</p>
         </div>
-        <button
-          onClick={sync}
-          disabled={syncing}
-          className="flex items-center gap-2 bg-surface border border-surface-3 text-ink px-4 py-2.5 rounded-xl font-medium text-sm hover:border-o2-green/50 transition-all disabled:opacity-50"
-        >
-          <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-          {syncing ? "Sincronizando..." : "Sincronizar Gmail"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setUploading(true)}
+            className="flex items-center gap-2 bg-surface border border-surface-3 text-ink px-4 py-2.5 rounded-xl font-medium text-sm hover:border-o2-green/50 transition-all"
+          >
+            <Upload size={15} />
+            Enviar transcrição
+          </button>
+          <button
+            onClick={sync}
+            disabled={syncing}
+            className="flex items-center gap-2 bg-surface border border-surface-3 text-ink px-4 py-2.5 rounded-xl font-medium text-sm hover:border-o2-green/50 transition-all disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Sincronizando..." : "Sincronizar Gmail"}
+          </button>
+        </div>
       </div>
 
       {accuracy && accuracy.evaluated > 0 && (
@@ -240,7 +264,15 @@ function RecapsPageInner() {
                 onClick={() => setExpanded(isExpanded ? null : recap.id)}
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink truncate">{recap.subject}</p>
+                  <p className="text-sm font-medium text-ink truncate flex items-center gap-2">
+                    {recap.subject}
+                    {recap.source === "manual" && (
+                      <span className="shrink-0 flex items-center gap-1 text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-o2-green/10 text-o2-green">
+                        <Upload size={9} />
+                        Manual
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-ink-faint mt-1">
                     {format(new Date(recap.createdAt), "dd 'de' MMM 'às' HH:mm", { locale: ptBR })}
                     {recap.client && ` · ${recap.client}`}
@@ -458,10 +490,14 @@ function RecapsPageInner() {
           <div className="text-center py-16 text-ink-faint">
             <p className="text-3xl mb-3">📋</p>
             <p className="text-sm">{filter === "pendentes" ? "Nenhum recap pendente de revisão." : "Nenhuma transcrição encontrada"}</p>
-            {recaps.length === 0 && <p className="text-xs mt-1">Sincronize o Gmail para buscar emails com label Meet_Recap</p>}
+            {recaps.length === 0 && <p className="text-xs mt-1">Sincronize o Gmail ou envie uma transcrição manualmente</p>}
           </div>
         )}
       </div>
+
+      {uploading && (
+        <UploadRecapModal onCancel={() => setUploading(false)} onUploaded={handleUploaded} />
+      )}
 
       {deadlinePrompt && (
         <DeadlineConfirmModal

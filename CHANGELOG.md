@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-05 (upload manual de transcrição em Meet Recaps)
+
+- Pedido do usuário: nem toda reunião gera um Meet Recap por e-mail (ex.: reunião fora do Google Meet, ou cujo e-mail não chegou/não foi rotulado) — precisava de um jeito de jogar a transcrição na IA do mesmo jeito, sem depender do Gmail.
+- Novo botão "Enviar transcrição" em `/recaps`, ao lado de "Sincronizar Gmail". Abre um modal (`UploadRecapModal`) com título da reunião + transcrição (cole o texto ou escolha um arquivo `.txt`, que é lido no navegador e joga o conteúdo na caixa de texto). Ao enviar, `POST /api/recaps/upload` cria o `MeetRecap` (`source: "manual"`) e já roda `processRecap` na hora — mesma extração por IA usada nos recaps do Gmail (mesmo prompt, mesmos poucos-exemplos de acerto/erro, mesma detecção de duplicidade), sem depender do toggle de pausa (que só afeta o processamento em lote do Gmail): quem sobe a transcrição já quer ver o resultado.
+- Sugestões geradas caem na mesma tela de revisão do recap (expande automaticamente), com o mesmo editar/aceitar/descartar de sempre — e também aparecem em `/sugestoes-ia`, sem nenhuma mudança lá.
+- Schema: `MeetRecap.gmailId` virou opcional (só os sincronizados do Gmail têm; upload manual não tem e-mail de origem) e ganhou `source` ("gmail" | "manual", default "gmail" — os 38 recaps existentes continuam com `gmailId` preenchido e viraram `source: "gmail"` automaticamente) e `uploadedById` (quem enviou, só preenchido no manual). Aplicado com `prisma db push` (aditivo, sem perda de dado — conferido: as 38 linhas existentes mantiveram `gmailId`).
+- Validado rodando `processRecap` de verdade contra uma transcrição sintética (via `tsx`, sem precisar do servidor): identificou corretamente 3 tarefas, incluindo responsável e prazo relativo mencionados no texto — mesmo comportamento dos recaps do Gmail. Dados de teste removidos depois.
+
 ## 2026-08-05 (Meet Recaps da Tainara não sincronizavam)
 
 - Bug relatado pelo usuário: depois de restringir a sincronização de Meet Recaps a uma única conta (2026-07-30), a conta da Tainara parou de trazer recaps novos — sem erro visível na tela.
