@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { processRecap } from "@/lib/process-recap";
+import { findSimilarRecap } from "@/lib/duplicate-detection";
 import { revalidateTag } from "next/cache";
 
 // Upload manual de transcrição (ex.: reunião sem Meet Recap por e-mail, ou de outra
@@ -12,12 +13,22 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { subject, body } = await req.json();
+  const { subject, body, force } = await req.json();
   if (typeof subject !== "string" || !subject.trim()) {
     return NextResponse.json({ error: "Informe um título pra transcrição." }, { status: 400 });
   }
   if (typeof body !== "string" || body.trim().length < 20) {
     return NextResponse.json({ error: "Transcrição muito curta pra IA analisar." }, { status: 400 });
+  }
+
+  if (!force) {
+    const similar = await findSimilarRecap(subject.trim(), body);
+    if (similar) {
+      return NextResponse.json(
+        { duplicate: { id: similar.id, subject: similar.subject, createdAt: similar.createdAt, reason: similar.reason } },
+        { status: 409 }
+      );
+    }
   }
 
   const recap = await prisma.meetRecap.create({

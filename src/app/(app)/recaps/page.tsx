@@ -43,7 +43,8 @@ type Recap = {
 
 type User = { id: string; name?: string | null; email: string };
 
-type Accuracy = { pending: number; accepted: number; edited: number; rejected: number; evaluated: number; accuracyPct: number | null };
+type ClientAccuracy = { client: string; pending: number; accepted: number; edited: number; rejected: number; evaluated: number; accuracyPct: number | null };
+type Accuracy = { pending: number; accepted: number; edited: number; rejected: number; evaluated: number; accuracyPct: number | null; byClient: ClientAccuracy[] };
 
 const FILTERS = [
   { key: "pendentes", label: "Pendentes de revisão" },
@@ -65,6 +66,7 @@ function RecapsPageInner() {
   const [editForm, setEditForm] = useState<EditForm>({ title: "", description: "", assignee: "", priority: "medium" });
   const [deadlinePrompt, setDeadlinePrompt] = useState<{ recap: Recap; suggestion: Suggestion } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showByClient, setShowByClient] = useState(false);
 
   async function load() {
     const [recapsRes, usersRes, accuracyRes] = await Promise.all([
@@ -228,11 +230,40 @@ function RecapsPageInner() {
       </div>
 
       {accuracy && accuracy.evaluated > 0 && (
-        <div className="flex items-center gap-4 bg-surface border border-surface-3 rounded-xl px-4 py-3 mb-4 text-xs text-ink-dim">
-          <span className="font-semibold text-ink">Taxa de acerto da IA: {accuracy.accuracyPct}%</span>
-          <span>{accuracy.accepted + accuracy.edited} aceitas ({accuracy.edited} editadas)</span>
-          <span>{accuracy.rejected} rejeitadas</span>
-          {accuracy.pending > 0 && <span className="ml-auto text-ink-faint">{accuracy.pending} aguardando revisão</span>}
+        <div className="bg-surface border border-surface-3 rounded-xl px-4 py-3 mb-4 text-xs text-ink-dim">
+          <div className="flex items-center gap-4">
+            <span className="font-semibold text-ink">Taxa de acerto da IA: {accuracy.accuracyPct}%</span>
+            <span>{accuracy.accepted + accuracy.edited} aceitas ({accuracy.edited} editadas)</span>
+            <span>{accuracy.rejected} rejeitadas</span>
+            {accuracy.pending > 0 && <span className="text-ink-faint">{accuracy.pending} aguardando revisão</span>}
+            {accuracy.byClient.length > 0 && (
+              <button
+                onClick={() => setShowByClient((v) => !v)}
+                className="ml-auto flex items-center gap-1 text-o2-green hover:text-o2-green-bright transition-colors font-medium"
+              >
+                {showByClient ? "Ocultar" : "Ver"} por cliente
+                {showByClient ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+            )}
+          </div>
+          {showByClient && accuracy.byClient.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-surface-3 space-y-1.5">
+              {accuracy.byClient.map((c) => (
+                <div key={c.client} className="flex items-center gap-3">
+                  <span className="flex-1 truncate text-ink-mid">{c.client}</span>
+                  <span
+                    className={cn(
+                      "font-semibold w-10 text-right",
+                      c.accuracyPct !== null && c.accuracyPct < 50 ? "text-red-400" : c.accuracyPct !== null && c.accuracyPct < 80 ? "text-yellow-400" : "text-o2-green"
+                    )}
+                  >
+                    {c.accuracyPct}%
+                  </span>
+                  <span className="text-ink-faint w-32 shrink-0">{c.accepted + c.edited} aceitas, {c.rejected} rejeitadas</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

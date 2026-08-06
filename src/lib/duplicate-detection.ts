@@ -88,3 +88,58 @@ export async function findDuplicateNote(
 
   return null;
 }
+
+// upload manual de transcrição não tem gmailId pra deduplicar (diferente do Gmail, que já
+// nunca busca de novo um e-mail já sincronizado) — então antes de processar, compara com
+// recaps recentes (de qualquer origem) por duas vias: título muito parecido enviado há
+// poucos dias (pega reenvio por engano do mesmo arquivo) e conteúdo muito parecido dentro
+// de um mês (pega a mesma transcrição enviada com um título diferente). Cliente ainda não
+// existe nesse ponto — só é extraído pela IA depois de já ter criado o MeetRecap.
+const RECAP_TITLE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // ~1 semana
+const RECAP_BODY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // ~1 mês
+const RECAP_BODY_SIMILARITY_THRESHOLD = 0.55;
+
+function tokenSet(text: string): Set<string> {
+  return new Set(normalize(text).split(" ").filter((w) => w.length > 2));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const token of a) if (b.has(token)) intersection++;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+export type SimilarRecap = { id: string; subject: string; createdAt: Date; reason: string };
+
+export async function findSimilarRecap(subject: string, body: string): Promise<SimilarRecap | null> {
+  const since = new Date(Date.now() - RECAP_BODY_WINDOW_MS);
+  const candidates = await prisma.meetRecap.findMany({
+    where: { createdAt: { gte: since } },
+    select: { id: true, subject: true, body: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+
+  const normSubject = normalize(subject);
+  const titleWindowStart = Date.now() - RECAP_TITLE_WINDOW_MS;
+  const titleMatch = candidates.find(
+    (c) => normSubject && normalize(c.subject) === normSubject && c.createdAt.getTime() >= titleWindowStart
+  );
+  if (titleMatch) {
+    return { id: titleMatch.id, subject: titleMatch.subject, createdAt: titleMatch.createdAt, reason: "mesmo título, enviado há menos de 7 dias" };
+  }
+
+  const bodyTokens = tokenSet(body.slice(0, 3000));
+  let best: SimilarRecap | null = null;
+  let bestScore = 0;
+  for (const c of candidates) {
+    const score = jaccard(bodyTokens, tokenSet(c.body.slice(0, 3000)));
+    if (score >= RECAP_BODY_SIMILARITY_THRESHOLD && score > bestScore) {
+      bestScore = score;
+      best = { id: c.id, subject: c.subject, createdAt: c.createdAt, reason: `conteúdo muito parecido (${Math.round(score * 100)}% de similaridade)` };
+    }
+  }
+  return best;
+}

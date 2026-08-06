@@ -4,6 +4,25 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-06 (taxa de acerto da IA por cliente)
+
+- Pedido do usuário: a taxa de acerto em `/recaps` era só uma média geral — não dava pra saber em qual cliente a IA erra mais.
+- `GET /api/recaps/accuracy` passou a retornar também `byClient`: mesma conta (aceitas/editadas/rejeitadas → % de acerto), agrupada pelo cliente do recap, só com quem já tem pelo menos 1 sugestão avaliada, ordenado do pior acerto pro melhor (quem tem problema aparece primeiro). Sugestão sem cliente identificado entra em "Sem cliente identificado".
+- Na tela, um "Ver por cliente" expande a lista embaixo do resumo geral, com cor por faixa (vermelho <50%, amarelo <80%, verde ≥80%).
+
+## 2026-08-06 (dedup no upload manual de transcrição)
+
+- Pedido do usuário: o upload manual (adicionado antes) não tinha proteção contra enviar a mesma transcrição duas vezes — o dedup por `gmailId` do Gmail não existe pra manual, e o cliente só é conhecido depois que a IA já processou, então não dá pra comparar "título+cliente" como o dedup de tarefa faz.
+- Nova `findSimilarRecap()` (`src/lib/duplicate-detection.ts`) compara com recaps recentes (qualquer origem) por duas vias: **título** normalizado igual enviado há menos de 7 dias (pega reenvio por engano do mesmo arquivo), ou **conteúdo** muito parecido (similaridade de tokens ≥ 55%) enviado no último mês (pega mesma transcrição com título diferente).
+- `POST /api/recaps/upload` roda essa checagem antes de criar o recap (evita gastar chamada de IA à toa); se achar parecido, responde 409 com o motivo. O modal mostra um aviso amarelo com "Enviar mesmo assim" (reenvia com `force: true`, pulando a checagem).
+- Validado com 3 cenários sintéticos: título igual → pega; conteúdo igual com título diferente → pega (83% de similaridade); conteúdo sem nada a ver → não pega nada.
+
+## 2026-08-06 (correção da busca global — Cmd+K)
+
+- A busca global (`CommandPalette` + `/api/search`) já existia, mas tinha dois bugs reais, confirmados direto no banco: (1) `contains` do Prisma no Postgres é sensível a maiúsculas/minúsculas por padrão — buscar "bairral" minúsculo não achava o cliente "Bairral"; (2) a lista de clientes da busca só vinha de tarefas/recaps/eventos que já bateram na busca — cliente cadastrado só em `ClientNote` (carteira, sem nenhuma atividade ainda) nunca aparecia. Tinha 14 clientes nessa situação.
+- Corrigido: todo `contains` ganhou `mode: "insensitive"`; `ClientNote` virou uma quarta fonte de cliente na busca (mesmas 4 fontes que `/api/clients` já usa). Também troquei o critério de "quais clientes aparecem": agora só entra quem tem o **nome** batendo com o texto buscado, não qualquer cliente que apareceu de carona porque o título de uma tarefa dele bateu por outro motivo.
+- Validado direto contra o banco (antes/depois) e depois via `/api/search` com sessão real: "bairral" e "scien" agora acham "Bairral"/"Grupo Bairral" e "Sciensa" corretamente.
+
 ## 2026-08-05 (upload manual de transcrição em Meet Recaps)
 
 - Pedido do usuário: nem toda reunião gera um Meet Recap por e-mail (ex.: reunião fora do Google Meet, ou cujo e-mail não chegou/não foi rotulado) — precisava de um jeito de jogar a transcrição na IA do mesmo jeito, sem depender do Gmail.
