@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-07 (limpeza dos dados de teste)
+
+- A pedido do usuário: saindo da fase de testes, apagadas todas as 23 Tasks (com cascata de 1 subtask, 53 atividades, 1 comentário, 1 link), os 43 MeetRecap (com cascata de 104 RecapSuggestion) e as 164 ExternalSuggestion (n8n) — tudo que alimentava Kanban/Tarefas/Sugestões da IA/Meet Recaps.
+- Não tocado: clientes (`ClientNote`, 21), eventos de calendário (`CalendarEvent`, 74), Tratativas, Onboarding, Fechamento, Acessos (Oxy), Automações, Logs e Configurações — só o que foi pedido.
+- Backup em JSON de tudo que foi apagado salvo em `backups/` (fora do git, adicionado ao `.gitignore` — contém dado real de cliente) antes de rodar o `deleteMany`, pra dar pra restaurar manualmente se precisar.
+
 ## 2026-08-06 (taxa de acerto da IA por cliente)
 
 - Pedido do usuário: a taxa de acerto em `/recaps` era só uma média geral — não dava pra saber em qual cliente a IA erra mais.

@@ -48,3 +48,6 @@ next-env.d.ts
 
 # claude code local settings
 .claude/settings.local.json
+
+# backups locais de dados reais (nunca versionar)
+/backups
