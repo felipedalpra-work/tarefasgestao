@@ -23,6 +23,7 @@ model User {
   tratativas         Tratativa[] @relation("TratativaResponsavel")
   createdTratativas  Tratativa[] @relation("TratativaCreatedBy")
   uploadedRecaps     MeetRecap[] @relation("UploadedRecaps")
+  assistantMessages  AssistantMessage[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -323,6 +324,20 @@ model TaskComment {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
+}
+
+// Histórico do assistente de IA flutuante, por pessoa — permite ele lembrar de
+// conversas anteriores em vez de começar do zero a cada recarregamento da página.
+model AssistantMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model PlatformLog {

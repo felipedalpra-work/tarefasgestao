@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (memória do assistente de IA + tratamento de limite diário do Groq)
+
+- Pedido do usuário: o assistente lembrar de interações passadas quando for relevante, em vez de esquecer tudo ao recarregar a página.
+- Novo modelo `AssistantMessage` (por pessoa, não por squad todo) guarda cada mensagem trocada. `GET /api/assistant/messages` carrega o histórico quando o painel abre; `DELETE` limpa (botão "Nova conversa" no cabeçalho, só aparece quando já tem conversa). `POST /api/assistant/chat` mudou de contrato: em vez do cliente mandar a conversa inteira toda vez, agora manda só a mensagem nova (`{message}`) — o servidor busca as últimas `ASSISTANT_HISTORY_LIMIT` (30) trocas dessa pessoa no banco, monta o contexto e já salva os dois lados da troca.
+- Aplicado com `prisma db push` (tabela nova, aditivo — não mexe em nada existente).
+- Durante a validação (rodando pergunta real contra o Groq), apareceu um problema de infraestrutura, não de código: a conta Groq tem cota diária de 100.000 tokens, **compartilhada** entre a extração de Meet Recaps e esse assistente novo — toda a bateria de testes desse recurso consumiu a cota do dia, e passou a estourar limite (429). Antes disso quebrava com "Erro ao consultar o assistente." sem explicação; agora detecta `RateLimitError` especificamente (sem tentar de novo à toa, já que ia bater no mesmo limite) e responde algo claro: "Bati no limite diário de uso da IA (cota compartilhada com a extração dos Meet Recaps) — tenta de novo daqui a pouco." Se o assistente for usado com frequência, vale considerar upgrade do plano Groq (Dev Tier) — hoje as duas features dividem a mesma cota.
+- Validado: persistência (grava/lê/limpa) confirmada direto contra o banco real; o próprio limite de cota serviu de teste real do tratamento de erro novo. A semântica de "lembrar quando relevante" já tinha sido confirmada num teste anterior (pergunta com pronome referenciando o turno anterior) — o mecanismo é o mesmo, só a origem do histórico mudou de client-side pra banco.
+
 ## 2026-08-13 (correção do assistente de IA: saudação e erro de tipo em ferramenta)
 
 - Bug relatado pelo usuário logo após o lançamento: dizer só "ola" fazia o assistente despejar um raio-x inteiro de urgências (deveria só cumprimentar de volta), e a pergunta "quem realizou mais tarefas?" retornava "Erro ao consultar o assistente."

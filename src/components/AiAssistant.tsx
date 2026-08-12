@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, X, Loader2 } from "lucide-react";
+import { Send, X, Loader2, RotateCcw } from "lucide-react";
 import { LogoIcon } from "./LogoIcon";
 import { cn } from "@/lib/utils";
 
@@ -12,11 +12,22 @@ const SUGGESTIONS = ["O que está atrasado?", "Quais clientes estão com saúde 
 export function AiAssistant() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // carrega a memória da pessoa (não some ao recarregar a página) na primeira vez que o painel abre
+  useEffect(() => {
+    if (!open || historyLoaded) return;
+    setHistoryLoaded(true);
+    fetch("/api/assistant/messages")
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data.messages)) setMessages(data.messages); })
+      .catch(() => {});
+  }, [open, historyLoaded]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
@@ -29,8 +40,7 @@ export function AiAssistant() {
   async function send(text?: string) {
     const content = (text ?? input).trim();
     if (!content || loading) return;
-    const next = [...messages, { role: "user" as const, content }];
-    setMessages(next);
+    setMessages((prev) => [...prev, { role: "user", content }]);
     setInput("");
     setError(null);
     setLoading(true);
@@ -38,7 +48,7 @@ export function AiAssistant() {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ message: content }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -51,6 +61,12 @@ export function AiAssistant() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function resetConversation() {
+    setMessages([]);
+    setError(null);
+    await fetch("/api/assistant/messages", { method: "DELETE" }).catch(() => {});
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -69,9 +85,16 @@ export function AiAssistant() {
               <LogoIcon className="w-5 h-5 text-o2-green" />
               <span className="text-sm font-semibold text-ink">Assistente O2</span>
             </div>
-            <button onClick={() => setOpen(false)} className="text-ink-faint hover:text-ink">
-              <X size={16} />
-            </button>
+            <div className="flex items-center gap-1">
+              {messages.length > 0 && (
+                <button onClick={resetConversation} title="Nova conversa" className="text-ink-faint hover:text-ink p-1">
+                  <RotateCcw size={14} />
+                </button>
+              )}
+              <button onClick={() => setOpen(false)} className="text-ink-faint hover:text-ink p-1">
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">

@@ -7,6 +7,11 @@ import { isTaskOverdue, normalizeText } from "./utils";
 // edita ou apaga nada (mesma filosofia das Sugestões da IA: a IA nunca age sozinha,
 // só informa — quem decide e clica é sempre uma pessoa).
 
+// Quantas mensagens (usuário + assistente) manter como memória — controla tanto o que
+// é carregado pro contexto do Groq quanto o que aparece no histórico da tela. Um teto
+// simples em vez de tudo desde sempre, pra não deixar o prompt crescer sem limite.
+export const ASSISTANT_HISTORY_LIMIT = 30;
+
 const MILESTONES = [
   { key: "cfoAllocatedAt", label: "CFO alocado", offsetDays: 2 },
   { key: "kickoffScheduledAt", label: "Kickoff agendado", offsetDays: 3 },
