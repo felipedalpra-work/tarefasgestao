@@ -4,6 +4,16 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (assistente de IA flutuante)
+
+- Pedido do usuário: um botão no canto inferior direito (ícone da O2) que abre um chat pra perguntar em linguagem natural sobre o que está acontecendo na plataforma, usando o Groq já conectado.
+- Escolhida a abordagem de **tool-calling** (em vez de só empilhar um resumo no prompt): o Groq decide sozinho quais dados buscar de acordo com a pergunta, chamando funções que rodam queries reais no Postgres. Escala melhor conforme a base cresce, já que não precisa carregar "tudo" em todo prompt.
+- `src/lib/assistant-tools.ts`: 7 ferramentas, todas **somente leitura** de propósito (mesma filosofia das Sugestões da IA — a IA nunca age sozinha, só informa): `get_urgent_items` (tarefas atrasadas, tratativas vencidas, onboarding atrasado, fechamento incompleto, sugestões da IA paradas), `search_tasks`, `get_client_overview`, `list_clients`, `get_upcoming_meetings`, `get_pending_ai_suggestions`, `get_tratativas`.
+- `src/app/api/assistant/chat/route.ts`: loop padrão de tool-calling (manda mensagens+ferramentas pro Groq, executa as ferramentas que ele pedir, manda o resultado de volta, repete até ele responder em texto ou até 5 rodadas).
+- `src/components/AiAssistant.tsx`: botão flutuante + painel de chat, montado no layout autenticado (`(app)/layout.tsx`) — aparece em qualquer tela logada.
+- Durante a validação, achei e corrigi um bug real: buscar cliente sem acento (ex. "cafe arrumado") não achava "Café Arrumado", porque `contains` do Postgres não ignora acento sozinho. Extraí o normalizador de texto (NFD + remove acento) que já existia em `duplicate-detection.ts` pra `src/lib/utils.ts` (`normalizeText`, reaproveitado nos dois lugares) e o assistente passou a resolver o nome "oficial" do cliente comparando contra a carteira em `ClientNote` antes de qualquer busca.
+- Validado com perguntas reais direto na API (sessão autenticada): raio-x de urgências, visão de cliente por nome com acento/caixa diferente, cliente inexistente, e uma conversa de 2 turnos com pronome ("e alguma delas tá atrasada?") — todas as respostas conferidas contra o banco real.
+
 ## 2026-08-07 (limpeza dos dados de teste)
 
 - A pedido do usuário: saindo da fase de testes, apagadas todas as 23 Tasks (com cascata de 1 subtask, 53 atividades, 1 comentário, 1 link), os 43 MeetRecap (com cascata de 104 RecapSuggestion) e as 164 ExternalSuggestion (n8n) — tudo que alimentava Kanban/Tarefas/Sugestões da IA/Meet Recaps.

@@ -5,6 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// minúsculo + sem acento + só alfanumérico/espaço — pra comparar nomes (cliente, título)
+// sem exigir grafia idêntica. Postgres `contains`/`ILIKE` não ignora acento sozinho.
+export function normalizeText(value: string): string {
+  return value
+    .toString()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
   return name

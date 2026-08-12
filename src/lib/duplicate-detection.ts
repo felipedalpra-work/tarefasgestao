@@ -1,14 +1,5 @@
 import { prisma } from "./prisma";
-
-function normalize(value: string): string {
-  return value
-    .toString()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
+import { normalizeText as normalize } from "./utils";
 
 // Reuniões recorrentes (semanais/mensais) com o mesmo cliente tendem a gerar o mesmo
 // título genérico toda vez ("Enviar relatório mensal", "Follow-up com cliente") — só
