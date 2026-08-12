@@ -15,10 +15,12 @@ const SYSTEM_PROMPT = `Você é o assistente interno da O2 Squad Tasks, platafor
 Responda em português, de forma direta e natural — como alguém do próprio squad que conhece a operação, não como um robô de suporte. Use as ferramentas disponíveis pra consultar dados reais antes de responder qualquer pergunta sobre tarefas, clientes, tratativas, reuniões ou sugestões da IA — nunca invente números ou nomes.
 
 Regras importantes:
+- Saudação ou conversa fiada ("oi", "bom dia", "tudo bem?", "obrigado") NÃO é motivo pra chamar nenhuma ferramenta — só responda naturalmente, de forma breve, e pergunte no que pode ajudar. Só use uma ferramenta quando a pessoa perguntar algo que exige dado real da plataforma.
 - Você só CONSULTA informação. Não cria, edita nem apaga nada — se alguém pedir pra você fazer isso, explique que precisa ser feito direto na tela correspondente (Tarefas, Kanban, Sugestões da IA, etc.).
 - Se uma ferramenta não achar o que foi pedido (ex: cliente não encontrado), diga isso claramente em vez de inventar uma resposta.
 - Seja conciso. Respostas de chat, não relatórios — poucas frases ou uma lista curta, direto ao ponto.
-- Se a pergunta for genérica ("o que está pegando?", "alguma coisa urgente?"), use get_urgent_items primeiro.`;
+- Se a pergunta for genérica sobre a operação ("o que está pegando?", "alguma coisa urgente?"), use get_urgent_items primeiro.
+- Parâmetros numéricos de ferramentas (limit, days) sempre como número, nunca como texto entre aspas.`;
 
 const MAX_TOOL_ROUNDS = 5;
 
@@ -39,14 +41,29 @@ export async function POST(req: NextRequest) {
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const completion = await getGroq().chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: conversation,
-        tools: ASSISTANT_TOOLS,
-        tool_choice: "auto",
-        temperature: 0.3,
-        max_tokens: 1024,
-      });
+      let completion;
+      try {
+        completion = await getGroq().chat.completions.create({
+          model: "llama-3.3-70b-versatile",
+          messages: conversation,
+          tools: ASSISTANT_TOOLS,
+          tool_choice: "auto",
+          temperature: 0.3,
+          max_tokens: 1024,
+        });
+      } catch (err) {
+        // o Groq às vezes gera uma chamada de ferramenta com argumento de tipo errado e
+        // rejeita a resposta inteira (400) antes de chegar aqui — em vez de quebrar a
+        // conversa toda, tenta mais uma vez sem ferramentas, só pra dar alguma resposta
+        await log("ai-assistant", "Groq rejeitou a chamada de ferramenta, tentando sem ferramentas", { level: "error", detail: String(err) });
+        const fallback = await getGroq().chat.completions.create({
+          model: "llama-3.3-70b-versatile",
+          messages: conversation,
+          temperature: 0.3,
+          max_tokens: 1024,
+        });
+        return NextResponse.json({ reply: fallback.choices[0]?.message?.content || "Não consegui gerar uma resposta." });
+      }
 
       const message = completion.choices[0]?.message;
       if (!message) break;

@@ -106,9 +106,10 @@ async function searchTasks(args: {
   dueBefore?: string;
   dueAfter?: string;
   textSearch?: string;
-  limit?: number;
+  limit?: number | string;
 }) {
-  const limit = Math.min(Math.max(args.limit ?? 15, 1), 30);
+  // o Groq às vezes manda number como string (ex: "15") — não confiar no tipo declarado
+  const limit = Math.min(Math.max(Number(args.limit) || 15, 1), 30);
   const resolvedClient = args.client ? await resolveClientName(args.client) : null;
   const tasks = await prisma.task.findMany({
     where: {
@@ -216,8 +217,9 @@ async function listClients(args: { status?: string; healthStatus?: string }) {
   return clients;
 }
 
-async function getUpcomingMeetings(args: { days?: number; client?: string }) {
-  const days = Math.min(Math.max(args.days ?? 7, 1), 60);
+async function getUpcomingMeetings(args: { days?: number | string; client?: string }) {
+  // o Groq às vezes manda number como string (ex: "7") — não confiar no tipo declarado
+  const days = Math.min(Math.max(Number(args.days) || 7, 1), 60);
   const now = new Date();
   const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   const resolvedClient = args.client ? await resolveClientName(args.client) : null;
@@ -312,7 +314,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
           dueBefore: { type: "string", description: "Prazo até essa data, formato YYYY-MM-DD" },
           dueAfter: { type: "string", description: "Prazo a partir dessa data, formato YYYY-MM-DD" },
           textSearch: { type: "string", description: "Texto livre pra buscar no título/descrição" },
-          limit: { type: "number", description: "Máximo de resultados (padrão 15, máximo 30)" },
+          limit: { type: ["number", "string"], description: "Máximo de resultados (padrão 15, máximo 30)" },
         },
       },
     },
@@ -351,7 +353,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          days: { type: "number", description: "Quantos dias pra frente olhar (padrão 7, máximo 60)" },
+          days: { type: ["number", "string"], description: "Quantos dias pra frente olhar (padrão 7, máximo 60)" },
           client: { type: "string", description: "Filtrar por cliente" },
         },
       },

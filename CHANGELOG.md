@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (correção do assistente de IA: saudação e erro de tipo em ferramenta)
+
+- Bug relatado pelo usuário logo após o lançamento: dizer só "ola" fazia o assistente despejar um raio-x inteiro de urgências (deveria só cumprimentar de volta), e a pergunta "quem realizou mais tarefas?" retornava "Erro ao consultar o assistente."
+- Causa do erro: o Groq validou a chamada de `search_tasks` e **rejeitou a resposta inteira** (400) porque o modelo mandou `"limit": "100"` (string) onde o schema pedia número — isso derrubava a conversa toda, sem nenhuma pista pro usuário do que aconteceu. Confirmado direto no `PlatformLog` (categoria `ai-assistant`).
+- Corrigido em duas camadas: (1) `limit` e `days` agora aceitam number OU string no schema das ferramentas (`type: ["number", "string"]`), e o código sempre converte com `Number(...)` antes de usar — não confia mais no tipo que o modelo mandou; (2) a chamada ao Groq ganhou um fallback: se a validação de ferramenta falhar mesmo assim, tenta de novo sem ferramentas (resposta só em texto) em vez de estourar erro pro usuário.
+- Causa da saudação: o prompt dizia pra usar `get_urgent_items` "se a pergunta for genérica" — o modelo interpretou "ola" como genérico. Adicionada regra explícita: saudação/conversa fiada não aciona nenhuma ferramenta, só responde naturalmente.
+- Revalidado com as duas perguntas exatas que quebraram — "ola" agora só cumprimenta, e "quem realizou mais tarefas?" responde certo (conferido contra o banco: Felipe 8, Gustavo 3, Tainara 1 tarefas concluídas).
+
 ## 2026-08-13 (assistente de IA flutuante)
 
 - Pedido do usuário: um botão no canto inferior direito (ícone da O2) que abre um chat pra perguntar em linguagem natural sobre o que está acontecendo na plataforma, usando o Groq já conectado.
