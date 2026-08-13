@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (nova aba Equipe com organograma visual)
+
+- Pedido do usuário: a gestão de equipe vivia espremida dentro de Configurações — queria uma aba própria, com organograma visual e interativo.
+- **Nova página `/equipe`** (item novo no menu lateral, grupo "Sistema"): organograma com admins numa fileira no topo (marcados com uma coroa) e membros embaixo, conectados por linhas — usa o componente `UserAvatar` já existente (foto do Google quando tem, senão inicial colorida). Clicar num card abre um painel de detalhe/edição embaixo (cargo, perfil Admin/Membro, remover — mesmas regras de permissão de antes: cargo qualquer um edita, perfil e remoção só admin). Um card tracejado "Adicionar" (só admin vê) abre o mesmo formulário de convite de sempre (nome/email/cargo/perfil/Slack ID + link de convite depois de criar).
+- **Removido de Configurações**: a seção "Equipe" saiu de lá inteira (estado, funções e JSX) — a gestão de time agora mora só em `/equipe`. O resto de Configurações (Google, Meet Recap, Minuta de cobrança, n8n, Slack) não mudou nada.
+- Nenhuma rota de API nova nem mudança de permissão — reaproveita exatamente `GET /api/users`, `POST /api/users`, `PATCH/DELETE /api/users/[id]` e `GET /api/settings/slack` que já existiam.
+- **Validado**: typecheck/lint limpos; teste real contra o servidor (squad de teste, admin + membro adicionados pela API de verdade) confirmando que a página renderiza com os dados certos (nomes, cargo) e que Configurações continua funcionando sem a seção removida. Layout visual (linhas do organograma, hover, expandir painel) não foi conferido num navegador de verdade — só o HTML gerado no servidor — vale um olhar visual rápido.
+
 ## 2026-08-13 (corrige link de convite quebrado em produção + convite passa a ir pelo Slack)
 
 - Usuário reportou que o link de convite (feature de mais cedo hoje) abria `undefined/reset-password?token=...` em produção — página de erro, e o email nem chegava.
