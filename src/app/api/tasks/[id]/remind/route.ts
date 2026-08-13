@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { notifyTaskReminder } from "@/lib/slack";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
-  const task = await prisma.task.findUnique({ where: { id } });
+  const task = await db.task.findUnique({ where: { id } });
   if (!task) return NextResponse.json({ error: "Tarefa não encontrada" }, { status: 404 });
   if (!task.assigneeId) return NextResponse.json({ error: "Essa tarefa não tem responsável definido" }, { status: 400 });
 
   const result = await notifyTaskReminder({
+    squadId: session.user.squadId,
     assigneeDbId: task.assigneeId,
     taskId: task.id,
     taskTitle: task.title,

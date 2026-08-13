@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 type Params = { params: Promise<{ name: string }> };
 
@@ -10,10 +10,11 @@ type Params = { params: Promise<{ name: string }> };
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
-  const logins = await prisma.clientLogin.findMany({
+  const logins = await db.clientLogin.findMany({
     where: { client },
     orderBy: { createdAt: "asc" },
   });
@@ -23,13 +24,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
   const body = await req.json().catch(() => ({}));
 
-  const login = await prisma.clientLogin.create({
+  const login = await db.clientLogin.create({
     data: {
+      squadId: session.user.squadId,
       client,
       empresa: body.empresa || "",
       erp: body.erp || null,

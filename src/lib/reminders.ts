@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { notifyUser } from "./slack";
 import { isNotificationEnabled } from "./settings";
 
@@ -15,18 +16,19 @@ async function alreadyNotifiedToday(type: string, link: string): Promise<boolean
 
 // sendSlack: normalmente vem de isNotificationEnabled(tipo) — a notificação in-app (sino)
 // acontece sempre; o Slack é o canal que dá pra desligar por tipo em Configurações.
-async function broadcast(users: { id: string }[], type: string, message: string, link: string, sendSlack: boolean) {
+async function broadcast(squadId: string, users: { id: string }[], type: string, message: string, link: string, sendSlack: boolean) {
   if (await alreadyNotifiedToday(type, link)) return;
+  const db = forSquad(squadId);
   for (const u of users) {
-    await prisma.notification.create({ data: { userId: u.id, type, message, link } });
-    if (sendSlack) await notifyUser(u.id, message).catch(() => {});
+    await db.notification.create({ data: { squadId, userId: u.id, type, message, link } });
+    if (sendSlack) await notifyUser(squadId, u.id, message).catch(() => {});
   }
 }
 
-async function notifyOne(userId: string, type: string, message: string, link: string, sendSlack: boolean) {
+async function notifyOne(squadId: string, userId: string, type: string, message: string, link: string, sendSlack: boolean) {
   if (await alreadyNotifiedToday(type, link)) return;
-  await prisma.notification.create({ data: { userId, type, message, link } });
-  if (sendSlack) await notifyUser(userId, message).catch(() => {});
+  await forSquad(squadId).notification.create({ data: { squadId, userId, type, message, link } });
+  if (sendSlack) await notifyUser(squadId, userId, message).catch(() => {});
 }
 
 const MILESTONES = [
@@ -39,10 +41,11 @@ const MILESTONES = [
 ] as const;
 
 // Marcos de onboarding (D+2..D+90) que passaram do prazo sem a data real preenchida
-export async function checkOnboardingDelays(): Promise<number> {
+export async function checkOnboardingDelays(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
   const [clients, users] = await Promise.all([
-    prisma.clientNote.findMany({ where: { status: "ativo", onboardingStartAt: { not: null } } }),
-    prisma.user.findMany({ select: { id: true } }),
+    db.clientNote.findMany({ where: { status: "ativo", onboardingStartAt: { not: null } } }),
+    db.user.findMany({ select: { id: true } }),
   ]);
 
   const now = new Date();
@@ -57,7 +60,7 @@ export async function checkOnboardingDelays(): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `⏰ Onboarding atrasado: "${m.label}" de ${c.client} venceu em ${target.toLocaleDateString("pt-BR")}`;
-      await broadcast(users, `onboarding_atraso_${m.key}`, message, link, await isNotificationEnabled("onboardingDelay"));
+      await broadcast(squadId, users, `onboarding_atraso_${m.key}`, message, link, await isNotificationEnabled(squadId, "onboardingDelay"));
       alerted++;
     }
   }
@@ -65,22 +68,23 @@ export async function checkOnboardingDelays(): Promise<number> {
 }
 
 // Tratativas com data prevista de finalização vencida, ainda não concluídas
-export async function checkTratativasOverdue(): Promise<number> {
+export async function checkTratativasOverdue(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
   const [tratativas, users] = await Promise.all([
-    prisma.tratativa.findMany({
+    db.tratativa.findMany({
       where: { status: { not: "concluida" }, dataPrevistaFinalizacao: { not: null, lt: new Date() } },
     }),
-    prisma.user.findMany({ select: { id: true } }),
+    db.user.findMany({ select: { id: true } }),
   ]);
 
-  const tratativaSlackEnabled = await isNotificationEnabled("tratativaOverdue");
+  const tratativaSlackEnabled = await isNotificationEnabled(squadId, "tratativaOverdue");
   for (const t of tratativas) {
     const link = `/tratativas`;
     const message = `⚠️ Tratativa com prazo vencido: "${t.motivo}" (${t.client}) — previsto pra ${new Date(t.dataPrevistaFinalizacao!).toLocaleDateString("pt-BR")}`;
     if (t.responsavelId) {
-      await notifyOne(t.responsavelId, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
+      await notifyOne(squadId, t.responsavelId, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
     } else {
-      await broadcast(users, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
+      await broadcast(squadId, users, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
     }
   }
   return tratativas.length;
@@ -88,7 +92,8 @@ export async function checkTratativasOverdue(): Promise<number> {
 
 // Checklist de fechamento do mês incompleto, perto da virada do mês (dias 25-31 do
 // mês corrente, e dias 1-5 revendo o mês anterior que já deveria estar fechado)
-export async function checkFechamentoIncompleto(): Promise<number> {
+export async function checkFechamentoIncompleto(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
   const now = new Date();
   const day = now.getDate();
   if (day > 5 && day < 25) return 0;
@@ -101,22 +106,22 @@ export async function checkFechamentoIncompleto(): Promise<number> {
   }
 
   const [clients, users] = await Promise.all([
-    prisma.clientNote.findMany({ where: { status: "ativo" }, select: { client: true } }),
-    prisma.user.findMany({ select: { id: true } }),
+    db.clientNote.findMany({ where: { status: "ativo" }, select: { client: true } }),
+    db.user.findMany({ select: { id: true } }),
   ]);
 
   let alerted = 0;
   for (const c of clients) {
     for (const p of periods) {
-      const fechamento = await prisma.fechamentoMensal.findUnique({
-        where: { client_year_month: { client: c.client, year: p.year, month: p.month } },
+      const fechamento = await db.fechamentoMensal.findUnique({
+        where: { squadId_client_year_month: { squadId, client: c.client, year: p.year, month: p.month } },
       });
       const complete = !!fechamento && fechamento.comiteRealizado && fechamento.rebalanceamentoFeito && fechamento.conciliacaoOk && fechamento.cpCrFechados;
       if (complete) continue;
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `📋 Fechamento de ${String(p.month).padStart(2, "0")}/${p.year} de ${c.client} está incompleto`;
-      await broadcast(users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, await isNotificationEnabled("fechamentoIncomplete"));
+      await broadcast(squadId, users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, await isNotificationEnabled(squadId, "fechamentoIncomplete"));
       alerted++;
     }
   }
@@ -124,24 +129,28 @@ export async function checkFechamentoIncompleto(): Promise<number> {
 }
 
 // Sugestões da IA paradas há mais de 3 dias sem revisão
-export async function checkStaleRecapSuggestions(): Promise<number> {
+export async function checkStaleRecapSuggestions(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
   const threshold = new Date();
   threshold.setDate(threshold.getDate() - 3);
 
   const [count, users] = await Promise.all([
-    prisma.recapSuggestion.count({ where: { status: "pending", createdAt: { lt: threshold } } }),
-    prisma.user.findMany({ select: { id: true } }),
+    db.recapSuggestion.count({ where: { status: "pending", createdAt: { lt: threshold }, recap: { squadId } } }),
+    db.user.findMany({ select: { id: true } }),
   ]);
   if (count === 0) return 0;
 
   const message = `🤖 ${count} sugestão(ões) da IA aguardando revisão há mais de 3 dias`;
-  await broadcast(users, "recap_pendente", message, "/sugestoes-ia", await isNotificationEnabled("staleRecapSuggestions"));
+  await broadcast(squadId, users, "recap_pendente", message, "/sugestoes-ia", await isNotificationEnabled(squadId, "staleRecapSuggestions"));
   return count;
 }
 
 export async function checkAllReminders(): Promise<void> {
-  await checkOnboardingDelays();
-  await checkTratativasOverdue();
-  await checkFechamentoIncompleto();
-  await checkStaleRecapSuggestions();
+  const squads = await prisma.squad.findMany({ select: { id: true } });
+  for (const { id: squadId } of squads) {
+    await checkOnboardingDelays(squadId);
+    await checkTratativasOverdue(squadId);
+    await checkFechamentoIncompleto(squadId);
+    await checkStaleRecapSuggestions(squadId);
+  }
 }

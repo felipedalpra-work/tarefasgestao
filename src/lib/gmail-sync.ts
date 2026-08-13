@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { processRecap } from "./process-recap";
 import { google } from "googleapis";
 import { log } from "./logger";
@@ -49,9 +50,14 @@ function extractTextFromParts(parts: any[]): string {
 }
 
 export async function syncUserGmail(userId: string): Promise<{ synced: number; suggestionsExtracted: number }> {
-  // se houver uma conta designada pra sincronizar Meet Recaps, qualquer outra conta
-  // não faz nada aqui — evita o mesmo recap chegando duplicado de duas caixas diferentes
-  const designatedUserId = await getMeetRecapGmailUserId();
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { squadId: true } });
+  if (!user) return { synced: 0, suggestionsExtracted: 0 };
+  const db = forSquad(user.squadId);
+
+  // se houver uma conta designada pra sincronizar Meet Recaps NESSE squad, qualquer
+  // outra conta do mesmo squad não faz nada aqui — evita o mesmo recap chegando
+  // duplicado de duas caixas diferentes
+  const designatedUserId = await getMeetRecapGmailUserId(user.squadId);
   if (designatedUserId && userId !== designatedUserId) {
     return { synced: 0, suggestionsExtracted: 0 };
   }
@@ -91,7 +97,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
     let suggestionsExtracted = 0;
 
     for (const msg of messages) {
-      const existing = await prisma.meetRecap.findUnique({ where: { gmailId: msg.id! } });
+      const existing = await db.meetRecap.findUnique({ where: { squadId_gmailId: { squadId: user.squadId, gmailId: msg.id! } } });
       if (existing) continue;
 
       const full = await gmail.users.messages.get({ userId: "me", id: msg.id!, format: "full" });
@@ -109,8 +115,8 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
           : raw;
       }
 
-      await prisma.meetRecap.create({
-        data: { gmailId: msg.id!, subject, body },
+      await db.meetRecap.create({
+        data: { squadId: user.squadId, gmailId: msg.id!, subject, body },
       });
 
       synced++;
@@ -120,8 +126,8 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
     // sugestão por IA é opcional e pode estar pausada (Configurações → Meet Recaps).
     // Ao religar, isso também recupera o atraso: processa qualquer recap ainda sem
     // processedAt, não só os sincronizados agora.
-    if (await isMeetRecapSuggestionsEnabled()) {
-      const pending = await prisma.meetRecap.findMany({
+    if (await isMeetRecapSuggestionsEnabled(user.squadId)) {
+      const pending = await db.meetRecap.findMany({
         where: { processedAt: null },
         select: { id: true },
       });

@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { normalizeText as normalize } from "./utils";
 
 // Reuniões recorrentes (semanais/mensais) com o mesmo cliente tendem a gerar o mesmo
@@ -22,6 +22,7 @@ function isNearInTime(a: Date, b: Date): boolean {
 // de Meet Recap quanto pelo webhook do n8n. Sem cliente identificado, não dá pra comparar com
 // segurança, então não checa nada.
 export async function findDuplicateNote(
+  squadId: string,
   title: string,
   client: string | null,
   dueDate?: Date | null
@@ -30,18 +31,19 @@ export async function findDuplicateNote(
   const normClient = client ? normalize(client) : "";
   if (!normTitle || !normClient) return null;
 
+  const db = forSquad(squadId);
   const newRef = dueDate ?? new Date();
 
   const [tasks, recapSuggestions, externalSuggestions] = await Promise.all([
-    prisma.task.findMany({
+    db.task.findMany({
       where: { status: { not: "done" }, client: { not: null } },
       select: { title: true, client: true, dueDate: true, createdAt: true },
     }),
-    prisma.recapSuggestion.findMany({
-      where: { status: "pending" },
+    db.recapSuggestion.findMany({
+      where: { status: "pending", recap: { squadId } },
       select: { title: true, dueDate: true, createdAt: true, recap: { select: { client: true, subject: true } } },
     }),
-    prisma.externalSuggestion.findMany({
+    db.externalSuggestion.findMany({
       where: { status: "pending", client: { not: null } },
       select: { title: true, client: true, dueDate: true, createdAt: true },
     }),
@@ -104,9 +106,10 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 
 export type SimilarRecap = { id: string; subject: string; createdAt: Date; reason: string };
 
-export async function findSimilarRecap(subject: string, body: string): Promise<SimilarRecap | null> {
+export async function findSimilarRecap(squadId: string, subject: string, body: string): Promise<SimilarRecap | null> {
+  const db = forSquad(squadId);
   const since = new Date(Date.now() - RECAP_BODY_WINDOW_MS);
-  const candidates = await prisma.meetRecap.findMany({
+  const candidates = await db.meetRecap.findMany({
     where: { createdAt: { gte: since } },
     select: { id: true, subject: true, body: true, createdAt: true },
     orderBy: { createdAt: "desc" },

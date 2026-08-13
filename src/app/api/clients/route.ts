@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad, type SquadPrisma } from "@/lib/tenant-prisma";
 
 // Lista de nomes de clientes conhecidos (carteira em ClientNote + eventos, recaps e tarefas —
 // ClientNote é a fonte de verdade de quais clientes existem, ver getClientsTable em src/lib/queries.ts;
@@ -9,17 +9,18 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
-  const names = await knownClientNames();
+  const names = await knownClientNames(db);
   return NextResponse.json([...names].sort((a, b) => a.localeCompare(b)));
 }
 
-async function knownClientNames(): Promise<Set<string>> {
+async function knownClientNames(db: SquadPrisma): Promise<Set<string>> {
   const [notes, events, recaps, tasks] = await Promise.all([
-    prisma.clientNote.findMany({ select: { client: true } }),
-    prisma.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } }, distinct: ["client"] }),
-    prisma.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
-    prisma.task.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
+    db.clientNote.findMany({ select: { client: true } }),
+    db.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } }, distinct: ["client"] }),
+    db.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
+    db.task.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
   ]);
 
   const names = new Set<string>();
@@ -35,6 +36,7 @@ async function knownClientNames(): Promise<Set<string>> {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const body = await req.json().catch(() => null);
   const client = typeof body?.client === "string" ? body.client.trim() : "";
@@ -43,14 +45,14 @@ export async function POST(req: NextRequest) {
   // client é só uma string espalhada em várias tabelas (não é entidade própria) — compara
   // sem diferenciar maiúsculas/minúsculas contra TODAS as fontes, não só ClientNote, senão
   // "fismatek" e "Fismatek" viram dois clientes diferentes na tabela.
-  const existing = await knownClientNames();
+  const existing = await knownClientNames(db);
   const lowerExisting = new Set([...existing].map((n) => n.toLowerCase()));
   if (lowerExisting.has(client.toLowerCase())) {
     return NextResponse.json({ error: "Já existe um cliente com esse nome" }, { status: 409 });
   }
 
   try {
-    const note = await prisma.clientNote.create({ data: { client } });
+    const note = await db.clientNote.create({ data: { squadId: session.user.squadId, client } });
     revalidateTag("clients", "max");
     return NextResponse.json(note, { status: 201 });
   } catch {

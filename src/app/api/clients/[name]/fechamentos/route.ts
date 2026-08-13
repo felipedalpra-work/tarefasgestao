@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 type Params = { params: Promise<{ name: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
-  const fechamentos = await prisma.fechamentoMensal.findMany({
+  const fechamentos = await db.fechamentoMensal.findMany({
     where: { client },
     orderBy: [{ year: "desc" }, { month: "desc" }],
   });
@@ -25,6 +26,7 @@ const FREE_TEXT_FIELDS = ["pendenciasAnotadas", "maturidade"] as const;
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
@@ -47,10 +49,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data.healthReviewedAt = body.healthReviewedAt ? new Date(body.healthReviewedAt) : null;
   }
 
-  const fechamento = await prisma.fechamentoMensal.upsert({
-    where: { client_year_month: { client, year, month } },
+  const fechamento = await db.fechamentoMensal.upsert({
+    where: { squadId_client_year_month: { squadId: session.user.squadId, client, year, month } },
     update: data,
-    create: { client, year, month, ...data },
+    create: { squadId: session.user.squadId, client, year, month, ...data },
   });
 
   revalidateTag("clients", "max");

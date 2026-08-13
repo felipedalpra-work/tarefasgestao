@@ -24,8 +24,12 @@ export async function POST(req: NextRequest) {
 
   await ensureKnownAutomations();
 
+  // automações continuam específicas da O2 por decisão do produto (ver src/lib/automations.ts)
+  const squad = await prisma.squad.findUnique({ where: { slug: "o2-inc" } });
+  if (!squad) return NextResponse.json({ error: "Squad não configurado" }, { status: 500 });
+
   const automation = await prisma.automation.upsert({
-    where: { key },
+    where: { squadId_key: { squadId: squad.id, key } },
     update: {
       lastRunAt: new Date(),
       lastStatus: status,
@@ -33,6 +37,7 @@ export async function POST(req: NextRequest) {
       lastError: status === "error" ? (detail ?? summary ?? "Erro sem detalhe") : null,
     },
     create: {
+      squadId: squad.id,
       key,
       name: name || key,
       client: client ?? null,

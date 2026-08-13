@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/authz";
 import {
   isMeetRecapSuggestionsEnabled,
   setMeetRecapSuggestionsEnabled,
@@ -12,14 +13,15 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   return NextResponse.json({
-    enabled: await isMeetRecapSuggestionsEnabled(),
-    gmailUserId: await getMeetRecapGmailUserId(),
+    enabled: await isMeetRecapSuggestionsEnabled(session.user.squadId),
+    gmailUserId: await getMeetRecapGmailUserId(session.user.squadId),
   });
 }
 
 export async function PUT(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Só admin do squad pode mexer nisso" }, { status: 403 });
 
   const body = await req.json();
 
@@ -27,18 +29,18 @@ export async function PUT(req: NextRequest) {
     if (typeof body.enabled !== "boolean") {
       return NextResponse.json({ error: "enabled precisa ser boolean" }, { status: 400 });
     }
-    await setMeetRecapSuggestionsEnabled(body.enabled);
+    await setMeetRecapSuggestionsEnabled(session.user.squadId, body.enabled);
   }
 
   if (body.gmailUserId !== undefined) {
     if (body.gmailUserId !== null && typeof body.gmailUserId !== "string") {
       return NextResponse.json({ error: "gmailUserId precisa ser string ou null" }, { status: 400 });
     }
-    await setMeetRecapGmailUserId(body.gmailUserId);
+    await setMeetRecapGmailUserId(session.user.squadId, body.gmailUserId);
   }
 
   return NextResponse.json({
-    enabled: await isMeetRecapSuggestionsEnabled(),
-    gmailUserId: await getMeetRecapGmailUserId(),
+    enabled: await isMeetRecapSuggestionsEnabled(session.user.squadId),
+    gmailUserId: await getMeetRecapGmailUserId(session.user.squadId),
   });
 }

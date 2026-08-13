@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,9 +14,10 @@ const DATE_FIELDS = ["dataPrevistaFinalizacao", "churnData"] as const;
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
-  const tratativa = await prisma.tratativa.findUnique({
+  const tratativa = await db.tratativa.findUnique({
     where: { id },
     include: {
       responsavel: { select: { id: true, name: true, image: true } },
@@ -30,6 +31,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
   const body = await req.json();
@@ -59,7 +61,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body[field] !== undefined) data[field] = body[field] ? new Date(body[field]) : null;
   }
 
-  const tratativa = await prisma.tratativa.update({
+  const tratativa = await db.tratativa.update({
     where: { id },
     data,
     include: {

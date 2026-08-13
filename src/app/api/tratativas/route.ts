@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 const TIPO_VALUES = ["preventiva", "reativa"];
 
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
-  const tratativas = await prisma.tratativa.findMany({
+  const tratativas = await db.tratativa.findMany({
     include: {
       responsavel: { select: { id: true, name: true, image: true } },
       createdBy: { select: { id: true, name: true } },
@@ -23,6 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const body = await req.json();
 
@@ -36,8 +38,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "motivo é obrigatório" }, { status: 400 });
   }
 
-  const tratativa = await prisma.tratativa.create({
+  const tratativa = await db.tratativa.create({
     data: {
+      squadId: session.user.squadId,
       client: body.client,
       tipo: body.tipo,
       motivo: body.motivo,

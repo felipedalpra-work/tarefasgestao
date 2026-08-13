@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   if (q.length < 2) return NextResponse.json({ tasks: [], recaps: [], clients: [] });
@@ -14,19 +15,19 @@ export async function GET(req: NextRequest) {
   const ci = { contains: q, mode: "insensitive" as const };
 
   const [tasks, recaps, events, notes] = await Promise.all([
-    prisma.task.findMany({
+    db.task.findMany({
       where: { OR: [{ title: ci }, { description: ci }, { client: ci }] },
       select: { id: true, title: true, status: true, priority: true, client: true, assignee: { select: { name: true } } },
       orderBy: { updatedAt: "desc" },
       take: 6,
     }),
-    prisma.meetRecap.findMany({
+    db.meetRecap.findMany({
       where: { OR: [{ subject: ci }, { client: ci }] },
       select: { id: true, subject: true, client: true, processedAt: true },
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    prisma.calendarEvent.findMany({
+    db.calendarEvent.findMany({
       where: { OR: [{ client: ci }, { title: ci }] },
       select: { id: true, title: true, client: true, startAt: true },
       orderBy: { startAt: "desc" },
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
     }),
     // ClientNote é a única fonte pra cliente cadastrado na carteira mas ainda sem
     // nenhuma tarefa/reunião/recap — sem isso, cliente novo nunca aparece na busca.
-    prisma.clientNote.findMany({
+    db.clientNote.findMany({
       where: { client: ci },
       select: { client: true },
       take: 10,

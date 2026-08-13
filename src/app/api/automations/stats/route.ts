@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 // Estatísticas pro painel /automacoes: visão geral (últimos 30 dias) + histórico
 // recente por automação + últimos erros. Separado de GET /api/automations (que a
@@ -8,11 +8,12 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const since30d = new Date();
   since30d.setDate(since30d.getDate() - 30);
 
-  const automations = await prisma.automation.findMany({
+  const automations = await db.automation.findMany({
     select: {
       key: true,
       name: true,

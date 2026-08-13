@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { ensureOnboardingDeliverables } from "@/lib/onboarding-deliverables";
 
 type Params = { params: Promise<{ name: string }> };
@@ -9,10 +9,11 @@ type Params = { params: Promise<{ name: string }> };
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
-  const note = await prisma.clientNote.findUnique({ where: { client } });
+  const note = await db.clientNote.findUnique({ where: { squadId_client: { squadId: session.user.squadId, client } } });
   return NextResponse.json(
     note ?? {
       client,
@@ -51,15 +52,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
   const body = await req.json();
 
-  const note = await prisma.clientNote.upsert({
-    where: { client },
+  const note = await db.clientNote.upsert({
+    where: { squadId_client: { squadId: session.user.squadId, client } },
     update: { notes: body.notes ?? null, contacts: body.contacts ?? null },
-    create: { client, notes: body.notes ?? null, contacts: body.contacts ?? null },
+    create: { squadId: session.user.squadId, client, notes: body.notes ?? null, contacts: body.contacts ?? null },
   });
 
   return NextResponse.json(note);
@@ -99,6 +101,7 @@ const DATE_FIELDS = [
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
@@ -136,14 +139,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body[field] !== undefined) data[field] = body[field] ? new Date(body[field]) : null;
   }
 
-  const note = await prisma.clientNote.upsert({
-    where: { client },
+  const note = await db.clientNote.upsert({
+    where: { squadId_client: { squadId: session.user.squadId, client } },
     update: data,
-    create: { client, status: "ativo", oxyStage: "nao_iniciado", ...data },
+    create: { squadId: session.user.squadId, client, status: "ativo", oxyStage: "nao_iniciado", ...data },
   });
 
   if (data.onboardingStartAt instanceof Date) {
-    await ensureOnboardingDeliverables(client, data.onboardingStartAt, session.user.id);
+    await ensureOnboardingDeliverables(session.user.squadId, client, data.onboardingStartAt, session.user.id);
     revalidateTag("tasks", "max");
   }
 
@@ -158,20 +161,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
 
-  await prisma.$transaction([
-    prisma.meetRecap.deleteMany({ where: { client } }), // cascade apaga RecapSuggestion junto
-    prisma.externalSuggestion.deleteMany({ where: { client } }),
-    prisma.task.deleteMany({ where: { client } }), // cascade apaga Subtask/TaskActivity/TaskLink/TaskComment junto
-    prisma.calendarEvent.deleteMany({ where: { client } }),
-    prisma.tratativa.deleteMany({ where: { client } }),
-    prisma.setupMeeting.deleteMany({ where: { client } }),
-    prisma.fechamentoMensal.deleteMany({ where: { client } }),
-    prisma.clientLogin.deleteMany({ where: { client } }),
-    prisma.clientNote.deleteMany({ where: { client } }),
+  await db.$transaction([
+    db.meetRecap.deleteMany({ where: { client } }), // cascade apaga RecapSuggestion junto
+    db.externalSuggestion.deleteMany({ where: { client } }),
+    db.task.deleteMany({ where: { client } }), // cascade apaga Subtask/TaskActivity/TaskLink/TaskComment junto
+    db.calendarEvent.deleteMany({ where: { client } }),
+    db.tratativa.deleteMany({ where: { client } }),
+    db.setupMeeting.deleteMany({ where: { client } }),
+    db.fechamentoMensal.deleteMany({ where: { client } }),
+    db.clientLogin.deleteMany({ where: { client } }),
+    db.clientNote.deleteMany({ where: { client } }),
   ]);
 
   revalidateTag("clients", "max");

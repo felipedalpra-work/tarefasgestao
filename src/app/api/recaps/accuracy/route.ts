@@ -15,7 +15,7 @@ export async function GET() {
   const counts = await prisma.recapSuggestion.groupBy({
     by: ["status"],
     _count: true,
-    where: { status: { not: "superseded" } },
+    where: { status: { not: "superseded" }, recap: { squadId: session.user.squadId } },
   });
 
   const byStatus = { pending: 0, accepted: 0, edited: 0, rejected: 0 };
@@ -29,7 +29,7 @@ export async function GET() {
   // recap (RecapSuggestion não tem client próprio, vem de recap.client); ajuda a ver
   // onde a IA erra mais, em vez de só uma média geral que esconde isso
   const suggestions = await prisma.recapSuggestion.findMany({
-    where: { status: { not: "superseded" } },
+    where: { status: { not: "superseded" }, recap: { squadId: session.user.squadId } },
     select: { status: true, recap: { select: { client: true } } },
   });
 

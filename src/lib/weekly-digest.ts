@@ -1,16 +1,18 @@
 import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
 import { getBaseUrl } from "./base-url";
 import { isNotificationEnabled } from "./settings";
 
-export async function sendWeeklyDigest(): Promise<void> {
-  if (!(await isNotificationEnabled("weeklyDigest"))) { console.log("[digest] Desativado em Configurações, pulando."); return; }
+async function sendWeeklyDigestForSquad(squadId: string): Promise<void> {
+  if (!(await isNotificationEnabled(squadId, "weeklyDigest"))) { console.log("[digest] Desativado em Configurações, pulando."); return; }
 
-  const config = await getSlackConfig();
+  const config = await getSlackConfig(squadId);
   if (!config) { console.log("[digest] Slack não configurado, pulando."); return; }
 
-  const users = await prisma.user.findMany({ select: { id: true, name: true } });
+  const db = forSquad(squadId);
+  const users = await db.user.findMany({ select: { id: true, name: true } });
   const now = new Date();
 
   // semana atual: segunda a domingo
@@ -33,7 +35,7 @@ export async function sendWeeklyDigest(): Promise<void> {
     const slackUserId = config.userMap[user.id];
     if (!slackUserId) continue;
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await db.task.findMany({
       where: { assigneeId: user.id },
       select: { id: true, title: true, status: true, priority: true, dueDate: true, client: true, updatedAt: true },
     });
@@ -93,5 +95,12 @@ export async function sendWeeklyDigest(): Promise<void> {
       });
       console.error(`[digest] erro para ${user.name}:`, err);
     }
+  }
+}
+
+export async function sendWeeklyDigest(): Promise<void> {
+  const squads = await prisma.squad.findMany({ select: { id: true } });
+  for (const { id: squadId } of squads) {
+    await sendWeeklyDigestForSquad(squadId);
   }
 }

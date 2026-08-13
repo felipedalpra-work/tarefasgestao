@@ -1,12 +1,14 @@
 import { unstable_cache } from "next/cache";
-import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 
-// Cached: lista de usuários (muda raramente)
+// Cached: lista de usuários (muda raramente) — squadId entra como argumento da função
+// cacheada, então o Next já diferencia o cache por squad automaticamente (não precisa
+// duplicar squadId dentro do array de keyParts).
 export const getUsers = unstable_cache(
-  async () =>
-    prisma.user.findMany({
+  async (squadId: string) =>
+    forSquad(squadId).user.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true, image: true, cargo: true },
+      select: { id: true, name: true, email: true, image: true, cargo: true, role: true },
     }),
   ["users"],
   { tags: ["users"], revalidate: 300 } // 5 min
@@ -14,8 +16,8 @@ export const getUsers = unstable_cache(
 
 // Cached: todas as tasks (invalida em mutações)
 export const getAllTasks = unstable_cache(
-  async () =>
-    prisma.task.findMany({
+  async (squadId: string) =>
+    forSquad(squadId).task.findMany({
       include: { assignee: { select: { id: true, name: true, image: true } } },
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
     }),
@@ -25,8 +27,8 @@ export const getAllTasks = unstable_cache(
 
 // Cached: tasks de um usuário específico
 export const getTasksByUser = unstable_cache(
-  async (userId: string) =>
-    prisma.task.findMany({
+  async (squadId: string, userId: string) =>
+    forSquad(squadId).task.findMany({
       where: { assigneeId: userId },
       include: { assignee: { select: { id: true, name: true, image: true } } },
       orderBy: { updatedAt: "desc" },
@@ -37,8 +39,8 @@ export const getTasksByUser = unstable_cache(
 
 // Cached: recaps (invalida ao sincronizar)
 export const getRecaps = unstable_cache(
-  async () =>
-    prisma.meetRecap.findMany({
+  async (squadId: string) =>
+    forSquad(squadId).meetRecap.findMany({
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -55,10 +57,10 @@ export const getRecaps = unstable_cache(
 
 // Cached: eventos de calendário por mês
 export const getCalendarEvents = unstable_cache(
-  async (year: number, month: number) => {
+  async (squadId: string, year: number, month: number) => {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59);
-    return prisma.calendarEvent.findMany({
+    return forSquad(squadId).calendarEvent.findMany({
       where: { startAt: { gte: start, lte: end } },
       orderBy: { startAt: "asc" },
     });
@@ -69,11 +71,12 @@ export const getCalendarEvents = unstable_cache(
 
 // Cached: visão geral de clientes (card list)
 export const getClientsOverview = unstable_cache(
-  async () => {
+  async (squadId: string) => {
+    const db = forSquad(squadId);
     const [events, recaps, tasks] = await Promise.all([
-      prisma.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } } }),
-      prisma.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } } }),
-      prisma.task.findMany({ select: { client: true, status: true }, where: { client: { not: null } } }),
+      db.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } } }),
+      db.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } } }),
+      db.task.findMany({ select: { client: true, status: true }, where: { client: { not: null } } }),
     ]);
 
     const map: Record<string, { meetings: number; recaps: number; tasks: number; openTasks: number }> = {};
@@ -99,10 +102,11 @@ export const getClientsOverview = unstable_cache(
 
 // Cached: clientes com status geral + situação na Oxy, para a tabela de clientes
 export const getClientsTable = unstable_cache(
-  async () => {
+  async (squadId: string) => {
+    const db = forSquad(squadId);
     const [overview, notes] = await Promise.all([
-      getClientsOverview(),
-      prisma.clientNote.findMany({
+      getClientsOverview(squadId),
+      db.clientNote.findMany({
         select: {
           client: true,
           status: true,
@@ -148,24 +152,25 @@ export const getClientsTable = unstable_cache(
 
 // Cached: dados completos de um cliente
 export const getClientDetail = unstable_cache(
-  async (client: string) => {
+  async (squadId: string, client: string) => {
+    const db = forSquad(squadId);
     const [events, recaps, tasks, clientNote, tratativas] = await Promise.all([
-      prisma.calendarEvent.findMany({
+      db.calendarEvent.findMany({
         where: { client },
         orderBy: { startAt: "desc" },
       }),
-      prisma.meetRecap.findMany({
+      db.meetRecap.findMany({
         where: { client },
         select: { id: true, subject: true, createdAt: true, processedAt: true, suggestedTasks: true, client: true },
         orderBy: { createdAt: "desc" },
       }),
-      prisma.task.findMany({
+      db.task.findMany({
         where: { client },
         include: { assignee: { select: { id: true, name: true, image: true } } },
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
       }),
-      prisma.clientNote.findUnique({ where: { client } }),
-      prisma.tratativa.findMany({
+      db.clientNote.findUnique({ where: { squadId_client: { squadId, client } } }),
+      db.tratativa.findMany({
         where: { client },
         include: { responsavel: { select: { id: true, name: true, image: true } } },
         orderBy: { createdAt: "desc" },
@@ -179,8 +184,8 @@ export const getClientDetail = unstable_cache(
 
 // Cached: todas as tratativas (página /tratativas)
 export const getTratativas = unstable_cache(
-  async () =>
-    prisma.tratativa.findMany({
+  async (squadId: string) =>
+    forSquad(squadId).tratativa.findMany({
       include: {
         responsavel: { select: { id: true, name: true, image: true } },
         createdBy: { select: { id: true, name: true } },

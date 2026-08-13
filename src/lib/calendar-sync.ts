@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { google } from "googleapis";
 import { log } from "./logger";
 
@@ -23,19 +24,24 @@ export function extractMeetingTypeFromTitle(title: string): string | null {
   return null;
 }
 
-// e-mail (minúsculo) → User.id, pra resolver os convidados de cada reunião contra o squad
-async function buildEmailToUserId(): Promise<Map<string, string>> {
-  const users = await prisma.user.findMany({ select: { id: true, email: true } });
+// e-mail (minúsculo) → User.id, pra resolver os convidados de cada reunião contra o
+// MESMO squad de quem está sincronizando — não pode misturar com o e-mail de outro squad
+async function buildEmailToUserId(squadId: string): Promise<Map<string, string>> {
+  const users = await forSquad(squadId).user.findMany({ select: { id: true, email: true } });
   return new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
 }
 
 export async function syncCalendarForUser(userId: string, emailToUserId?: Map<string, string>): Promise<number> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { squadId: true } });
+  if (!user) return 0;
+  const db = forSquad(user.squadId);
+
   const account = await prisma.account.findFirst({
     where: { userId, provider: "google" },
   });
   if (!account?.access_token) return 0;
 
-  const emailMap = emailToUserId ?? (await buildEmailToUserId());
+  const emailMap = emailToUserId ?? (await buildEmailToUserId(user.squadId));
 
   try {
     const oauth2 = new google.auth.OAuth2(
@@ -88,10 +94,10 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
       }
       const attendeeUserIds = [...attendeeIds];
 
-      await prisma.calendarEvent.upsert({
-        where: { googleId: event.id! },
+      await db.calendarEvent.upsert({
+        where: { squadId_googleId: { squadId: user.squadId, googleId: event.id! } },
         update: { title, client, startAt, endAt, meetingType, attendeeUserIds },
-        create: { googleId: event.id!, title, client, startAt, endAt, meetingType, attendeeUserIds },
+        create: { squadId: user.squadId, googleId: event.id!, title, client, startAt, endAt, meetingType, attendeeUserIds },
       });
       synced++;
     }
@@ -117,9 +123,10 @@ export async function syncAllCalendars(): Promise<void> {
     distinct: ["userId"],
   });
 
-  const emailToUserId = await buildEmailToUserId();
+  // cada conta resolve o mapa de e-mails do próprio squad internamente — não dá pra
+  // compartilhar um mapa só entre squads diferentes
   for (const { userId } of accounts) {
-    const count = await syncCalendarForUser(userId, emailToUserId);
+    const count = await syncCalendarForUser(userId);
     if (count > 0) console.log(`[calendar-sync] userId=${userId}: ${count} evento(s) sincronizado(s)`);
   }
 }

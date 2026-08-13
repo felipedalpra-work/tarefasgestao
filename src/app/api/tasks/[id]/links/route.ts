@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const { id } = await params;
   const links = await prisma.taskLink.findMany({
-    where: { taskId: id },
+    where: { taskId: id, task: { squadId: session.user.squadId } },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json(links);
@@ -24,6 +24,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const { url, label } = await req.json();
   if (!url?.trim()) return NextResponse.json({ error: "URL obrigatória" }, { status: 400 });
+
+  const task = await prisma.task.findUnique({ where: { id, squadId: session.user.squadId }, select: { id: true } });
+  if (!task) return NextResponse.json({ error: "Tarefa não encontrada" }, { status: 404 });
 
   let normalized = url.trim();
   if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
@@ -43,6 +46,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   await params;
   const linkId = new URL(req.url).searchParams.get("linkId");
   if (!linkId) return NextResponse.json({ error: "linkId obrigatório" }, { status: 400 });
+
+  const link = await prisma.taskLink.findUnique({ where: { id: linkId }, select: { task: { select: { squadId: true } } } });
+  if (!link || link.task.squadId !== session.user.squadId) {
+    return NextResponse.json({ error: "Link não encontrado" }, { status: 404 });
+  }
 
   await prisma.taskLink.delete({ where: { id: linkId } });
   revalidateTag("tasks", "max");

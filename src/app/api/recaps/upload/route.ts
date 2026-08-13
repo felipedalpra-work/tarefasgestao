@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { processRecap } from "@/lib/process-recap";
 import { findSimilarRecap } from "@/lib/duplicate-detection";
 import { revalidateTag } from "next/cache";
@@ -12,6 +12,7 @@ import { revalidateTag } from "next/cache";
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { subject, body, force } = await req.json();
   if (typeof subject !== "string" || !subject.trim()) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!force) {
-    const similar = await findSimilarRecap(subject.trim(), body);
+    const similar = await findSimilarRecap(session.user.squadId, subject.trim(), body);
     if (similar) {
       return NextResponse.json(
         { duplicate: { id: similar.id, subject: similar.subject, createdAt: similar.createdAt, reason: similar.reason } },
@@ -31,8 +32,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const recap = await prisma.meetRecap.create({
+  const recap = await db.meetRecap.create({
     data: {
+      squadId: session.user.squadId,
       subject: subject.trim().slice(0, 255),
       body,
       source: "manual",
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   const count = await processRecap(recap.id);
 
-  const suggestions = await prisma.recapSuggestion.findMany({
+  const suggestions = await db.recapSuggestion.findMany({
     where: { recapId: recap.id, status: { not: "superseded" } },
     orderBy: { index: "asc" },
   });

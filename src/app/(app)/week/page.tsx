@@ -29,7 +29,7 @@ type Task = Awaited<ReturnType<typeof getAllTasks>>[number];
 export default async function WeekPage() {
   const session = await auth();
   const userId = session?.user?.id ?? "";
-  const allTasks = await getAllTasks();
+  const allTasks = await getAllTasks(session!.user.squadId);
   const mine = allTasks.filter((t) => t.assigneeId === userId && t.status !== "done");
 
   const now = new Date();

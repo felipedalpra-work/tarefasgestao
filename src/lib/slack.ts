@@ -8,9 +8,9 @@ type SlackConfig = {
   userMap: Record<string, string>; // userId (DB) → slackUserId
 };
 
-export async function getSlackConfig(): Promise<SlackConfig | null> {
+export async function getSlackConfig(squadId: string): Promise<SlackConfig | null> {
   const rows = await prisma.setting.findMany({
-    where: { key: { startsWith: "slack_" } },
+    where: { squadId, key: { startsWith: "slack_" } },
   });
   if (!rows.length) return null;
 
@@ -64,6 +64,7 @@ export async function sendSlackDM(
 }
 
 export async function notifyTaskAssigned({
+  squadId,
   assigneeDbId,
   taskId,
   taskTitle,
@@ -73,6 +74,7 @@ export async function notifyTaskAssigned({
   createdBy,
   client,
 }: {
+  squadId: string;
   assigneeDbId: string;
   taskId?: string;
   taskTitle: string;
@@ -82,9 +84,9 @@ export async function notifyTaskAssigned({
   createdBy?: string | null;
   client?: string | null;
 }): Promise<void> {
-  if (!(await isNotificationEnabled("taskAssigned"))) return;
+  if (!(await isNotificationEnabled(squadId, "taskAssigned"))) return;
 
-  const config = await getSlackConfig();
+  const config = await getSlackConfig(squadId);
   if (!config) return;
 
   const slackUserId = config.userMap[assigneeDbId];
@@ -114,6 +116,7 @@ export async function notifyTaskAssigned({
 
 // DM manual disparada pela pessoa que abriu a tarefa, cobrando o responsável (botão "Lembrar" no detalhe da tarefa)
 export async function notifyTaskReminder({
+  squadId,
   assigneeDbId,
   taskId,
   taskTitle,
@@ -123,6 +126,7 @@ export async function notifyTaskReminder({
   client,
   requestedBy,
 }: {
+  squadId: string;
   assigneeDbId: string;
   taskId?: string;
   taskTitle: string;
@@ -132,11 +136,11 @@ export async function notifyTaskReminder({
   client?: string | null;
   requestedBy?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
-  if (!(await isNotificationEnabled("taskReminder"))) {
+  if (!(await isNotificationEnabled(squadId, "taskReminder"))) {
     return { ok: false, error: "Lembretes de tarefa via Slack estão desativados (Configurações → Integração Slack)" };
   }
 
-  const config = await getSlackConfig();
+  const config = await getSlackConfig(squadId);
   if (!config) return { ok: false, error: "Integração com Slack não configurada (Configurações → Slack)" };
 
   const slackUserId = config.userMap[assigneeDbId];
@@ -165,17 +169,19 @@ export async function notifyTaskReminder({
 }
 
 export async function notifyTaskCompleted({
+  squadId,
   userDbId,
   taskTitle,
   client,
 }: {
+  squadId: string;
   userDbId: string;
   taskTitle: string;
   client?: string | null;
 }): Promise<void> {
-  if (!(await isNotificationEnabled("taskCompleted"))) return;
+  if (!(await isNotificationEnabled(squadId, "taskCompleted"))) return;
 
-  const config = await getSlackConfig();
+  const config = await getSlackConfig(squadId);
   if (!config) return;
 
   const slackUserId = config.userMap[userDbId];
@@ -192,8 +198,8 @@ export async function notifyTaskCompleted({
 }
 
 // DM genérica para um usuário do banco (usada por menções em comentários)
-export async function notifyUser(dbUserId: string, message: string): Promise<void> {
-  const config = await getSlackConfig();
+export async function notifyUser(squadId: string, dbUserId: string, message: string): Promise<void> {
+  const config = await getSlackConfig(squadId);
   if (!config) return;
   const slackUserId = config.userMap[dbUserId];
   if (!slackUserId) return;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { recordTaskChanges } from "@/lib/activity";
 import { notifyTaskCompleted } from "@/lib/slack";
@@ -14,9 +14,10 @@ const TASK_INCLUDE = {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
-  const task = await prisma.task.findUnique({ where: { id }, include: TASK_INCLUDE });
+  const task = await db.task.findUnique({ where: { id }, include: TASK_INCLUDE });
   if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(task);
 }
@@ -34,17 +35,18 @@ function nextDueDate(current: Date | null, recurrence: string): Date | null {
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
   const body = await req.json();
 
-  const before = await prisma.task.findUnique({
+  const before = await db.task.findUnique({
     where: { id },
     include: { assignee: { select: { id: true, name: true } } },
   });
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const task = await prisma.task.update({
+  const task = await db.task.update({
     where: { id },
     data: {
       ...(body.status && { status: body.status }),
@@ -64,7 +66,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   let newAssigneeName: string | null = before.assignee?.name ?? null;
   if (body.assigneeId !== undefined && body.assigneeId !== before.assigneeId) {
     newAssigneeName = body.assigneeId
-      ? (await prisma.user.findUnique({ where: { id: body.assigneeId }, select: { name: true } }))?.name ?? null
+      ? (await db.user.findUnique({ where: { id: body.assigneeId }, select: { name: true } }))?.name ?? null
       : null;
   }
   await recordTaskChanges(
@@ -82,8 +84,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     body.assigneeId !== before.assigneeId &&
     body.assigneeId !== session.user?.id
   ) {
-    await prisma.notification.create({
+    await db.notification.create({
       data: {
+        squadId: session.user.squadId,
         userId: body.assigneeId,
         type: "assigned",
         message: `${session.user?.name?.split(" ")[0] ?? "Alguém"} atribuiu a você: ${task.title}`,
@@ -95,6 +98,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // parabeniza no Slack quem concluiu a tarefa
   if (body.status === "done" && before.status !== "done" && session.user?.id) {
     await notifyTaskCompleted({
+      squadId: session.user.squadId,
       userDbId: session.user.id,
       taskTitle: task.title,
       client: task.client,
@@ -105,8 +109,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.status === "done" && before.status !== "done" && before.recurrence) {
     const due = nextDueDate(before.dueDate, before.recurrence);
     if (due) {
-      await prisma.task.create({
+      await db.task.create({
         data: {
+          squadId: session.user.squadId,
           title: before.title,
           description: before.description,
           priority: before.priority,
@@ -129,10 +134,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
-  await prisma.taskComment.deleteMany({ where: { taskId: id } });
-  await prisma.task.delete({ where: { id } });
+  await db.taskComment.deleteMany({ where: { taskId: id } });
+  await db.task.delete({ where: { id } });
   revalidateTag("tasks", "max");
   return NextResponse.json({ ok: true });
 }

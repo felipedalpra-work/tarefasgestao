@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import Groq from "groq-sdk";
 import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
@@ -18,16 +19,18 @@ type SuggestedTask = {
   deliverTo?: string;
 };
 
-async function buildFewShotExamples(): Promise<string> {
+// poucos-exemplos são do MESMO squad do recap sendo processado — sem isso, o padrão de
+// escrita/aceite de um squad vazaria pro prompt de outro squad
+async function buildFewShotExamples(db: SquadPrisma, squadId: string): Promise<string> {
   const [accepted, rejected] = await Promise.all([
-    prisma.recapSuggestion.findMany({
-      where: { status: { in: ["accepted", "edited"] } },
+    db.recapSuggestion.findMany({
+      where: { status: { in: ["accepted", "edited"] }, recap: { squadId } },
       include: { task: { select: { title: true, description: true, priority: true } } },
       orderBy: { updatedAt: "desc" },
       take: 8,
     }),
-    prisma.recapSuggestion.findMany({
-      where: { status: "rejected" },
+    db.recapSuggestion.findMany({
+      where: { status: "rejected", recap: { squadId } },
       orderBy: { updatedAt: "desc" },
       take: 5,
     }),
@@ -51,8 +54,8 @@ async function buildFewShotExamples(): Promise<string> {
 }
 
 // Marca superseded as sugestões ainda pendentes de uma leva anterior (preserva aceitas/editadas/rejeitadas como histórico)
-async function supersedePendingSuggestions(recapId: string) {
-  await prisma.recapSuggestion.updateMany({
+async function supersedePendingSuggestions(db: SquadPrisma, recapId: string) {
+  await db.recapSuggestion.updateMany({
     where: { recapId, status: "pending" },
     data: { status: "superseded" },
   });
@@ -64,18 +67,22 @@ async function supersedePendingSuggestions(recapId: string) {
  * `force`: reprocessa mesmo se já foi processado antes (usado pelo botão de reprocessar).
  */
 export async function processRecap(recapId: string, opts?: { force?: boolean }): Promise<number> {
+  // busca sem escopo — squadId ainda não é conhecido nesse ponto; é o próprio recap
+  // encontrado aqui que informa qual squad usar dali em diante
   const recap = await prisma.meetRecap.findUnique({ where: { id: recapId } });
   if (!recap) return 0;
   if (recap.processedAt && !opts?.force) return 0;
 
+  const db = forSquad(recap.squadId);
+
   if (!recap.body || recap.body.trim().length < 20) {
-    await prisma.meetRecap.update({ where: { id: recapId }, data: { suggestedTasks: "[]", processedAt: new Date() } });
+    await db.meetRecap.update({ where: { id: recapId }, data: { suggestedTasks: "[]", processedAt: new Date() } });
     return 0;
   }
 
-  const users = await prisma.user.findMany({ select: { id: true, name: true, email: true } });
+  const users = await db.user.findMany({ select: { id: true, name: true, email: true } });
   const memberList = users.map((u) => u.name || u.email).join(", ");
-  const fewShot = await buildFewShotExamples();
+  const fewShot = await buildFewShotExamples(db, recap.squadId);
 
   const prompt = `Você é um assistente de gestão de tarefas para a empresa O2 Inc. Analise o conteúdo abaixo (transcrição, resumo ou lista de próximas etapas de reunião) e extraia TODAS as tarefas e compromissos.
 
@@ -132,9 +139,9 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
       tasks = JSON.parse(arrayMatch[0]);
     }
 
-    await supersedePendingSuggestions(recapId);
+    await supersedePendingSuggestions(db, recapId);
 
-    await prisma.meetRecap.update({
+    await db.meetRecap.update({
       where: { id: recapId },
       data: {
         suggestedTasks: JSON.stringify(tasks),
@@ -146,9 +153,9 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
     const validTasks = tasks.filter((t) => t.title?.trim());
     if (validTasks.length > 0) {
       const duplicateNotes = await Promise.all(
-        validTasks.map((t) => findDuplicateNote(t.title!, client, t.dueDate ? new Date(t.dueDate) : null))
+        validTasks.map((t) => findDuplicateNote(recap.squadId, t.title!, client, t.dueDate ? new Date(t.dueDate) : null))
       );
-      await prisma.recapSuggestion.createMany({
+      await db.recapSuggestion.createMany({
         data: validTasks.map((t, index) => ({
           recapId,
           index,

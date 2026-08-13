@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const activities = await prisma.taskActivity.findMany({
-    where: { taskId: id },
+    where: { taskId: id, task: { squadId: session.user.squadId } },
     orderBy: { createdAt: "desc" },
     take: 50,
   });

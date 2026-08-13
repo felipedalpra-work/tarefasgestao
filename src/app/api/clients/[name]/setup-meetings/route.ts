@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 type Params = { params: Promise<{ name: string }> };
 
@@ -10,10 +10,11 @@ const CODES = ["R1", "R2", "R3", "R4"] as const;
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
-  const existing = await prisma.setupMeeting.findMany({ where: { client } });
+  const existing = await db.setupMeeting.findMany({ where: { client } });
   const byCode = new Map(existing.map((m) => [m.code, m]));
 
   const meetings = CODES.map(
@@ -40,6 +41,7 @@ const DATE_FIELDS = ["scheduledAt", "completedAt"] as const;
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { name } = await params;
   const client = decodeURIComponent(name);
@@ -55,10 +57,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body[field] !== undefined) data[field] = body[field] ? new Date(body[field]) : null;
   }
 
-  const meeting = await prisma.setupMeeting.upsert({
-    where: { client_code: { client, code: body.code } },
+  const meeting = await db.setupMeeting.upsert({
+    where: { squadId_client_code: { squadId: session.user.squadId, client, code: body.code } },
     update: data,
-    create: { client, code: body.code, ...data },
+    create: { squadId: session.user.squadId, client, code: body.code, ...data },
   });
 
   revalidateTag("clients", "max");

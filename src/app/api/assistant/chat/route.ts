@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         let result: unknown;
         try {
           const args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-          result = await runTool(call.function.name, args);
+          result = await runTool(session.user.squadId, call.function.name, args);
         } catch (err) {
           result = { error: String(err) };
         }

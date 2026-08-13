@@ -8,8 +8,8 @@ import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, AlertCircle, Circle, TrendingUp, BarChart2, Building2, Flame, ArrowRight } from "lucide-react";
 import { cn, dueDateOnly, isTaskOverdue } from "@/lib/utils";
 
-async function getStats(userId: string) {
-  const [allTasks, users, clients] = await Promise.all([getAllTasks(), getUsers(), getClientsOverview()]);
+async function getStats(squadId: string, userId: string) {
+  const [allTasks, users, clients] = await Promise.all([getAllTasks(squadId), getUsers(squadId), getClientsOverview(squadId)]);
   const myTasks = allTasks.filter((t) => t.assigneeId === userId);
 
   // produtividade dos últimos 7 dias
@@ -39,7 +39,7 @@ const statusConfig = {
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session?.user?.id ?? "";
-  const { myTasks, allTasks, productivity, topClients, maxClientTasks, users } = await getStats(userId);
+  const { myTasks, allTasks, productivity, topClients, maxClientTasks, users } = await getStats(session!.user.squadId, userId);
 
   const counts = {
     todo: myTasks.filter((t) => t.status === "todo").length,

@@ -17,13 +17,13 @@ export default async function ClientePage({ params }: Props) {
   const { slug } = await params;
   const client = decodeURIComponent(slug);
 
-  const [session, data, users] = await Promise.all([
-    auth(),
-    getClientDetail(client),
-    getUsers(),
-  ]);
-
+  const session = await auth();
   if (!session?.user?.id) notFound();
+
+  const [data, users] = await Promise.all([
+    getClientDetail(session.user.squadId, client),
+    getUsers(session.user.squadId),
+  ]);
 
   const { events, recaps, tasks, clientNote, tratativas } = data;
 

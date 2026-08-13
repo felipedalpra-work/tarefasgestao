@@ -53,7 +53,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user, account }) {
-      if (user) token.id = user.id;
+      if (user) {
+        token.id = user.id;
+        // squadId/role vêm do banco (não do provider) — todo User já pertence a um
+        // squad desde o cadastro/convite, isso só carrega pra sessão
+        const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { squadId: true, role: true } });
+        if (dbUser) {
+          token.squadId = dbUser.squadId;
+          token.role = dbUser.role;
+        }
+      }
       // quando conecta Google, salva o token no banco
       if (account?.provider === "google" && token.id) {
         await prisma.account.upsert({
@@ -81,6 +90,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (token?.id) session.user.id = token.id as string;
+      if (token?.squadId) session.user.squadId = token.squadId as string;
+      if (token?.role) session.user.role = token.role as string;
       return session;
     },
     async signIn({ account, profile }) {

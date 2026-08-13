@@ -6,14 +6,31 @@ datasource db {
   provider = "postgresql"
 }
 
+// Um squad = uma equipe de CFO as a Service com sua própria conta na plataforma.
+// Todo dado de negócio (Task, ClientNote, MeetRecap, etc.) pertence a exatamente
+// um Squad — isolamento entre squads é reforçado centralmente em src/lib/tenant-prisma.ts,
+// não confiar em cada rota lembrar de filtrar manualmente.
+model Squad {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+}
+
 model User {
   id            String    @id @default(cuid())
+  squadId       String
+  role          String    @default("member") // "admin" (CFO — convida/remove gente, configura integrações do squad) | "member"
   name          String?
   email         String    @unique
   emailVerified DateTime?
   image         String?
   password      String?
   cargo         String?
+  squad         Squad     @relation(fields: [squadId], references: [id])
   accounts      Account[]
   sessions      Session[]
   tasks         Task[]         @relation("AssignedTasks")
@@ -26,6 +43,8 @@ model User {
   assistantMessages  AssistantMessage[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([squadId])
 }
 
 model PasswordResetToken {
@@ -68,6 +87,7 @@ model Session {
 
 model Task {
   id          String    @id @default(cuid())
+  squadId     String
   title       String
   description String?
   status      String    @default("todo")
@@ -99,6 +119,7 @@ model Task {
   @@index([status])
   @@index([client])
   @@index([updatedAt])
+  @@index([squadId])
 }
 
 model Subtask {
@@ -138,6 +159,7 @@ model TaskLink {
 
 model Notification {
   id        String    @id @default(cuid())
+  squadId   String
   userId    String
   type      String // "assigned" | "mention" | "comment" | "recap"
   message   String
@@ -147,11 +169,13 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([createdAt])
+  @@index([squadId])
 }
 
 model ClientNote {
   id                String    @id @default(cuid())
-  client            String    @unique
+  squadId           String
+  client            String
   notes             String?
   contacts          String?
   status            String    @default("ativo") // "ativo" | "pausado" | "encerrado"
@@ -182,15 +206,18 @@ model ClientNote {
   diagnosticoValidacaoAt DateTime? // Diagnóstico Etapa 3: validação com o cliente (na semanal)
   updatedAt         DateTime  @updatedAt
 
+  @@unique([squadId, client])
   @@index([status])
   @@index([oxyStage])
   @@index([healthStatus])
+  @@index([squadId])
 }
 
 // Acessos ao ERP/Oxy do cliente — vira lista (não campo único em ClientNote) porque
 // tem cliente com mais de uma empresa/CNPJ, cada uma com seu próprio ERP e login.
 model ClientLogin {
   id         String   @id @default(cuid())
+  squadId    String
   client     String // nome do cliente, mesma string usada em Task/CalendarEvent/ClientNote
   empresa    String // razão social/nome da empresa (distingue quando o cliente tem mais de uma)
   erp        String?
@@ -199,10 +226,12 @@ model ClientLogin {
   updatedAt  DateTime @updatedAt
 
   @@index([client])
+  @@index([squadId])
 }
 
 model SetupMeeting {
   id            String    @id @default(cuid())
+  squadId       String
   client        String
   code          String // "R1" | "R2" | "R3" | "R4"
   scheduledAt   DateTime?
@@ -213,12 +242,14 @@ model SetupMeeting {
   nextSteps     String?
   updatedAt     DateTime  @updatedAt
 
-  @@unique([client, code])
+  @@unique([squadId, client, code])
   @@index([client])
+  @@index([squadId])
 }
 
 model Tratativa {
   id                      String    @id @default(cuid())
+  squadId                 String
   client                  String
   tipo                    String // "preventiva" | "reativa"
   motivo                  String
@@ -241,13 +272,15 @@ model Tratativa {
 
   @@index([client])
   @@index([status])
+  @@index([squadId])
 }
 
 model MeetRecap {
   id             String    @id @default(cuid())
+  squadId        String
   subject        String
   body           String
-  gmailId        String?   @unique // null quando source = "manual" (não veio de um e-mail)
+  gmailId        String? // null quando source = "manual" (não veio de um e-mail)
   source         String    @default("gmail") // "gmail" | "manual" (upload de transcrição em /recaps)
   uploadedById   String? // quem fez o upload manual; null pros recaps sincronizados do Gmail
   uploadedBy     User?     @relation("UploadedRecaps", fields: [uploadedById], references: [id])
@@ -257,7 +290,9 @@ model MeetRecap {
   suggestions    RecapSuggestion[]
   createdAt      DateTime  @default(now())
 
+  @@unique([squadId, gmailId])
   @@index([processedAt])
+  @@index([squadId])
 }
 
 model RecapSuggestion {
@@ -287,6 +322,7 @@ model RecapSuggestion {
 // em /sugestoes-ia), mas sem depender de um MeetRecap.
 model ExternalSuggestion {
   id          String    @id @default(cuid())
+  squadId     String
   source      String // "n8n" (aberto pra outras origens no futuro)
   sourceRef   String?
   title       String
@@ -306,12 +342,16 @@ model ExternalSuggestion {
 
   @@index([status])
   @@index([source])
+  @@index([squadId])
 }
 
 model Setting {
-  key       String   @id
+  squadId   String
+  key       String
   value     String
   updatedAt DateTime @updatedAt
+
+  @@id([squadId, key])
 }
 
 model TaskComment {
@@ -342,6 +382,7 @@ model AssistantMessage {
 
 model PlatformLog {
   id        String   @id @default(cuid())
+  squadId   String? // fica nullable pra sempre — algumas linhas são de sistema/cron, não de um squad específico
   level     String   @default("info")
   category  String
   message   String
@@ -351,11 +392,13 @@ model PlatformLog {
   @@index([createdAt])
   @@index([category])
   @@index([level])
+  @@index([squadId])
 }
 
 model CalendarEvent {
   id           String   @id @default(cuid())
-  googleId     String   @unique
+  squadId      String
+  googleId     String
   title        String
   client       String
   startAt      DateTime
@@ -370,12 +413,15 @@ model CalendarEvent {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@unique([squadId, googleId])
   @@index([startAt])
   @@index([client])
+  @@index([squadId])
 }
 
 model FechamentoMensal {
   id                    String   @id @default(cuid())
+  squadId               String
   client                String
   year                  Int
   month                 Int // 1-12
@@ -388,8 +434,9 @@ model FechamentoMensal {
   healthReviewedAt      DateTime?
   updatedAt             DateTime @updatedAt
 
-  @@unique([client, year, month])
+  @@unique([squadId, client, year, month])
   @@index([client])
+  @@index([squadId])
 }
 
 // Rotinas automatizadas fora do app (hoje rodam como tarefas agendadas do
@@ -398,7 +445,8 @@ model FechamentoMensal {
 // em si acontece fora do tarefasgestao.
 model Automation {
   id            String    @id @default(cuid())
-  key           String    @unique // ex: "getconnect-oxy", "babyland-oxy", "zedoflor-lembrete"
+  squadId       String
+  key           String // ex: "getconnect-oxy", "babyland-oxy", "zedoflor-lembrete"
   name          String // ex: "GetConnect → Oxy CFO Hub"
   client        String? // nome do cliente, casa com ClientNote.client quando existir
   scheduleLabel String // ex: "Toda quarta, 14h" — texto livre, só pra exibição
@@ -413,7 +461,9 @@ model Automation {
   runs     AutomationRun[]
   commands AutomationCommand[]
 
+  @@unique([squadId, key])
   @@index([client])
+  @@index([squadId])
 }
 
 // Histórico de execuções reportadas pela rotina externa (uma linha por rodada).

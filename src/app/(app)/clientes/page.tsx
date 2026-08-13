@@ -1,8 +1,10 @@
+import { auth } from "@/lib/auth";
 import { getClientsTable } from "@/lib/queries";
 import { ClientsTable } from "./ClientsTable";
 
 export default async function ClientesPage() {
-  const clients = await getClientsTable();
+  const session = await auth();
+  const clients = await getClientsTable(session!.user.squadId);
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">

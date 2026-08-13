@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { log } from "@/lib/logger";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,6 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
@@ -21,14 +22,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'type deve ser "trigger", "pause" ou "resume"' }, { status: 400 });
   }
 
-  const automation = await prisma.automation.findUnique({ where: { id } });
+  const automation = await db.automation.findUnique({ where: { id } });
   if (!automation) return NextResponse.json({ error: "Automação não encontrada" }, { status: 404 });
 
   if (type === "pause" || type === "resume") {
-    await prisma.automation.update({ where: { id }, data: { enabled: type === "resume" } });
+    await db.automation.update({ where: { id }, data: { enabled: type === "resume" } });
   }
 
-  const command = await prisma.automationCommand.create({
+  const command = await db.automationCommand.create({
     data: {
       automationId: id,
       type,

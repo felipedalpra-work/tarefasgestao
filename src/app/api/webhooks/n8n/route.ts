@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { log } from "@/lib/logger";
 import { findDuplicateNote } from "@/lib/duplicate-detection";
 
@@ -24,6 +25,11 @@ function normalizePriority(value: unknown): string | null {
 // Endpoint chamado pelo workflow n8n da colega de squad, que hoje só manda os
 // itens gerados pra uma lista no Slack. Aqui eles entram como sugestão pendente
 // (mesmo espírito das sugestões de Meet Recap) — revisão em /sugestoes-ia.
+// TODO (Etapa 5 do plano multi-tenant): N8N_WEBHOOK_SECRET é um secret único e
+// global hoje — não dá pra saber de qual squad veio a chamada quando mais de um
+// squad usar n8n. Por enquanto resolve pro único squad existente (O2); precisa
+// virar secret+rota por squad (ex.: /api/webhooks/n8n/[squadId]) antes de outro
+// squad configurar isso.
 export async function POST(req: NextRequest) {
   const auth = req.headers.get("authorization");
   if (!process.env.N8N_WEBHOOK_SECRET || auth !== `Bearer ${process.env.N8N_WEBHOOK_SECRET}`) {
@@ -35,14 +41,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "title é obrigatório" }, { status: 400 });
   }
 
+  const squad = await prisma.squad.findUnique({ where: { slug: "o2-inc" } });
+  if (!squad) return NextResponse.json({ error: "Squad não configurado" }, { status: 500 });
+  const db = forSquad(squad.id);
+
   const duplicateNote = await findDuplicateNote(
+    squad.id,
     body.title,
     body.client || null,
     body.dueDate ? new Date(body.dueDate) : null
   );
 
-  const suggestion = await prisma.externalSuggestion.create({
+  const suggestion = await db.externalSuggestion.create({
     data: {
+      squadId: squad.id,
       source: "n8n",
       sourceRef: body.sourceRef || null,
       title: body.title,

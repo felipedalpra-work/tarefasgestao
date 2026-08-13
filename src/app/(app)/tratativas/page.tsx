@@ -1,8 +1,11 @@
+import { auth } from "@/lib/auth";
 import { getTratativas, getUsers, getClientsTable } from "@/lib/queries";
 import { TratativasBoard } from "./TratativasBoard";
 
 export default async function TratativasPage() {
-  const [tratativas, users, clients] = await Promise.all([getTratativas(), getUsers(), getClientsTable()]);
+  const session = await auth();
+  const squadId = session!.user.squadId;
+  const [tratativas, users, clients] = await Promise.all([getTratativas(squadId), getUsers(squadId), getClientsTable(squadId)]);
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">

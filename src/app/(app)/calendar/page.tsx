@@ -1,3 +1,4 @@
+import { auth } from "@/lib/auth";
 import { getCalendarEvents, getAllTasks, getUsers } from "@/lib/queries";
 import { CalendarGrid } from "@/components/CalendarGrid";
 
@@ -6,10 +7,10 @@ const MONTHS = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-async function getCalendarData(year: number, month: number) {
+async function getCalendarData(squadId: string, year: number, month: number) {
   const [events, allTasks] = await Promise.all([
-    getCalendarEvents(year, month),
-    getAllTasks(),
+    getCalendarEvents(squadId, year, month),
+    getAllTasks(squadId),
   ]);
 
   const clients = new Set(events.map(e => e.client));
@@ -70,14 +71,16 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ year?: string; month?: string }>;
 }) {
+  const session = await auth();
+  const squadId = session!.user.squadId;
   const params = await searchParams;
   const now = new Date();
   const year = parseInt(params.year ?? String(now.getFullYear()));
   const month = parseInt(params.month ?? String(now.getMonth() + 1));
 
   const [{ events, tasks }, users] = await Promise.all([
-    getCalendarData(year, month),
-    getUsers(),
+    getCalendarData(squadId, year, month),
+    getUsers(squadId),
   ]);
 
   return (

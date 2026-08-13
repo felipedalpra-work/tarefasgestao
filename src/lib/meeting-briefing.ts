@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { Resend } from "resend";
 import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
@@ -106,15 +107,15 @@ export async function sendMeetingBriefings(): Promise<void> {
   if (events.length === 0) return;
   console.log(`[briefing] ${events.length} reunião(ões) amanhã`);
 
-  const users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true },
-  });
-
   for (const event of events) {
     const client = event.client;
+    const db = forSquad(event.squadId);
+    const users = await db.user.findMany({
+      select: { id: true, name: true, email: true },
+    });
 
     // tarefas O2 para esse cliente (deliverTo = "client" ou source = meet_recap com esse cliente)
-    const o2Tasks = await prisma.task.findMany({
+    const o2Tasks = await db.task.findMany({
       where: {
         status: { notIn: ["done"] },
         client: { equals: client },
@@ -124,7 +125,7 @@ export async function sendMeetingBriefings(): Promise<void> {
     });
 
     // tarefas que o cliente tem que entregar pra O2
-    const clientTasks = await prisma.task.findMany({
+    const clientTasks = await db.task.findMany({
       where: {
         status: { notIn: ["done"] },
         client: { equals: client },
@@ -164,7 +165,7 @@ export async function sendMeetingBriefings(): Promise<void> {
     }
 
     // Slack briefing
-    const slackConfig = (await isNotificationEnabled("meetingBriefing")) ? await getSlackConfig() : null;
+    const slackConfig = (await isNotificationEnabled(event.squadId, "meetingBriefing")) ? await getSlackConfig(event.squadId) : null;
     if (slackConfig) {
       const slackLines = [
         `📅 *Reunião amanhã: O2 Inc & ${client}*`,
@@ -194,7 +195,7 @@ export async function sendMeetingBriefings(): Promise<void> {
     }
 
     // marca briefing como enviado
-    await prisma.calendarEvent.update({
+    await db.calendarEvent.update({
       where: { id: event.id },
       data: { briefingSent: true },
     });

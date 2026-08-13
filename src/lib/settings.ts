@@ -4,16 +4,16 @@ const MEET_RECAP_SUGGESTIONS_KEY = "meet_recap_suggestions_enabled";
 const MEET_RECAP_GMAIL_USER_KEY = "meet_recap_gmail_user_id";
 
 // Sem linha na tabela Setting = ligado (comportamento histórico, antes de existir esse flag)
-export async function isMeetRecapSuggestionsEnabled(): Promise<boolean> {
-  const row = await prisma.setting.findUnique({ where: { key: MEET_RECAP_SUGGESTIONS_KEY } });
+export async function isMeetRecapSuggestionsEnabled(squadId: string): Promise<boolean> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: MEET_RECAP_SUGGESTIONS_KEY } } });
   return row?.value !== "false";
 }
 
-export async function setMeetRecapSuggestionsEnabled(enabled: boolean): Promise<void> {
+export async function setMeetRecapSuggestionsEnabled(squadId: string, enabled: boolean): Promise<void> {
   await prisma.setting.upsert({
-    where: { key: MEET_RECAP_SUGGESTIONS_KEY },
+    where: { squadId_key: { squadId, key: MEET_RECAP_SUGGESTIONS_KEY } },
     update: { value: String(enabled) },
-    create: { key: MEET_RECAP_SUGGESTIONS_KEY, value: String(enabled) },
+    create: { squadId, key: MEET_RECAP_SUGGESTIONS_KEY, value: String(enabled) },
   });
 }
 
@@ -22,20 +22,20 @@ export async function setMeetRecapSuggestionsEnabled(enabled: boolean): Promise<
 // duplicado em duas caixas diferentes — gmailId diferente em cada uma, então vira
 // dois MeetRecap distintos pro mesmo encontro, com sugestões de tarefa divergentes.
 // null/sem linha = sincroniza de todas as contas conectadas (comportamento histórico).
-export async function getMeetRecapGmailUserId(): Promise<string | null> {
-  const row = await prisma.setting.findUnique({ where: { key: MEET_RECAP_GMAIL_USER_KEY } });
+export async function getMeetRecapGmailUserId(squadId: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: MEET_RECAP_GMAIL_USER_KEY } } });
   return row?.value || null;
 }
 
-export async function setMeetRecapGmailUserId(userId: string | null): Promise<void> {
+export async function setMeetRecapGmailUserId(squadId: string, userId: string | null): Promise<void> {
   if (!userId) {
-    await prisma.setting.deleteMany({ where: { key: MEET_RECAP_GMAIL_USER_KEY } });
+    await prisma.setting.deleteMany({ where: { squadId, key: MEET_RECAP_GMAIL_USER_KEY } });
     return;
   }
   await prisma.setting.upsert({
-    where: { key: MEET_RECAP_GMAIL_USER_KEY },
+    where: { squadId_key: { squadId, key: MEET_RECAP_GMAIL_USER_KEY } },
     update: { value: userId },
-    create: { key: MEET_RECAP_GMAIL_USER_KEY, value: userId },
+    create: { squadId, key: MEET_RECAP_GMAIL_USER_KEY, value: userId },
   });
 }
 
@@ -74,8 +74,8 @@ const DEFAULT_NOTIFICATION_PREFS: Record<NotificationType, boolean> = {
   meetingBriefing: true,
 };
 
-export async function getNotificationPrefs(): Promise<Record<NotificationType, boolean>> {
-  const row = await prisma.setting.findUnique({ where: { key: NOTIFICATION_PREFS_KEY } });
+export async function getNotificationPrefs(squadId: string): Promise<Record<NotificationType, boolean>> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: NOTIFICATION_PREFS_KEY } } });
   if (!row) return { ...DEFAULT_NOTIFICATION_PREFS };
   try {
     const stored = JSON.parse(row.value) as Partial<Record<NotificationType, boolean>>;
@@ -85,18 +85,18 @@ export async function getNotificationPrefs(): Promise<Record<NotificationType, b
   }
 }
 
-export async function isNotificationEnabled(type: NotificationType): Promise<boolean> {
-  const prefs = await getNotificationPrefs();
+export async function isNotificationEnabled(squadId: string, type: NotificationType): Promise<boolean> {
+  const prefs = await getNotificationPrefs(squadId);
   return prefs[type];
 }
 
-export async function setNotificationPref(type: NotificationType, enabled: boolean): Promise<Record<NotificationType, boolean>> {
-  const prefs = await getNotificationPrefs();
+export async function setNotificationPref(squadId: string, type: NotificationType, enabled: boolean): Promise<Record<NotificationType, boolean>> {
+  const prefs = await getNotificationPrefs(squadId);
   prefs[type] = enabled;
   await prisma.setting.upsert({
-    where: { key: NOTIFICATION_PREFS_KEY },
+    where: { squadId_key: { squadId, key: NOTIFICATION_PREFS_KEY } },
     update: { value: JSON.stringify(prefs) },
-    create: { key: NOTIFICATION_PREFS_KEY, value: JSON.stringify(prefs) },
+    create: { squadId, key: NOTIFICATION_PREFS_KEY, value: JSON.stringify(prefs) },
   });
   return prefs;
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { sendSlackDM } from "@/lib/slack";
 
@@ -8,7 +9,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const rows = await prisma.setting.findMany({
-    where: { key: { startsWith: "slack_" } },
+    where: { squadId: session.user.squadId, key: { startsWith: "slack_" } },
   });
 
   const map: Record<string, string> = {};
@@ -27,8 +28,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Só admin do squad pode mexer nisso" }, { status: 403 });
 
   const body = await req.json();
+  const squadId = session.user.squadId;
 
   // body: { slack_bot_token?: string, slack_user_<dbId>?: string, ... }
   const upserts = Object.entries(body as Record<string, string>)
@@ -36,8 +39,8 @@ export async function POST(req: NextRequest) {
     .filter(([, v]) => typeof v === "string")
     .map(([key, value]) =>
       prisma.setting.upsert({
-        where: { key },
-        create: { key, value },
+        where: { squadId_key: { squadId, key } },
+        create: { squadId, key, value },
         update: { value },
       })
     );
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Só admin do squad pode mexer nisso" }, { status: 403 });
 
   const { botToken: bodyToken, slackUserId } = await req.json();
   if (!slackUserId) {
@@ -59,7 +63,7 @@ export async function PUT(req: NextRequest) {
   // fall back to stored token if none supplied
   let botToken = bodyToken;
   if (!botToken) {
-    const stored = await prisma.setting.findUnique({ where: { key: "slack_bot_token" } });
+    const stored = await prisma.setting.findUnique({ where: { squadId_key: { squadId: session.user.squadId, key: "slack_bot_token" } } });
     botToken = stored?.value;
   }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,6 +12,7 @@ const MEETING_TYPE_VALUES = ["semanal", "comite", "kickoff", "setup", "interno"]
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const { id } = await params;
   const body = await req.json();
@@ -34,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.attendanceConfirmed !== undefined) data.attendanceConfirmed = !!body.attendanceConfirmed;
   if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
 
-  const event = await prisma.calendarEvent.update({ where: { id }, data });
+  const event = await db.calendarEvent.update({ where: { id }, data });
 
   revalidateTag("calendar", "max");
 

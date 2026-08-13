@@ -33,13 +33,18 @@ export const KNOWN_AUTOMATIONS: {
   },
 ];
 
-// Garante que toda automação conhecida tenha uma linha no banco (idempotente).
+// Automações continuam específicas da O2 por decisão do produto (não é um recurso
+// genérico pra qualquer squad configurar ainda) — sempre aponta pro squad da O2.
 export async function ensureKnownAutomations() {
+  const squad = await prisma.squad.findUnique({ where: { slug: "o2-inc" } });
+  if (!squad) return;
+
   for (const def of KNOWN_AUTOMATIONS) {
     await prisma.automation.upsert({
-      where: { key: def.key },
+      where: { squadId_key: { squadId: squad.id, key: def.key } },
       update: {}, // não sobrescreve nada que já existe (ex: enabled alterado no painel)
       create: {
+        squadId: squad.id,
         key: def.key,
         name: def.name,
         client: def.client,

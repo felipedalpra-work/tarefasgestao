@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { sendNewTaskEmail } from "@/lib/email";
 import { notifyTaskAssigned } from "@/lib/slack";
@@ -8,8 +8,9 @@ import { notifyTaskAssigned } from "@/lib/slack";
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
-  const tasks = await prisma.task.findMany({
+  const tasks = await db.task.findMany({
     include: {
       assignee: { select: { id: true, name: true, image: true } },
       subtasks: { select: { id: true, done: true } },
@@ -26,10 +27,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const db = forSquad(session.user.squadId);
 
   const body = await req.json();
-  const task = await prisma.task.create({
+  const task = await db.task.create({
     data: {
+      squadId: session.user.squadId,
       title: body.title,
       description: body.description || null,
       priority: body.priority || "medium",
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await prisma.taskActivity.create({
+  await db.taskActivity.create({
     data: {
       taskId: task.id,
       userName: session.user.name ?? null,
@@ -67,14 +70,14 @@ export async function POST(req: NextRequest) {
   });
 
   if (body.recapSuggestionId) {
-    await prisma.recapSuggestion.update({
+    await db.recapSuggestion.update({
       where: { id: body.recapSuggestionId },
       data: { status: body.suggestionEdited ? "edited" : "accepted", taskId: task.id },
     }).catch((e) => console.error("[recap-suggestion] erro ao vincular:", e));
   }
 
   if (body.externalSuggestionId) {
-    await prisma.externalSuggestion.update({
+    await db.externalSuggestion.update({
       where: { id: body.externalSuggestionId },
       data: { status: body.suggestionEdited ? "edited" : "accepted", taskId: task.id },
     }).catch((e) => console.error("[external-suggestion] erro ao vincular:", e));
@@ -82,8 +85,9 @@ export async function POST(req: NextRequest) {
 
   // notificação in-app quando atribuída a outra pessoa
   if (task.assigneeId && task.assigneeId !== session.user.id) {
-    await prisma.notification.create({
+    await db.notification.create({
       data: {
+        squadId: session.user.squadId,
         userId: task.assigneeId,
         type: "assigned",
         message: `${session.user.name?.split(" ")[0] ?? "Alguém"} atribuiu a você: ${task.title}`,
@@ -108,6 +112,7 @@ export async function POST(req: NextRequest) {
 
   if (task.assigneeId) {
     notifyTaskAssigned({
+      squadId: session.user.squadId,
       assigneeDbId: task.assigneeId,
       taskId: task.id,
       taskTitle: task.title,

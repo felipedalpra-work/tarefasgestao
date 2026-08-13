@@ -1,5 +1,5 @@
 import type Groq from "groq-sdk";
-import { prisma } from "./prisma";
+import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import { isTaskOverdue, normalizeText } from "./utils";
 
 // Ferramentas do assistente de IA (botão flutuante) — todas SOMENTE LEITURA de propósito.
@@ -29,29 +29,30 @@ function fmtDate(d: Date | null | undefined): string | null {
 // livre que a pessoa digitou no chat — tolera acento/caixa diferente (Postgres
 // `contains` sozinho não ignora acento, então "cafe" não bate com "Café" de outro jeito),
 // comparando contra a carteira em ClientNote. Retorna null se não achar nenhum parecido.
-async function resolveClientName(input: string): Promise<string | null> {
+async function resolveClientName(db: SquadPrisma, input: string): Promise<string | null> {
   const target = normalizeText(input);
   if (!target) return null;
-  const notes = await prisma.clientNote.findMany({ select: { client: true } });
+  const notes = await db.clientNote.findMany({ select: { client: true } });
   const exact = notes.find((c) => normalizeText(c.client) === target);
   if (exact) return exact.client;
   const partial = notes.find((c) => normalizeText(c.client).includes(target) || target.includes(normalizeText(c.client)));
   return partial?.client ?? null;
 }
 
-async function getUrgentItems() {
+async function getUrgentItems(squadId: string) {
+  const db = forSquad(squadId);
   const now = new Date();
 
   const [openTasks, tratativasAbertas, clientesAtivos] = await Promise.all([
-    prisma.task.findMany({
+    db.task.findMany({
       where: { status: { not: "done" }, dueDate: { not: null } },
       select: { id: true, title: true, client: true, priority: true, dueDate: true, status: true, assignee: { select: { name: true } } },
     }),
-    prisma.tratativa.findMany({
+    db.tratativa.findMany({
       where: { status: { not: "concluida" }, dataPrevistaFinalizacao: { not: null, lt: now } },
       select: { client: true, motivo: true, tipo: true, dataPrevistaFinalizacao: true, responsavel: { select: { name: true } } },
     }),
-    prisma.clientNote.findMany({ where: { status: "ativo", onboardingStartAt: { not: null } } }),
+    db.clientNote.findMany({ where: { status: "ativo", onboardingStartAt: { not: null } } }),
   ]);
 
   const overdueTasks = openTasks
@@ -79,8 +80,8 @@ async function getUrgentItems() {
   }
 
   const [currentYear, currentMonth] = [now.getFullYear(), now.getMonth() + 1];
-  const clientesAtivosNomes = await prisma.clientNote.findMany({ where: { status: "ativo" }, select: { client: true } });
-  const fechamentos = await prisma.fechamentoMensal.findMany({
+  const clientesAtivosNomes = await db.clientNote.findMany({ where: { status: "ativo" }, select: { client: true } });
+  const fechamentos = await db.fechamentoMensal.findMany({
     where: { year: currentYear, month: currentMonth, client: { in: clientesAtivosNomes.map((c) => c.client) } },
   });
   const fechamentoPorCliente = new Map(fechamentos.map((f) => [f.client, f]));
@@ -91,8 +92,8 @@ async function getUrgentItems() {
     })
     .map((c) => c.client);
 
-  const sugestoesIaPendentesHaMuitoTempo = await prisma.recapSuggestion.count({
-    where: { status: "pending", createdAt: { lt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) } },
+  const sugestoesIaPendentesHaMuitoTempo = await db.recapSuggestion.count({
+    where: { status: "pending", createdAt: { lt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) }, recap: { squadId } },
   });
 
   return {
@@ -104,7 +105,7 @@ async function getUrgentItems() {
   };
 }
 
-async function searchTasks(args: {
+async function searchTasks(squadId: string, args: {
   status?: string;
   client?: string;
   assigneeName?: string;
@@ -113,10 +114,11 @@ async function searchTasks(args: {
   textSearch?: string;
   limit?: number | string;
 }) {
+  const db = forSquad(squadId);
   // o Groq às vezes manda number como string (ex: "15") — não confiar no tipo declarado
   const limit = Math.min(Math.max(Number(args.limit) || 15, 1), 30);
-  const resolvedClient = args.client ? await resolveClientName(args.client) : null;
-  const tasks = await prisma.task.findMany({
+  const resolvedClient = args.client ? await resolveClientName(db, args.client) : null;
+  const tasks = await db.task.findMany({
     where: {
       ...(args.status ? { status: args.status } : {}),
       ...(resolvedClient
@@ -148,16 +150,17 @@ async function searchTasks(args: {
   }));
 }
 
-async function findClientNote(name: string) {
-  const resolved = await resolveClientName(name);
+async function findClientNote(db: SquadPrisma, squadId: string, name: string) {
+  const resolved = await resolveClientName(db, name);
   if (!resolved) return null;
-  return prisma.clientNote.findUnique({ where: { client: resolved } });
+  return db.clientNote.findUnique({ where: { squadId_client: { squadId, client: resolved } } });
 }
 
-async function getClientOverview(args: { client: string }) {
-  const note = await findClientNote(args.client);
+async function getClientOverview(squadId: string, args: { client: string }) {
+  const db = forSquad(squadId);
+  const note = await findClientNote(db, squadId, args.client);
   if (!note) {
-    const all = await prisma.clientNote.findMany({ select: { client: true } });
+    const all = await db.clientNote.findMany({ select: { client: true } });
     const target = normalizeText(args.client);
     const similares = all.map((c) => c.client).filter((c) => normalizeText(c).includes(target.slice(0, 4)));
     return { encontrado: false, mensagem: `Nenhum cliente chamado "${args.client}" encontrado.`, clientesParecidos: similares.slice(0, 5) };
@@ -165,19 +168,19 @@ async function getClientOverview(args: { client: string }) {
 
   const now = new Date();
   const [openTasks, tratativas, fechamento, upcomingMeetings] = await Promise.all([
-    prisma.task.findMany({
+    db.task.findMany({
       where: { client: note.client, status: { not: "done" } },
       select: { title: true, status: true, priority: true, dueDate: true },
       take: 15,
     }),
-    prisma.tratativa.findMany({
+    db.tratativa.findMany({
       where: { client: note.client, status: { not: "concluida" } },
       select: { motivo: true, tipo: true, status: true, dataPrevistaFinalizacao: true },
     }),
-    prisma.fechamentoMensal.findUnique({
-      where: { client_year_month: { client: note.client, year: now.getFullYear(), month: now.getMonth() + 1 } },
+    db.fechamentoMensal.findUnique({
+      where: { squadId_client_year_month: { squadId, client: note.client, year: now.getFullYear(), month: now.getMonth() + 1 } },
     }),
-    prisma.calendarEvent.findMany({
+    db.calendarEvent.findMany({
       where: { client: note.client, startAt: { gte: now } },
       select: { title: true, startAt: true, meetingType: true },
       orderBy: { startAt: "asc" },
@@ -213,8 +216,8 @@ async function getClientOverview(args: { client: string }) {
   };
 }
 
-async function listClients(args: { status?: string; healthStatus?: string }) {
-  const clients = await prisma.clientNote.findMany({
+async function listClients(squadId: string, args: { status?: string; healthStatus?: string }) {
+  const clients = await forSquad(squadId).clientNote.findMany({
     where: { ...(args.status ? { status: args.status } : {}), ...(args.healthStatus ? { healthStatus: args.healthStatus } : {}) },
     select: { client: true, status: true, healthStatus: true, oxyStage: true },
     orderBy: { client: "asc" },
@@ -222,13 +225,14 @@ async function listClients(args: { status?: string; healthStatus?: string }) {
   return clients;
 }
 
-async function getUpcomingMeetings(args: { days?: number | string; client?: string }) {
+async function getUpcomingMeetings(squadId: string, args: { days?: number | string; client?: string }) {
+  const db = forSquad(squadId);
   // o Groq às vezes manda number como string (ex: "7") — não confiar no tipo declarado
   const days = Math.min(Math.max(Number(args.days) || 7, 1), 60);
   const now = new Date();
   const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-  const resolvedClient = args.client ? await resolveClientName(args.client) : null;
-  const events = await prisma.calendarEvent.findMany({
+  const resolvedClient = args.client ? await resolveClientName(db, args.client) : null;
+  const events = await db.calendarEvent.findMany({
     where: {
       startAt: { gte: now, lte: until },
       ...(resolvedClient
@@ -244,13 +248,14 @@ async function getUpcomingMeetings(args: { days?: number | string; client?: stri
   return events.map((e) => ({ title: e.title, client: e.client, data: e.startAt.toISOString(), tipo: e.meetingType }));
 }
 
-async function getPendingAiSuggestions() {
+async function getPendingAiSuggestions(squadId: string) {
+  const db = forSquad(squadId);
   const [recapPending, recapDuplicate, externalPending, externalDuplicate, oldest] = await Promise.all([
-    prisma.recapSuggestion.count({ where: { status: "pending" } }),
-    prisma.recapSuggestion.count({ where: { status: "duplicate" } }),
-    prisma.externalSuggestion.count({ where: { status: "pending" } }),
-    prisma.externalSuggestion.count({ where: { status: "duplicate" } }),
-    prisma.recapSuggestion.findFirst({ where: { status: "pending" }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+    db.recapSuggestion.count({ where: { status: "pending", recap: { squadId } } }),
+    db.recapSuggestion.count({ where: { status: "duplicate", recap: { squadId } } }),
+    db.externalSuggestion.count({ where: { status: "pending" } }),
+    db.externalSuggestion.count({ where: { status: "duplicate" } }),
+    db.recapSuggestion.findFirst({ where: { status: "pending", recap: { squadId } }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
   ]);
   return {
     meetRecapPendentes: recapPending,
@@ -261,9 +266,10 @@ async function getPendingAiSuggestions() {
   };
 }
 
-async function getTratativas(args: { status?: string; client?: string }) {
-  const resolvedClient = args.client ? await resolveClientName(args.client) : null;
-  const tratativas = await prisma.tratativa.findMany({
+async function getTratativas(squadId: string, args: { status?: string; client?: string }) {
+  const db = forSquad(squadId);
+  const resolvedClient = args.client ? await resolveClientName(db, args.client) : null;
+  const tratativas = await db.tratativa.findMany({
     where: {
       ...(args.status ? { status: args.status } : {}),
       ...(resolvedClient
@@ -388,22 +394,22 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   },
 ];
 
-export async function runTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+export async function runTool(squadId: string, name: string, args: Record<string, unknown>): Promise<unknown> {
   switch (name) {
     case "get_urgent_items":
-      return getUrgentItems();
+      return getUrgentItems(squadId);
     case "search_tasks":
-      return searchTasks(args);
+      return searchTasks(squadId, args);
     case "get_client_overview":
-      return getClientOverview(args as { client: string });
+      return getClientOverview(squadId, args as { client: string });
     case "list_clients":
-      return listClients(args);
+      return listClients(squadId, args);
     case "get_upcoming_meetings":
-      return getUpcomingMeetings(args);
+      return getUpcomingMeetings(squadId, args);
     case "get_pending_ai_suggestions":
-      return getPendingAiSuggestions();
+      return getPendingAiSuggestions(squadId);
     case "get_tratativas":
-      return getTratativas(args);
+      return getTratativas(squadId, args);
     default:
       return { error: `Ferramenta desconhecida: ${name}` };
   }
