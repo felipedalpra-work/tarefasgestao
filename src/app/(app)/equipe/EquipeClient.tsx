@@ -2,14 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { UserPlus, Trash2, Copy, Crown, X } from "lucide-react";
+import { UserPlus, Trash2, Copy, Crown, X, Check } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import { UserAvatar } from "@/components/UserAvatar";
 import { cn } from "@/lib/utils";
 
 type SquadMember = { id: string; name: string | null; email: string; image?: string | null; cargo?: string | null; role?: string };
 
-type Tab = "org" | "membros";
+type Tab = "org" | "membros" | "permissoes";
+
+// Referência fixa — não vem do banco, é a regra de negócio documentada (a única
+// checagem real é isAdmin, ver src/lib/authz.ts). Manter em sincronia manualmente
+// se uma ação nova virar admin-only.
+const ADMIN_ONLY = [
+  "Convidar, remover e promover/rebaixar membro do squad",
+  "Configurar Slack (bot token, notificações), Meet Recap Gmail, Minuta de cobrança e secret do n8n",
+  "Excluir um cliente (ação irreversível — apaga tudo ligado a ele)",
+  "Pausar, reativar ou rodar uma automação agora",
+];
+const ANYONE = [
+  "Criar, editar e concluir tarefas — inclusive de outras pessoas",
+  "Criar e editar clientes, tratativas, onboarding e fechamento mensal",
+  "Revisar sugestões da IA (Meet Recap / n8n) e usar o assistente de IA",
+  "Editar o próprio cargo de exibição",
+];
 
 export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) {
   const { data: session } = useSession();
@@ -134,6 +150,15 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
           )}
         >
           Membros ({users.length})
+        </button>
+        <button
+          onClick={() => setTab("permissoes")}
+          className={cn(
+            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            tab === "permissoes" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
+          )}
+        >
+          Permissões
         </button>
       </div>
 
@@ -338,6 +363,39 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "permissoes" && (
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Crown size={14} className="text-yellow-400" />
+              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Admin</h2>
+            </div>
+            <ul className="space-y-3">
+              {ADMIN_ONLY.map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-ink-soft">
+                  <Check size={14} className="text-o2-green shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-4">Membro</h2>
+            <ul className="space-y-3">
+              {ANYONE.map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-ink-soft">
+                  <Check size={14} className="text-o2-green shrink-0 mt-0.5" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-ink-faint mt-4 pt-4 border-t border-surface-3">
+              Membro também tem acesso a tudo isso — só não mexe em configuração do squad.
+            </p>
+          </div>
         </div>
       )}
     </div>

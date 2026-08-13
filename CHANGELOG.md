@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (referência de permissões em Equipe)
+
+- Terceira etapa do plano: nenhum lugar do app explicava, de forma direta, o que Admin pode fazer que Membro não pode.
+- Nova sub-aba **"Permissões"** em `/equipe` (ao lado de Organograma/Membros): duas listas — o que é admin-only (convidar/remover/promover membro, configurar Slack/Meet Recap/n8n/Minuta de cobrança, excluir cliente, controlar automação) e o que qualquer membro já faz normalmente (tarefas, clientes, tratativas, sugestões da IA, assistente, próprio cargo). É documentação viva da regra — não vem do banco, não é uma permissão configurável nova (mantém os 2 níveis Admin/Membro já decididos).
+- Validado: typecheck/lint limpos, aba aparece na tela de um squad de teste real.
+
 ## 2026-08-13 (Configurações em abas + corrige controles que falhavam silenciosamente pra membro)
 
 - Segunda etapa do plano: usuário achou `/settings` confusa — tudo empilhado numa pilha vertical só, sem separação clara entre o que é pessoal, do squad, ou do Slack.
