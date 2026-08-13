@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (cadastro público de squad + perfil Admin/Membro)
+
+- Continuação da fundação multi-tenant de mais cedo hoje: agora qualquer squad de CFOaaS consegue criar a própria conta sozinho, sem precisar que a O2 crie manualmente.
+- **`/signup`**: tela pública (mesmo visual de `/login`) — nome do squad, nome/email/senha de quem está criando. `POST /api/auth/signup` cria `Squad` + `User` (`role: "admin"`) numa transação só, slug gerado a partir do nome do squad com desempate automático em caso de colisão. Sem verificação de email (mesmo padrão informal já usado no convite de membro). Login automático logo depois de criar a conta, cai direto no dashboard. Link "Criar squad" adicionado no rodapé de `/login`.
+- **Seletor de perfil em Configurações → Equipe**: quem é admin agora vê um `<select>` Admin/Membro em cada linha de membro do time (a API `/api/users/[id]` já aceitava `role` desde a etapa anterior, só faltava a UI) e escolhe o perfil de quem está convidando. Quem é membro comum não vê o formulário de convite nem o botão de remover — só visualiza o perfil de cada colega, sem poder mexer.
+- **Validado fim-a-fim contra o banco real** (não só typecheck): criado um squad de teste via `curl` direto na API de cadastro, login com as credenciais recém-criadas confirmado (fluxo padrão de CSRF do NextAuth), sessão resultante conferida (`squadId`/`role: "admin"` corretos e diferentes do squad da O2), e confirmado que esse squad novo vê zero tarefas/clientes/resultados de busca mesmo com a O2 tendo dado real no banco — prova de isolamento igual à da etapa anterior, agora pelo fluxo de cadastro de verdade. Squad e usuário de teste removidos depois.
+- Ainda pendente (próxima etapa, não incluída aqui): secret do n8n por squad (hoje ainda resolve só pro squad da O2) e o email dono da minuta de cobrança (`gmail-draft.ts`) virar configuração por squad em vez de hardcoded.
+
 ## 2026-08-13 (fundação multi-tenant: cada squad, seus próprios dados)
 
 - Início da transformação da plataforma de "app da O2" pra "plataforma que qualquer squad de CFOaaS pode usar" — squad próprio, admin (CFO), time convidado, dados isolados. Essa entrada cobre a fundação (schema + motor de isolamento + migração de todas as rotas); o cadastro público (`/signup`) e o seletor de perfil na tela de convite ficam pra próxima etapa — a API já aceita `role`, só falta a UI.

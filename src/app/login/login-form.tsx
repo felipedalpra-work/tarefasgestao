@@ -107,6 +107,10 @@ export default function LoginForm() {
         </svg>
         {googleLoading ? "Redirecionando..." : "Continuar com Google"}
       </button>
+
+      <p className="text-xs text-ink-faint text-center mt-6">
+        Seu squad ainda não tem conta? <a href="/signup" className="text-o2-green hover:underline">Criar squad</a>
+      </p>
     </>
   );
 }

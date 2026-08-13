@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, UserPlus, Trash2, Sparkles } from "lucide-react";
 import { toast } from "@/components/Toaster";
 
-type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null };
+type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null; role?: string };
 
 // Espelha NOTIFICATION_TYPES/DEFAULT_NOTIFICATION_PREFS de src/lib/settings.ts — duplicado
 // aqui (não importado) porque aquele arquivo puxa o Prisma, que não pode ir pro bundle do client.
@@ -52,6 +52,7 @@ const NOTIFICATION_GROUPS: { title: string; items: { key: string; label: string;
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +71,7 @@ export default function SettingsPage() {
   const [cargoDrafts, setCargoDrafts] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "" });
+  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member" });
   const [addingMember, setAddingMember] = useState(false);
 
   // Meet Recap suggestions state
@@ -251,11 +252,26 @@ export default function SettingsPage() {
     if (res.ok) {
       const created = await res.json();
       setUsers((prev) => [...prev, created]);
-      setNewMember({ name: "", email: "", cargo: "" });
+      setNewMember({ name: "", email: "", cargo: "", role: "member" });
       toast("Membro adicionado", "success");
     } else {
       const data = await res.json().catch(() => ({}));
       toast(data.error || "Erro ao adicionar membro", "error");
+    }
+  }
+
+  async function changeRole(userId: string, role: string) {
+    const res = await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (res.ok) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+      toast("Perfil atualizado", "success");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || "Erro ao atualizar perfil", "error");
     }
   }
 
@@ -503,7 +519,21 @@ export default function SettingsPage() {
                 onBlur={() => saveCargo(u.id)}
                 className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
               />
-              {confirmingRemoveId === u.id ? (
+              {isAdmin ? (
+                <select
+                  value={u.role ?? "member"}
+                  onChange={(e) => changeRole(u.id, e.target.value)}
+                  className="w-28 shrink-0 bg-surface-2 border border-border rounded-lg px-2 py-2 text-xs text-ink focus:outline-none focus:border-o2-green/50"
+                >
+                  <option value="member">Membro</option>
+                  <option value="admin">Admin</option>
+                </select>
+              ) : (
+                <span className="w-28 shrink-0 text-xs text-ink-faint text-center">
+                  {u.role === "admin" ? "Admin" : "Membro"}
+                </span>
+              )}
+              {!isAdmin ? null : confirmingRemoveId === u.id ? (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-xs text-ink-mid">Remover mesmo?</span>
                   <button
@@ -533,40 +563,50 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        <div className="border-t border-border pt-5">
-          <p className="text-xs text-ink-mid mb-2.5">Adicionar membro</p>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Nome"
-              value={newMember.name}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
-              className="w-28 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            <input
-              type="email"
-              placeholder="E-mail"
-              value={newMember.email}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
-              className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            <input
-              type="text"
-              placeholder="Cargo"
-              value={newMember.cargo}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            <button
-              onClick={addMember}
-              disabled={addingMember || !newMember.email}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs bg-o2-green/10 text-o2-green rounded-lg hover:bg-o2-green/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-            >
-              <UserPlus size={13} />
-              {addingMember ? "..." : "Adicionar"}
-            </button>
+        {isAdmin && (
+          <div className="border-t border-border pt-5">
+            <p className="text-xs text-ink-mid mb-2.5">Adicionar membro</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Nome"
+                value={newMember.name}
+                onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-28 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+              />
+              <input
+                type="email"
+                placeholder="E-mail"
+                value={newMember.email}
+                onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+              />
+              <input
+                type="text"
+                placeholder="Cargo"
+                value={newMember.cargo}
+                onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
+                className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+              />
+              <select
+                value={newMember.role}
+                onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
+                className="w-28 shrink-0 bg-surface-2 border border-border rounded-lg px-2 py-2 text-xs text-ink focus:outline-none focus:border-o2-green/50"
+              >
+                <option value="member">Membro</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button
+                onClick={addMember}
+                disabled={addingMember || !newMember.email}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs bg-o2-green/10 text-o2-green rounded-lg hover:bg-o2-green/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+              >
+                <UserPlus size={13} />
+                {addingMember ? "..." : "Adicionar"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
