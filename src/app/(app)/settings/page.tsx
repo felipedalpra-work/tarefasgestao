@@ -2,7 +2,7 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, UserPlus, Trash2, Sparkles } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, UserPlus, Trash2, Sparkles, Copy, RefreshCw } from "lucide-react";
 import { toast } from "@/components/Toaster";
 
 type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null; role?: string };
@@ -80,6 +80,15 @@ export default function SettingsPage() {
   const [meetRecapGmailUserId, setMeetRecapGmailUserId] = useState<string | null>(null);
   const [meetRecapGmailSaving, setMeetRecapGmailSaving] = useState(false);
 
+  // n8n webhook secret state
+  const [n8nSecret, setN8nSecret] = useState<string | null>(null);
+  const [n8nRegenerating, setN8nRegenerating] = useState(false);
+  const [n8nConfirmRegen, setN8nConfirmRegen] = useState(false);
+
+  // Minuta de cobrança (rascunho no Gmail) state
+  const [billingDraftOwnerId, setBillingDraftOwnerId] = useState<string | null>(null);
+  const [billingDraftSaving, setBillingDraftSaving] = useState(false);
+
   useEffect(() => {
     fetch("/api/settings/google-status")
       .then((r) => r.json())
@@ -88,6 +97,10 @@ export default function SettingsPage() {
     fetch("/api/settings/meet-recap")
       .then((r) => r.json())
       .then((d) => { setMeetRecapEnabled(d.enabled); setMeetRecapGmailUserId(d.gmailUserId ?? null); });
+
+    fetch("/api/settings/billing-draft")
+      .then((r) => r.json())
+      .then((d) => setBillingDraftOwnerId(d.ownerUserId ?? null));
 
     fetch("/api/settings/notifications")
       .then((r) => r.json())
@@ -113,8 +126,53 @@ export default function SettingsPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/api/settings/n8n")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setN8nSecret(d.secret));
+  }, [isAdmin]);
+
   async function connectGoogle() {
     await signIn("google", { callbackUrl: "/settings" });
+  }
+
+  async function regenerateN8nSecret() {
+    setN8nRegenerating(true);
+    setN8nConfirmRegen(false);
+    const res = await fetch("/api/settings/n8n", { method: "POST" });
+    setN8nRegenerating(false);
+    if (res.ok) {
+      const d = await res.json();
+      setN8nSecret(d.secret);
+      toast("Secret regenerado — atualize o workflow n8n com o novo valor", "success");
+    } else {
+      toast("Erro ao gerar novo secret", "error");
+    }
+  }
+
+  function copyN8nSecret() {
+    if (!n8nSecret) return;
+    navigator.clipboard.writeText(n8nSecret);
+    toast("Secret copiado", "success");
+  }
+
+  async function saveBillingDraftOwner(ownerUserId: string | null) {
+    setBillingDraftSaving(true);
+    const prev = billingDraftOwnerId;
+    setBillingDraftOwnerId(ownerUserId);
+    const res = await fetch("/api/settings/billing-draft", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ownerUserId }),
+    });
+    setBillingDraftSaving(false);
+    if (res.ok) {
+      toast(ownerUserId ? "Dono da minuta de cobrança atualizado" : "Minuta de cobrança desativada", "success");
+    } else {
+      setBillingDraftOwnerId(prev);
+      toast("Erro ao salvar", "error");
+    }
   }
 
   async function toggleMeetRecap(enabled: boolean) {
@@ -382,6 +440,83 @@ export default function SettingsPage() {
           </select>
         </div>
       </div>
+
+      {/* Minuta de cobrança */}
+      <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
+        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Minuta de cobrança</h2>
+        <p className="text-xs text-ink-mid mb-4">
+          Tarefa do cliente vencida (sem responsável interno) cria um <span className="text-ink-soft">rascunho</span> — nunca envia — no Gmail de quem estiver aqui, já redigido pra cobrar o cliente. Sem ninguém selecionado, esse recurso fica desligado.
+        </p>
+        <select
+          value={billingDraftOwnerId ?? ""}
+          disabled={billingDraftSaving || !isAdmin}
+          onChange={(e) => saveBillingDraftOwner(e.target.value || null)}
+          className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+        >
+          <option value="">Desligado</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>{u.name || u.email}</option>
+          ))}
+        </select>
+        {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
+      </div>
+
+      {/* n8n webhook (visível só pra admin — é uma credencial) */}
+      {isAdmin && (
+        <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
+          <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Integração n8n</h2>
+          <p className="text-xs text-ink-mid mb-4">
+            Cole esse secret no header <code className="text-ink-soft">Authorization: Bearer &lt;secret&gt;</code> do seu workflow n8n. Cada squad tem o seu — itens recebidos entram como sugestão pendente em <span className="text-ink-soft">/sugestoes-ia</span>.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={n8nSecret ?? "Carregando..."}
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink font-mono placeholder:text-ink-ghost focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={copyN8nSecret}
+              disabled={!n8nSecret}
+              title="Copiar"
+              className="shrink-0 p-2.5 bg-surface-2 border border-border rounded-lg text-ink-mid hover:text-o2-green hover:border-o2-green/50 transition-colors disabled:opacity-50"
+            >
+              <Copy size={16} />
+            </button>
+          </div>
+
+          {!n8nConfirmRegen ? (
+            <button
+              type="button"
+              onClick={() => setN8nConfirmRegen(true)}
+              className="mt-3 flex items-center gap-1.5 text-xs text-ink-faint hover:text-ink-mid transition-colors"
+            >
+              <RefreshCw size={12} />
+              Gerar novo secret
+            </button>
+          ) : (
+            <div className="mt-3 flex items-center gap-2 bg-red-400/10 rounded-lg px-3 py-2">
+              <p className="text-xs text-red-400 flex-1">Isso invalida o secret atual — o workflow n8n vai parar de funcionar até você atualizar o valor lá. Confirma?</p>
+              <button
+                type="button"
+                onClick={regenerateN8nSecret}
+                disabled={n8nRegenerating}
+                className="shrink-0 text-xs font-medium text-red-400 hover:underline disabled:opacity-50"
+              >
+                {n8nRegenerating ? "Gerando..." : "Confirmar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setN8nConfirmRegen(false)}
+                className="shrink-0 text-xs text-ink-faint hover:text-ink-mid"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Slack Integration */}
       <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">

@@ -1,11 +1,8 @@
 import { prisma } from "./prisma";
 import { log } from "./logger";
 import { buildClientTaskDraftHtml } from "./email";
+import { getBillingDraftOwnerUserId } from "./settings";
 import { google } from "googleapis";
-
-// E-mail de quem recebe os rascunhos de cobrança de tarefa do cliente — fixo por
-// enquanto (pedido explícito do usuário), não é um "responsável" configurável.
-const DRAFT_OWNER_EMAIL = "felipe.dalpra@o2inc.com.br";
 
 function encodeSubject(subject: string): string {
   return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
@@ -28,12 +25,17 @@ type ClientTask = {
   meetingDate: Date | null;
 };
 
-// Cria um RASCUNHO (nunca envia) no Gmail do dono fixo acima, com uma mensagem já
-// redigida como se fosse pro cliente sobre uma tarefa vencida — fica com "Para" em
-// branco de propósito (não temos e-mail de cliente cadastrado na plataforma), pra
-// quem revisar completar o destinatário antes de mandar.
-export async function createClientTaskDraft(task: ClientTask): Promise<boolean> {
-  const owner = await prisma.user.findUnique({ where: { email: DRAFT_OWNER_EMAIL } });
+// Cria um RASCUNHO (nunca envia) no Gmail de quem o squad configurou como dono da
+// minuta de cobrança (Configurações), com uma mensagem já redigida como se fosse
+// pro cliente sobre uma tarefa vencida — fica com "Para" em branco de propósito
+// (não temos e-mail de cliente cadastrado na plataforma), pra quem revisar
+// completar o destinatário antes de mandar. Sem dono configurado = recurso
+// desligado pro squad (não tem como adivinhar quem deveria receber).
+export async function createClientTaskDraft(squadId: string, task: ClientTask): Promise<boolean> {
+  const ownerId = await getBillingDraftOwnerUserId(squadId);
+  if (!ownerId) return false;
+
+  const owner = await prisma.user.findUnique({ where: { id: ownerId, squadId } });
   if (!owner) return false;
 
   const account = await prisma.account.findFirst({ where: { userId: owner.id, provider: "google" } });

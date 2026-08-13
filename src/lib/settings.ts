@@ -1,7 +1,10 @@
+import crypto from "crypto";
 import { prisma } from "./prisma";
 
 const MEET_RECAP_SUGGESTIONS_KEY = "meet_recap_suggestions_enabled";
 const MEET_RECAP_GMAIL_USER_KEY = "meet_recap_gmail_user_id";
+const N8N_WEBHOOK_SECRET_KEY = "n8n_webhook_secret";
+const BILLING_DRAFT_OWNER_KEY = "billing_draft_owner_user_id";
 
 // Sem linha na tabela Setting = ligado (comportamento histórico, antes de existir esse flag)
 export async function isMeetRecapSuggestionsEnabled(squadId: string): Promise<boolean> {
@@ -36,6 +39,57 @@ export async function setMeetRecapGmailUserId(squadId: string, userId: string | 
     where: { squadId_key: { squadId, key: MEET_RECAP_GMAIL_USER_KEY } },
     update: { value: userId },
     create: { squadId, key: MEET_RECAP_GMAIL_USER_KEY, value: userId },
+  });
+}
+
+// Secret do webhook n8n (POST /api/webhooks/n8n) — cada squad tem o seu, gerado por
+// nós (não é colado pelo usuário como o token do Slack). A rota do webhook resolve
+// QUAL squad recebeu a chamada olhando pra que squad esse valor pertence — não tem
+// squadId na URL, então trocar o secret é a única forma de "desconectar" um n8n.
+export async function getOrCreateN8nWebhookSecret(squadId: string): Promise<string> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: N8N_WEBHOOK_SECRET_KEY } } });
+  if (row) return row.value;
+  const secret = crypto.randomBytes(24).toString("hex");
+  await prisma.setting.create({ data: { squadId, key: N8N_WEBHOOK_SECRET_KEY, value: secret } });
+  return secret;
+}
+
+export async function regenerateN8nWebhookSecret(squadId: string): Promise<string> {
+  const secret = crypto.randomBytes(24).toString("hex");
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: N8N_WEBHOOK_SECRET_KEY } },
+    update: { value: secret },
+    create: { squadId, key: N8N_WEBHOOK_SECRET_KEY, value: secret },
+  });
+  return secret;
+}
+
+// Único lookup do webhook n8n que roda ANTES de saber o squad — por isso não usa
+// forSquad/sessão, é o próprio secret que aponta pro squad dono dele.
+export async function resolveSquadIdByN8nSecret(secret: string): Promise<string | null> {
+  if (!secret) return null;
+  const row = await prisma.setting.findFirst({ where: { key: N8N_WEBHOOK_SECRET_KEY, value: secret } });
+  return row?.squadId ?? null;
+}
+
+// Dono da caixa de Gmail onde nasce o rascunho (nunca enviado) de cobrança de
+// tarefa do cliente vencida — ver src/lib/gmail-draft.ts. null/sem linha = recurso
+// desligado pro squad (não dá pra adivinhar um dono, diferente do Meet Recap Gmail
+// que tem um default razoável de "todas as contas").
+export async function getBillingDraftOwnerUserId(squadId: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: BILLING_DRAFT_OWNER_KEY } } });
+  return row?.value || null;
+}
+
+export async function setBillingDraftOwnerUserId(squadId: string, userId: string | null): Promise<void> {
+  if (!userId) {
+    await prisma.setting.deleteMany({ where: { squadId, key: BILLING_DRAFT_OWNER_KEY } });
+    return;
+  }
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: BILLING_DRAFT_OWNER_KEY } },
+    update: { value: userId },
+    create: { squadId, key: BILLING_DRAFT_OWNER_KEY, value: userId },
   });
 }
 

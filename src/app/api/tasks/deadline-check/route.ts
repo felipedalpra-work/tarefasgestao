@@ -6,6 +6,6 @@ export async function POST() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const sent = await checkDeadlines();
+  const sent = await checkDeadlines(session.user.squadId);
   return NextResponse.json({ sent });
 }

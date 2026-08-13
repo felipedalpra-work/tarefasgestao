@@ -1,14 +1,16 @@
 import { prisma } from "./prisma";
+import { forSquad } from "./tenant-prisma";
 import { sendDeadlineAlertEmail } from "./email";
 import { createClientTaskDraft } from "./gmail-draft";
 
-export async function checkDeadlines(): Promise<number> {
+async function checkDeadlinesForSquad(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
   const now = new Date();
   const in2days = new Date(now);
   in2days.setDate(in2days.getDate() + 2);
   in2days.setHours(23, 59, 59, 999);
 
-  const tasks = await prisma.task.findMany({
+  const tasks = await db.task.findMany({
     where: {
       status: { notIn: ["done"] },
       dueDate: { not: null, lte: in2days },
@@ -40,8 +42,19 @@ export async function checkDeadlines(): Promise<number> {
     }
   }
 
-  console.log(`[deadline] ${tasks.length} tarefa(s) verificada(s), ${sent} email(s) enviado(s)`);
+  console.log(`[deadline] squad ${squadId}: ${tasks.length} tarefa(s) verificada(s), ${sent} email(s) enviado(s)`);
   return sent;
+}
+
+// Sem squadId: roda em todos os squads (uso do cron). Com squadId: só aquele squad
+// (uso do botão manual — sem isso, qualquer membro de qualquer squad dispararia
+// alerta de prazo pra tarefa de outro squad).
+export async function checkDeadlines(squadId?: string): Promise<number> {
+  if (squadId) return checkDeadlinesForSquad(squadId);
+  const squads = await prisma.squad.findMany({ select: { id: true } });
+  let total = 0;
+  for (const { id } of squads) total += await checkDeadlinesForSquad(id);
+  return total;
 }
 
 // Tarefas atribuídas ao cliente (assigneeId null + deliverTo "o2") ficam de fora do
@@ -49,8 +62,9 @@ export async function checkDeadlines(): Promise<number> {
 // cliente vencida nunca gera nenhum alerta pra ninguém. Aqui a gente cria um
 // rascunho de cobrança (uma única vez por tarefa, via clientDraftCreatedAt) em vez
 // de mandar e-mail direto — ver src/lib/gmail-draft.ts.
-export async function checkClientTasksOverdue(): Promise<number> {
-  const tasks = await prisma.task.findMany({
+async function checkClientTasksOverdueForSquad(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
+  const tasks = await db.task.findMany({
     where: {
       assigneeId: null,
       deliverTo: "o2",
@@ -63,7 +77,7 @@ export async function checkClientTasksOverdue(): Promise<number> {
   let created = 0;
   for (const task of tasks) {
     if (!task.dueDate) continue;
-    const ok = await createClientTaskDraft({
+    const ok = await createClientTaskDraft(squadId, {
       title: task.title,
       description: task.description,
       client: task.client,
@@ -72,11 +86,19 @@ export async function checkClientTasksOverdue(): Promise<number> {
       meetingDate: task.meetingDate,
     });
     if (ok) {
-      await prisma.task.update({ where: { id: task.id }, data: { clientDraftCreatedAt: new Date() } });
+      await db.task.update({ where: { id: task.id }, data: { clientDraftCreatedAt: new Date() } });
       created++;
     }
   }
 
-  console.log(`[deadline] ${tasks.length} tarefa(s) do cliente vencida(s), ${created} rascunho(s) criado(s)`);
+  console.log(`[deadline] squad ${squadId}: ${tasks.length} tarefa(s) do cliente vencida(s), ${created} rascunho(s) criado(s)`);
   return created;
+}
+
+export async function checkClientTasksOverdue(squadId?: string): Promise<number> {
+  if (squadId) return checkClientTasksOverdueForSquad(squadId);
+  const squads = await prisma.squad.findMany({ select: { id: true } });
+  let total = 0;
+  for (const { id } of squads) total += await checkClientTasksOverdueForSquad(id);
+  return total;
 }
