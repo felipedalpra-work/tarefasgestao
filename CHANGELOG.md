@@ -4,6 +4,18 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (onboarding animado no primeiro login — fecha o plano de 5 etapas)
+
+- Última etapa do plano: nada guiava quem acabou de criar o squad (ou acabou de aceitar um convite) a configurar o essencial — a pessoa caía direto no dashboard vazio.
+- **`User` ganhou `onboardingCompletedAt`** (nullable, `db push` aditivo) — `null` = ainda não viu. **Backfill obrigatório** rodado antes de ligar: todo usuário já existente (não só os 3 da O2 — também squads reais que já se cadastraram sozinhos via `/signup` desde que a plataforma virou multi-tenant) foi marcado como já onboarded, pra ninguém ver o modal aparecer do nada num login normal.
+- **Novo `<OnboardingGate>`** (`src/components/OnboardingGate.tsx`), plugado no layout autenticado ao lado do `Toaster`/`AiAssistant` — reaproveita a mesma identidade visual do login/signup (`LoginFX`, `TiltCard`, `animate-login-enter`/`animate-fade-in`), sem inventar nenhum efeito novo. Wizard curto com indicador de progresso:
+  - Todo mundo: boas-vindas → conectar Google → concluído.
+  - Só admin (quem cria o squad): mais 2 passos — Slack (bot token opcional) e um aviso sobre Meet Recap/Minuta de cobrança/n8n, que ficam pra configurar depois em Configurações.
+  - **Todo passo é pulável** ("Pular tudo" sempre visível) — nunca bloqueia o resto do app. O progresso persiste em `localStorage` só pra sobreviver ao redirect de "Conectar Google" (senão voltava sempre pro passo 1).
+  - `PATCH /api/users/me/onboarding` (novo) marca como concluído — usado tanto ao terminar quanto ao pular.
+- **Validado com 7 checagens reais**: usuário novo (signup e convite) nasce sem `onboardingCompletedAt`; a primeira página autenticada já mostra o modal (confirmado no HTML renderizado no servidor); concluir via PATCH grava no banco e a mesma página deixa de mostrar o modal na visita seguinte; e os usuários que já existiam (O2 + squads que já tinham se cadastrado) continuam com o campo preenchido pelo backfill, sem ver nada surgir do nada.
+- Nota técnica: mesmo ajuste de "reiniciar o servidor de dev depois de `db push` + `prisma generate`" que apareceu na etapa de convites — o processo já rodando mantinha o Prisma Client antigo em memória.
+
 ## 2026-08-13 (histórico de convites: pendente/aceito/expirado + reenviar)
 
 - Quarta etapa do plano: não havia nenhum jeito de saber quem foi convidado e ainda não aceitou, nem de reenviar um convite. O link só aparecia uma vez, na hora, e sumia se a página fosse recarregada.

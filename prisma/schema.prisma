@@ -30,6 +30,7 @@ model User {
   image         String?
   password      String?
   cargo         String?
+  onboardingCompletedAt DateTime? // null = ainda não viu/concluiu o onboarding animado no 1o login
   squad         Squad     @relation(fields: [squadId], references: [id])
   accounts      Account[]
   sessions      Session[]
