@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/authz";
 import { forSquad } from "@/lib/tenant-prisma";
 import { log } from "@/lib/logger";
 
@@ -10,9 +11,11 @@ type Params = { params: Promise<{ id: string }> };
 // listagem como "pausada"); a tarefa fica na fila (AutomationCommand) pra uma
 // tarefa agendada do Claude (bridge de comandos) buscar, aplicar o efeito real
 // no agendador do lado dela (ex: desabilitar o cron), e marcar como concluída.
+// Controle operacional de squad (mesmo nível de Slack/n8n/Meet Recap) — admin-only.
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Só admin do squad pode controlar automações" }, { status: 403 });
   const db = forSquad(session.user.squadId);
 
   const { id } = await params;

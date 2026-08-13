@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/authz";
 import { forSquad } from "@/lib/tenant-prisma";
 import { ensureOnboardingDeliverables } from "@/lib/onboarding-deliverables";
 
@@ -157,10 +158,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 // Exclui o cliente e tudo que aponta pro nome dele (client não é entidade própria,
 // é string espalhada em Task/CalendarEvent/MeetRecap/Tratativa/SetupMeeting/FechamentoMensal/ClientLogin).
-// Ação destrutiva e irreversível — a confirmação fica a cargo da UI.
+// Ação destrutiva e irreversível — a confirmação fica a cargo da UI. Só admin do
+// squad pode disparar, mesmo nível de "remover membro" (DELETE /api/users/[id]).
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(session)) return NextResponse.json({ error: "Só admin do squad pode excluir cliente" }, { status: 403 });
   const db = forSquad(session.user.squadId);
 
   const { name } = await params;

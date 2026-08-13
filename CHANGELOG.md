@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (fecha 2 buracos reais de permissão: excluir cliente e controlar automação)
+
+- Primeira etapa de um plano maior pedido pelo usuário (histórico de convites, permissões mais claras, Configurações reorganizada, onboarding animado). Auditoria completa de tudo que é `isAdmin` hoje encontrou 2 ações destrutivas/operacionais liberadas pra qualquer membro do squad, quando deveriam ser só do admin (mesmo nível de "remover membro", que já é admin-only).
+- **`DELETE /api/clients/[name]`** (excluir cliente inteiro, com cascade de tarefas/reuniões/recaps/tratativas — irreversível) agora exige admin. Botão "Excluir cliente" só aparece na tela pra quem é admin.
+- **`POST /api/automations/[id]/commands`** (rodar agora/pausar/reativar automação) agora exige admin. Pra quem não é admin, os botões da tela `/automacoes` viram um texto "Só admin controla".
+- `ClientLogin` (empresa/ERP/modo de acesso do cliente) foi avaliado e decidido **não** entrar como gap — são campos descritivos, não credenciais reais, então continuam editáveis por qualquer membro.
+- Validado contra o servidor real: squad de teste com 1 admin + 1 membro comum, confirmado que o membro recebe 403 nas duas ações e o admin consegue as duas. Dados de teste removidos depois.
+
 ## 2026-08-13 (corrige sessão travada com perfil desatualizado — botão "Adicionar" sumia)
 
 - Usuário relatou: na aba Equipe → Membros, o botão de adicionar membro não aparecia — só via os 3 membros já existentes, sem opção de colocar mais (mesmo sendo admin de verdade no banco).

@@ -1,5 +1,6 @@
 import { getClientDetail, getUsers } from "@/lib/queries";
 import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/authz";
 import { Building2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -54,10 +55,12 @@ export default async function ClientePage({ params }: Props) {
             </p>
           )}
         </div>
-        <DeleteClientButton
-          client={client}
-          counts={{ tasks: tasks.length, events: events.length, recaps: recaps.length, tratativas: tratativas.length }}
-        />
+        {isAdmin(session) && (
+          <DeleteClientButton
+            client={client}
+            counts={{ tasks: tasks.length, events: events.length, recaps: recaps.length, tratativas: tratativas.length }}
+          />
+        )}
       </div>
 
       <ClientTabs

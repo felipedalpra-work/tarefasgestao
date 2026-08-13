@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   RefreshCw, Play, Pause, PlayCircle, CheckCircle2, XCircle, Clock, Zap,
   Activity, TrendingUp, AlertTriangle,
@@ -43,6 +44,8 @@ type Stats = {
 };
 
 export default function AutomacoesPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const [items, setItems] = useState<Automation[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -233,35 +236,39 @@ export default function AutomacoesPage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => sendCommand(a, "trigger")}
-                    disabled={isBusy || Boolean(a.pendingCommand) || !a.enabled}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-o2-green/10 text-o2-green border border-o2-green/20 hover:bg-o2-green/20 transition-all disabled:opacity-40"
-                  >
-                    <Play size={12} />
-                    Rodar agora
-                  </button>
-                  {a.enabled ? (
+                {isAdmin ? (
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <button
-                      onClick={() => sendCommand(a, "pause")}
-                      disabled={isBusy}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface border border-surface-3 text-ink-mid hover:text-ink transition-all disabled:opacity-40"
+                      onClick={() => sendCommand(a, "trigger")}
+                      disabled={isBusy || Boolean(a.pendingCommand) || !a.enabled}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-o2-green/10 text-o2-green border border-o2-green/20 hover:bg-o2-green/20 transition-all disabled:opacity-40"
                     >
-                      <Pause size={12} />
-                      Pausar
+                      <Play size={12} />
+                      Rodar agora
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => sendCommand(a, "resume")}
-                      disabled={isBusy}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface border border-surface-3 text-ink-mid hover:text-ink transition-all disabled:opacity-40"
-                    >
-                      <PlayCircle size={12} />
-                      Reativar
-                    </button>
-                  )}
-                </div>
+                    {a.enabled ? (
+                      <button
+                        onClick={() => sendCommand(a, "pause")}
+                        disabled={isBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface border border-surface-3 text-ink-mid hover:text-ink transition-all disabled:opacity-40"
+                      >
+                        <Pause size={12} />
+                        Pausar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => sendCommand(a, "resume")}
+                        disabled={isBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface border border-surface-3 text-ink-mid hover:text-ink transition-all disabled:opacity-40"
+                      >
+                        <PlayCircle size={12} />
+                        Reativar
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-ink-faint shrink-0">Só admin controla</span>
+                )}
               </div>
             </div>
           );
