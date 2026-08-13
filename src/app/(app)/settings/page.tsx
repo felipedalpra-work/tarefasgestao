@@ -71,9 +71,9 @@ export default function SettingsPage() {
   const [cargoDrafts, setCargoDrafts] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member" });
+  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member", slackUserId: "" });
   const [addingMember, setAddingMember] = useState(false);
-  const [lastInvite, setLastInvite] = useState<{ email: string; url: string; emailSent: boolean } | null>(null);
+  const [lastInvite, setLastInvite] = useState<{ email: string; url: string; slackSent: boolean } | null>(null);
 
   // Meet Recap suggestions state
   const [meetRecapEnabled, setMeetRecapEnabled] = useState(true);
@@ -309,11 +309,11 @@ export default function SettingsPage() {
     });
     setAddingMember(false);
     if (res.ok) {
-      const { inviteUrl, emailSent, ...created } = await res.json();
+      const { inviteUrl, slackSent, ...created } = await res.json();
       setUsers((prev) => [...prev, created]);
-      setLastInvite({ email: created.email, url: inviteUrl, emailSent });
-      setNewMember({ name: "", email: "", cargo: "", role: "member" });
-      toast(emailSent ? "Membro adicionado e convite enviado por email" : "Membro adicionado — copie o link de convite abaixo", "success");
+      setLastInvite({ email: created.email, url: inviteUrl, slackSent });
+      setNewMember({ name: "", email: "", cargo: "", role: "member", slackUserId: "" });
+      toast(slackSent ? "Membro adicionado e convite enviado no Slack" : "Membro adicionado — copie o link de convite abaixo", "success");
     } else {
       const data = await res.json().catch(() => ({}));
       toast(data.error || "Erro ao adicionar membro", "error");
@@ -709,7 +709,7 @@ export default function SettingsPage() {
         {isAdmin && (
           <div className="border-t border-border pt-5">
             <p className="text-xs text-ink-mid mb-2.5">Adicionar membro</p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 placeholder="Nome"
@@ -729,8 +729,17 @@ export default function SettingsPage() {
                 placeholder="Cargo"
                 value={newMember.cargo}
                 onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
-                className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                className="flex-1 min-w-24 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
               />
+              {slackConfigured && (
+                <input
+                  type="text"
+                  placeholder="Slack ID (p/ mandar convite)"
+                  value={newMember.slackUserId}
+                  onChange={(e) => setNewMember((prev) => ({ ...prev, slackUserId: e.target.value }))}
+                  className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                />
+              )}
               <select
                 value={newMember.role}
                 onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
@@ -748,13 +757,16 @@ export default function SettingsPage() {
                 {addingMember ? "..." : "Adicionar"}
               </button>
             </div>
+            {slackConfigured && (
+              <p className="text-xs text-ink-faint mt-1.5">Informando o Slack ID, o convite já é mandado por DM assim que a pessoa for adicionada.</p>
+            )}
 
             {lastInvite && (
               <div className="mt-3 bg-surface-2 rounded-lg px-4 py-3">
                 <p className="text-xs text-ink-mid mb-2">
-                  {lastInvite.emailSent
-                    ? <>Convite enviado por email pra <strong className="text-ink-soft">{lastInvite.email}</strong>. Se preferir, também dá pra mandar o link direto:</>
-                    : <>Não deu pra mandar o email de convite pra <strong className="text-ink-soft">{lastInvite.email}</strong> — copie o link e envie por outro canal (Slack, WhatsApp etc.):</>}
+                  {lastInvite.slackSent
+                    ? <>Convite enviado por DM no Slack pra <strong className="text-ink-soft">{lastInvite.email}</strong>. Se quiser, também dá pra mandar o link direto:</>
+                    : <>Copie o link abaixo e envie pra <strong className="text-ink-soft">{lastInvite.email}</strong> por onde preferir (Slack, WhatsApp etc.):</>}
                 </p>
                 <div className="flex items-center gap-2">
                   <input

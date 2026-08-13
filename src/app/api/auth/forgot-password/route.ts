@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
+import { getBaseUrl } from "@/lib/base-url";
 
 const TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
 
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${rawToken}`;
+  const resetUrl = `${getBaseUrl()}/reset-password?token=${rawToken}`;
 
   try {
     await sendPasswordResetEmail({ to: user.email, name: user.name, resetUrl });

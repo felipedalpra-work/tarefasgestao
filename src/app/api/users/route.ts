@@ -5,8 +5,8 @@ import { isAdmin } from "@/lib/authz";
 import { forSquad } from "@/lib/tenant-prisma";
 import { prisma } from "@/lib/prisma";
 import { getUsers } from "@/lib/queries";
-import { sendInviteEmail } from "@/lib/email";
-import { log } from "@/lib/logger";
+import { getSlackConfig, sendSlackDM } from "@/lib/slack";
+import { getBaseUrl } from "@/lib/base-url";
 import { revalidateTag } from "next/cache";
 
 const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias — convite de time não é urgente como reset de senha
@@ -26,8 +26,10 @@ export async function GET() {
 // Google (src/lib/auth.ts, callback signIn — liberado porque o e-mail já tem uma
 // linha em User), a pessoa também ganha um link de convite (mesmo mecanismo de
 // token do "esqueci minha senha", PasswordResetToken) pra definir senha própria e
-// entrar por credenciais — mandado por email e devolvido pro admin copiar/repassar
-// por qualquer canal (Slack, WhatsApp etc.), caso o email não chegue. Só admin
+// entrar por credenciais. Envio por email foi abandonado (não chegava de forma
+// confiável) — o convite vai por DM do Slack quando o admin já sabe o Slack User ID
+// da pessoa (squad precisa ter o bot do Slack configurado), e o link sempre volta
+// na resposta pra copiar/repassar por qualquer canal como alternativa. Só admin
 // (o CFO) pode convidar/definir o perfil de quem entra.
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -62,27 +64,35 @@ export async function POST(req: NextRequest) {
   await prisma.passwordResetToken.create({
     data: { tokenHash, userId: user.id, expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS) },
   });
-  const inviteUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${rawToken}`;
+  const inviteUrl = `${getBaseUrl()}/reset-password?token=${rawToken}`;
 
-  let emailSent = false;
-  try {
-    const squad = await prisma.squad.findUnique({ where: { id: session.user.squadId }, select: { name: true } });
-    await sendInviteEmail({
-      to: user.email,
-      name: user.name,
-      squadName: squad?.name || "seu squad",
-      invitedBy: session.user.name,
-      inviteUrl,
+  let slackSent = false;
+  const slackUserId = typeof body.slackUserId === "string" ? body.slackUserId.trim() : "";
+  if (slackUserId) {
+    // já grava o mapeamento (mesma Setting usada pelas outras notificações do Slack) —
+    // o admin não precisa configurar de novo em Integração Slack depois.
+    await prisma.setting.upsert({
+      where: { squadId_key: { squadId: session.user.squadId, key: `slack_user_${user.id}` } },
+      create: { squadId: session.user.squadId, key: `slack_user_${user.id}`, value: slackUserId },
+      update: { value: slackUserId },
     });
-    emailSent = true;
-  } catch (e) {
-    await log("auth", "Falha ao enviar email de convite", {
-      level: "error",
-      detail: e instanceof Error ? e.message : String(e),
-    });
+
+    const config = await getSlackConfig(session.user.squadId);
+    if (config) {
+      const squad = await prisma.squad.findUnique({ where: { id: session.user.squadId }, select: { name: true } });
+      const lines = [
+        `👋 *Você foi convidado pro squad ${squad?.name || "O2"}*`,
+        session.user.name ? `Convite de ${session.user.name}.` : undefined,
+        "",
+        `<${inviteUrl}|Criar senha e entrar →>`,
+        "",
+        `Esse link expira em 7 dias. Também dá pra entrar direto com o Google usando o e-mail ${user.email}.`,
+      ].filter(Boolean).join("\n");
+      slackSent = await sendSlackDM(slackUserId, config.botToken, lines);
+    }
   }
 
   revalidateTag("users", "max");
 
-  return NextResponse.json({ ...user, inviteUrl, emailSent }, { status: 201 });
+  return NextResponse.json({ ...user, inviteUrl, slackSent }, { status: 201 });
 }

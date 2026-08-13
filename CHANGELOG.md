@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (corrige link de convite quebrado em produção + convite passa a ir pelo Slack)
+
+- Usuário reportou que o link de convite (feature de mais cedo hoje) abria `undefined/reset-password?token=...` em produção — página de erro, e o email nem chegava.
+- **Causa raiz**: `POST /api/users` (e, descoberto de quebra, o `forgot-password` também, mesmo bug, pré-existente) montava a URL com `process.env.NEXTAUTH_URL` direto — essa variável não está configurada na Vercel, então virava literalmente a string `"undefined"` na frente da URL. Já existia um helper certo pra isso (`src/lib/base-url.ts`, `getBaseUrl()` — usado nos links de Slack de tarefa/comentário/digest) com fallback automático pras variáveis que a própria Vercel injeta (`VERCEL_URL`/`VERCEL_PROJECT_PRODUCTION_URL`), sem precisar configurar nada a mais. Os dois pontos passaram a usar esse helper.
+- **Convite deixou de ir por email, passa a ir por DM do Slack**: a pedido do usuário (email não é confiável pra isso). Novo campo "Slack ID" no formulário de "Adicionar membro" (só aparece se o squad já tem o Slack configurado) — preenchendo, o convite (link + contexto de quem convidou/squad) é mandado direto por DM assim que o membro é criado, e o Slack User ID já fica salvo pra esse membro (mesma Setting usada pelas notificações de tarefa — não precisa configurar de novo depois em Integração Slack). `sendInviteEmail` (código de mais cedo hoje) foi removido — não estava sendo usado mais.
+- O link de convite (com botão de copiar) continua sempre aparecendo na tela, independente do Slack — cobre o caso de squad sem Slack configurado, ou de a DM falhar (token inválido etc., sem quebrar o convite em si).
+- **Validado contra o servidor real**: confirmado que a URL gerada não contém mais `"undefined"`; convite sem Slack configurado não tenta nada (`slackSent: false` sem erro); convite com Slack ID mas bot token inválido tenta a DM, falha graciosamente (Slack rejeita o token) sem quebrar a criação do membro, e mesmo assim persiste o mapeamento `slack_user_<id>`; fluxo completo de convite → definir senha → login → sessão com o squad certo continua funcionando ponta a ponta. Dados de teste removidos depois.
+
 ## 2026-08-13 (link de convite pro membro novo entrar no squad)
 
 - Bug relatado pelo usuário: "Adicionar membro" em Configurações → Equipe criava o `User` na base, mas não mostrava nada pro admin copiar/mandar pra pessoa — o único jeito de entrar era ela ter Google com aquele e-mail exato, e alguém avisar por fora do sistema (Slack, WhatsApp) que a conta existia. Não tinha link, não tinha senha, não tinha aviso automático nenhum.
