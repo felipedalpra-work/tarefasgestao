@@ -53,12 +53,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user, account }) {
-      if (user) {
-        token.id = user.id;
-        // squadId/role vêm do banco (não do provider) — todo User já pertence a um
-        // squad desde o cadastro/convite, isso só carrega pra sessão
-        const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { squadId: true, role: true } });
+      if (user) token.id = user.id;
+
+      // squadId/role vêm do banco (não do provider) — refeito em TODA chamada (não só
+      // no login) pra sessão já aberta sentir na hora se o perfil mudar (ex.: alguém
+      // virou admin/membro na aba Equipe) sem precisar deslogar e logar de novo.
+      const userId = (token.id as string | undefined) ?? token.sub;
+      if (userId) {
+        const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { squadId: true, role: true } });
         if (dbUser) {
+          token.id = userId;
           token.squadId = dbUser.squadId;
           token.role = dbUser.role;
         }

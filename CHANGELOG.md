@@ -4,6 +4,15 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (corrige sessão travada com perfil desatualizado — botão "Adicionar" sumia)
+
+- Usuário relatou: na aba Equipe → Membros, o botão de adicionar membro não aparecia — só via os 3 membros já existentes, sem opção de colocar mais (mesmo sendo admin de verdade no banco).
+- **Causa raiz**: `src/lib/auth.ts`, callback `jwt` — `token.squadId`/`token.role` só eram gravados no token dentro do `if (user)`, bloco que só roda no exato momento do login. Depois disso, a sessão (cookie JWT) nunca mais atualizava esses dois campos — ficava para sempre com o valor de quando a pessoa logou. Quem estava com sessão aberta desde antes de "role" existir (ou desde antes de virar admin) ficava com `role` desatualizado ou ausente até deslogar e logar de novo — e o botão "Adicionar" é justamente `{isAdmin && (...)}`.
+- Bug irmão, mais sério: mudar o perfil de alguém em Equipe → Membros também não tinha efeito nenhum na sessão já aberta dessa pessoa — ela continuaria (ou deixaria de) ver os controles de admin só depois de deslogar/logar.
+- **Corrigido**: o callback `jwt` agora busca squadId/role do banco em toda chamada (não só no login), usando o `id` do usuário já salvo no token. Uma sessão aberta passa a refletir mudança de perfil na próxima requisição, sem precisar deslogar.
+- **Validado com um teste que prova exatamente o cenário do bug**: logou, confirmou `role: admin` na sessão, mudou o role pra "member" direto no banco (simulando outra pessoa alterando o perfil), conferiu que a MESMA sessão (sem novo login) já refletia `role: member` na chamada seguinte — e voltou a refletir "admin" ao reverter. Squad de teste removido depois.
+- Quem já estava com a plataforma aberta deve ver o botão "Adicionar" aparecer sozinho na próxima navegação — não precisa deslogar.
+
 ## 2026-08-13 (ajustes na aba Equipe: mais visível + organograma só de visualização)
 
 - Dois ajustes pedidos pelo usuário logo depois da aba Equipe entrar no ar: (1) o item "Equipe" estava escondido dentro do grupo recolhível "Sistema" no menu; (2) não queria a ação de adicionar pessoa embutida direto no organograma.
