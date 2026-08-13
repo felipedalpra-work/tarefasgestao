@@ -73,6 +73,7 @@ export default function SettingsPage() {
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member" });
   const [addingMember, setAddingMember] = useState(false);
+  const [lastInvite, setLastInvite] = useState<{ email: string; url: string; emailSent: boolean } | null>(null);
 
   // Meet Recap suggestions state
   const [meetRecapEnabled, setMeetRecapEnabled] = useState(true);
@@ -308,14 +309,21 @@ export default function SettingsPage() {
     });
     setAddingMember(false);
     if (res.ok) {
-      const created = await res.json();
+      const { inviteUrl, emailSent, ...created } = await res.json();
       setUsers((prev) => [...prev, created]);
+      setLastInvite({ email: created.email, url: inviteUrl, emailSent });
       setNewMember({ name: "", email: "", cargo: "", role: "member" });
-      toast("Membro adicionado", "success");
+      toast(emailSent ? "Membro adicionado e convite enviado por email" : "Membro adicionado — copie o link de convite abaixo", "success");
     } else {
       const data = await res.json().catch(() => ({}));
       toast(data.error || "Erro ao adicionar membro", "error");
     }
+  }
+
+  function copyInviteLink() {
+    if (!lastInvite) return;
+    navigator.clipboard.writeText(lastInvite.url);
+    toast("Link copiado", "success");
   }
 
   async function changeRole(userId: string, role: string) {
@@ -740,6 +748,32 @@ export default function SettingsPage() {
                 {addingMember ? "..." : "Adicionar"}
               </button>
             </div>
+
+            {lastInvite && (
+              <div className="mt-3 bg-surface-2 rounded-lg px-4 py-3">
+                <p className="text-xs text-ink-mid mb-2">
+                  {lastInvite.emailSent
+                    ? <>Convite enviado por email pra <strong className="text-ink-soft">{lastInvite.email}</strong>. Se preferir, também dá pra mandar o link direto:</>
+                    : <>Não deu pra mandar o email de convite pra <strong className="text-ink-soft">{lastInvite.email}</strong> — copie o link e envie por outro canal (Slack, WhatsApp etc.):</>}
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={lastInvite.url}
+                    className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs text-ink font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={copyInviteLink}
+                    className="shrink-0 p-2 bg-surface border border-border rounded-lg text-ink-mid hover:text-o2-green hover:border-o2-green/50 transition-colors"
+                    title="Copiar"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

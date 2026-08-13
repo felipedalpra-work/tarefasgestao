@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (link de convite pro membro novo entrar no squad)
+
+- Bug relatado pelo usuário: "Adicionar membro" em Configurações → Equipe criava o `User` na base, mas não mostrava nada pro admin copiar/mandar pra pessoa — o único jeito de entrar era ela ter Google com aquele e-mail exato, e alguém avisar por fora do sistema (Slack, WhatsApp) que a conta existia. Não tinha link, não tinha senha, não tinha aviso automático nenhum.
+- **`POST /api/users` agora gera um link de convite de verdade**: reaproveitado o mesmo mecanismo já existente do "esqueci minha senha" (`PasswordResetToken` — token aleatório, só o hash SHA-256 é salvo, expira, é de uso único), só que com validade de 7 dias em vez de 1h (convite de time não é tão urgente quanto redefinir senha). O link (`/reset-password?token=...`) deixa a pessoa definir a própria senha e entrar por credenciais — sem depender de Google.
+- **Duas formas de chegar até a pessoa**: (1) email automático (`sendInviteEmail`, novo, em `src/lib/email.ts`, reaproveitando o template/Resend que já existia) mencionando o squad e quem convidou; (2) o link também volta na resposta da API e agora aparece na própria tela de Configurações, num campo com botão de copiar — pra quem preferir mandar por outro canal, ou se o email falhar (a UI avisa quando isso acontece, sem quebrar o fluxo — o membro já foi criado de qualquer forma).
+- Continua funcionando o Google também: quem já tem conta Google com aquele e-mail pode entrar direto por ali, sem precisar do link (mecanismo antigo inalterado).
+- **Validado fim-a-fim contra o servidor real**: criado um squad de teste com admin, admin convidou um membro pela API de verdade, extraído o token do `inviteUrl` retornado, chamado `/api/auth/reset-password` com esse token pra definir senha, login com email+senha nova — sessão resultante confirmada com o **mesmo `squadId` do admin** que convidou (não um squad novo) e `role: "member"`. Squad e usuários de teste removidos depois.
+
 ## 2026-08-13 (n8n e minuta de cobrança por squad — fecha o resto do plano multi-tenant)
 
 - Última pendência do plano multi-tenant: as duas integrações que ainda resolviam pra um squad fixo (a O2), sem jeito de outro squad configurar as próprias.

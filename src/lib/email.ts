@@ -281,6 +281,62 @@ export async function sendPasswordResetEmail({
   return getResend().emails.send({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
 }
 
+export async function sendInviteEmail({
+  to,
+  name,
+  squadName,
+  invitedBy,
+  inviteUrl,
+}: {
+  to: string;
+  name?: string | null;
+  squadName: string;
+  invitedBy?: string | null;
+  inviteUrl: string;
+}) {
+  const html = baseTemplate(`
+    <!-- Title -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td>
+          <div style="width:36px;height:36px;background-color:#6BF16920;border-radius:8px;display:inline-block;text-align:center;line-height:36px;margin-bottom:16px;">
+            <span style="font-size:18px;">👋</span>
+          </div>
+          <h1 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f0f0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Você foi convidado</h1>
+          <p style="margin:0;font-size:14px;color:#888888;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Olá${name ? ` <strong style="color:#cccccc;">${name}</strong>` : ""}, ${invitedBy ? `<strong style="color:#cccccc;">${invitedBy}</strong>` : "alguém"} te convidou para o squad <strong style="color:#cccccc;">${squadName}</strong> no O2 Squad Tasks.</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Divider -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td style="height:1px;background-color:#2a2a2a;"></td></tr>
+    </table>
+
+    <!-- CTA -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td align="center">
+          <a href="${inviteUrl}" style="display:inline-block;background-color:#6BF169;color:#111111;font-weight:700;font-size:14px;padding:12px 28px;border-radius:12px;text-decoration:none;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Criar senha e entrar</a>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Message -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background-color:#161616;border-radius:8px;padding:14px 16px;">
+          <p style="margin:0;font-size:13px;color:#888888;line-height:1.6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+            Esse link expira em 7 dias. Se preferir, também dá pra entrar direto com o Google usando este mesmo e-mail (${to}).
+          </p>
+        </td>
+      </tr>
+    </table>
+  `);
+
+  return getResend().emails.send({ from: FROM, to, subject: `[O2 Squad] Convite para o squad ${squadName}`, html });
+}
+
 // Monta (sem enviar) o conteúdo de um e-mail de cobrança de pendência do cliente —
 // escrito como se fosse endereçado a ele, pra virar rascunho no Gmail de alguém do
 // squad revisar/completar destinatário antes de mandar. Ver src/lib/gmail-draft.ts.
