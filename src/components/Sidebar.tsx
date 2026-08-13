@@ -13,7 +13,10 @@ import { LogoIcon } from "./LogoIcon";
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
-const topLevel: NavItem = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard };
+const topLevelItems: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/equipe", label: "Equipe", icon: Users },
+];
 
 const navGroups: NavGroup[] = [
   {
@@ -46,7 +49,6 @@ const navGroups: NavGroup[] = [
     id: "sistema",
     label: "Sistema",
     items: [
-      { href: "/equipe", label: "Equipe", icon: Users },
       { href: "/automacoes", label: "Automações", icon: Zap },
       { href: "/logs", label: "Logs", icon: ScrollText },
       { href: "/settings", label: "Configurações", icon: Settings },
@@ -158,7 +160,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {renderItem(topLevel)}
+        {topLevelItems.map((item) => renderItem(item))}
 
         {navGroups.map((group) => {
           const hasActive = group.items.some((i) => i.href === path);

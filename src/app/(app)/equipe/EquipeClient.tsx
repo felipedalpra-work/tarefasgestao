@@ -9,19 +9,23 @@ import { cn } from "@/lib/utils";
 
 type SquadMember = { id: string; name: string | null; email: string; image?: string | null; cargo?: string | null; role?: string };
 
-type Panel = { type: "none" } | { type: "edit"; userId: string } | { type: "add" };
+type Tab = "org" | "membros";
 
 export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
 
+  const [tab, setTab] = useState<Tab>("org");
   const [users, setUsers] = useState<SquadMember[]>(initialUsers);
   const [slackConfigured, setSlackConfigured] = useState(false);
-  const [panel, setPanel] = useState<Panel>({ type: "none" });
 
+  // Organograma (só visualização)
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
+  // Membros (gestão)
   const [cargoDrafts, setCargoDrafts] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member", slackUserId: "" });
   const [addingMember, setAddingMember] = useState(false);
   const [lastInvite, setLastInvite] = useState<{ email: string; url: string; slackSent: boolean } | null>(null);
@@ -34,17 +38,7 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
 
   const admins = users.filter((u) => u.role === "admin");
   const members = users.filter((u) => u.role !== "admin");
-  const selectedUser = panel.type === "edit" ? users.find((u) => u.id === panel.userId) ?? null : null;
-
-  function openEdit(userId: string) {
-    setConfirmingRemove(false);
-    setPanel((prev) => (prev.type === "edit" && prev.userId === userId ? { type: "none" } : { type: "edit", userId }));
-  }
-
-  function closePanel() {
-    setConfirmingRemove(false);
-    setPanel({ type: "none" });
-  }
+  const viewingUser = users.find((u) => u.id === viewingId) ?? null;
 
   async function saveCargo(userId: string) {
     const cargo = cargoDrafts[userId];
@@ -83,11 +77,10 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
     setRemovingId(userId);
     const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
     setRemovingId(null);
-    setConfirmingRemove(false);
+    setConfirmingRemoveId(null);
     if (res.ok) {
       setUsers((prev) => prev.filter((u) => u.id !== userId));
       toast("Membro removido", "success");
-      closePanel();
     } else {
       const data = await res.json().catch(() => ({}));
       toast(data.error || "Erro ao remover", "error");
@@ -123,221 +116,226 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
 
   return (
     <div className="space-y-6">
-      {/* Organograma */}
-      <div className="bg-surface border border-surface-3 rounded-2xl p-8 md:p-12 overflow-x-auto">
-        <div className="flex flex-col items-center min-w-max">
-          <div className="flex gap-6 flex-wrap justify-center">
-            {admins.map((u) => (
-              <MemberNode
-                key={u.id}
-                user={u}
-                isAdminTier
-                selected={panel.type === "edit" && panel.userId === u.id}
-                onClick={() => openEdit(u.id)}
-              />
-            ))}
-          </div>
-
-          {members.length > 0 && (
-            <>
-              <div className="w-px h-8 bg-border" />
-              <div className="inline-flex flex-col items-center">
-                <div className={cn("flex gap-6 flex-wrap justify-center pt-8", members.length > 1 && "border-t border-border")}>
-                  {members.map((u) => (
-                    <div key={u.id} className="relative">
-                      {members.length > 1 && (
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-px h-8 bg-border" />
-                      )}
-                      <MemberNode
-                        user={u}
-                        selected={panel.type === "edit" && panel.userId === u.id}
-                        onClick={() => openEdit(u.id)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setTab("org")}
+          className={cn(
+            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            tab === "org" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
           )}
-
-          {isAdmin && (
-            <>
-              <div className="w-px h-8 bg-border" />
-              <button
-                onClick={() => setPanel((prev) => (prev.type === "add" ? { type: "none" } : { type: "add" }))}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-1.5 w-32 h-[104px] rounded-2xl border border-dashed transition-all",
-                  panel.type === "add"
-                    ? "border-o2-green text-o2-green bg-o2-green/5"
-                    : "border-border text-ink-faint hover:text-o2-green hover:border-o2-green/50"
-                )}
-              >
-                <UserPlus size={18} />
-                <span className="text-xs font-medium">Adicionar</span>
-              </button>
-            </>
+        >
+          Organograma
+        </button>
+        <button
+          onClick={() => setTab("membros")}
+          className={cn(
+            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            tab === "membros" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
           )}
-        </div>
+        >
+          Membros ({users.length})
+        </button>
       </div>
 
-      {/* Painel: editar membro selecionado */}
-      {panel.type === "edit" && selectedUser && (
-        <div className="bg-surface border border-surface-3 rounded-xl p-6 animate-fade-in">
-          <div className="flex items-start justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <UserAvatar name={selectedUser.name} image={selectedUser.image} size="lg" />
-              <div>
-                <p className="font-medium text-ink">{selectedUser.name || selectedUser.email}</p>
-                <p className="text-xs text-ink-faint">{selectedUser.email}</p>
+      {tab === "org" && (
+        <div className="space-y-6">
+          {/* Organograma — só visualização, clique num card só mostra os detalhes */}
+          <div className="bg-surface border border-surface-3 rounded-2xl p-8 md:p-12 overflow-x-auto">
+            <div className="flex flex-col items-center min-w-max">
+              <div className="flex gap-6 flex-wrap justify-center">
+                {admins.map((u) => (
+                  <MemberNode key={u.id} user={u} isAdminTier selected={viewingId === u.id} onClick={() => setViewingId((id) => (id === u.id ? null : u.id))} />
+                ))}
               </div>
-            </div>
-            <button onClick={closePanel} className="text-ink-faint hover:text-ink p-1">
-              <X size={16} />
-            </button>
-          </div>
 
-          <div className="grid sm:grid-cols-2 gap-4 mb-5">
-            <div>
-              <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Cargo</label>
-              <input
-                type="text"
-                placeholder="Cargo (ex: CFO)"
-                value={cargoDrafts[selectedUser.id] ?? selectedUser.cargo ?? ""}
-                onChange={(e) => setCargoDrafts((prev) => ({ ...prev, [selectedUser.id]: e.target.value }))}
-                onBlur={() => saveCargo(selectedUser.id)}
-                className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Perfil</label>
-              {isAdmin ? (
-                <select
-                  value={selectedUser.role ?? "member"}
-                  onChange={(e) => changeRole(selectedUser.id, e.target.value)}
-                  className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
-                >
-                  <option value="member">Membro</option>
-                  <option value="admin">Admin</option>
-                </select>
-              ) : (
-                <p className="mt-1.5 text-sm text-ink-mid">{selectedUser.role === "admin" ? "Admin" : "Membro"}</p>
+              {members.length > 0 && (
+                <>
+                  <div className="w-px h-8 bg-border" />
+                  <div className="inline-flex flex-col items-center">
+                    <div className={cn("flex gap-6 flex-wrap justify-center pt-8", members.length > 1 && "border-t border-border")}>
+                      {members.map((u) => (
+                        <div key={u.id} className="relative">
+                          {members.length > 1 && (
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-px h-8 bg-border" />
+                          )}
+                          <MemberNode user={u} selected={viewingId === u.id} onClick={() => setViewingId((id) => (id === u.id ? null : u.id))} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
 
-          {isAdmin && (
-            confirmingRemove ? (
-              <div className="flex items-center gap-2 bg-red-400/10 rounded-lg px-3 py-2.5">
-                <span className="text-xs text-red-400 flex-1">Remover {selectedUser.name || selectedUser.email} da equipe?</span>
-                <button
-                  onClick={() => removeMember(selectedUser.id)}
-                  disabled={removingId === selectedUser.id}
-                  className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 shrink-0"
-                >
-                  {removingId === selectedUser.id ? "..." : "Sim, remover"}
-                </button>
-                <button onClick={() => setConfirmingRemove(false)} className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-2 border border-border text-ink-mid hover:text-ink shrink-0">
-                  Cancelar
+          {viewingUser && (
+            <div className="bg-surface border border-surface-3 rounded-xl p-6 animate-fade-in">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <UserAvatar name={viewingUser.name} image={viewingUser.image} size="lg" />
+                  <div>
+                    <p className="font-medium text-ink">{viewingUser.name || viewingUser.email}</p>
+                    <p className="text-xs text-ink-faint">{viewingUser.email}</p>
+                    <p className="text-xs text-ink-mid mt-1">
+                      {viewingUser.cargo ? `${viewingUser.cargo} · ` : ""}{viewingUser.role === "admin" ? "Admin" : "Membro"}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setViewingId(null)} className="text-ink-faint hover:text-ink p-1">
+                  <X size={16} />
                 </button>
               </div>
-            ) : (
-              <button
-                onClick={() => setConfirmingRemove(true)}
-                className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-red-400 transition-colors"
-              >
-                <Trash2 size={13} />
-                Remover da equipe
-              </button>
-            )
+            </div>
           )}
         </div>
       )}
 
-      {/* Painel: adicionar membro */}
-      {panel.type === "add" && isAdmin && (
-        <div className="bg-surface border border-surface-3 rounded-xl p-6 animate-fade-in">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Adicionar membro</h2>
-            <button onClick={closePanel} className="text-ink-faint hover:text-ink p-1">
-              <X size={16} />
-            </button>
-          </div>
+      {tab === "membros" && (
+        <div className="bg-surface border border-surface-3 rounded-xl p-6">
+          <p className="text-xs text-ink-mid mb-6">Gerencie quem faz parte do squad e o cargo de cada um.</p>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              placeholder="Nome"
-              value={newMember.name}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
-              className="w-28 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            <input
-              type="email"
-              placeholder="E-mail"
-              value={newMember.email}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
-              className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            <input
-              type="text"
-              placeholder="Cargo"
-              value={newMember.cargo}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
-              className="flex-1 min-w-24 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            {slackConfigured && (
-              <input
-                type="text"
-                placeholder="Slack ID (p/ mandar convite)"
-                value={newMember.slackUserId}
-                onChange={(e) => setNewMember((prev) => ({ ...prev, slackUserId: e.target.value }))}
-                className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-              />
-            )}
-            <select
-              value={newMember.role}
-              onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
-              className="w-28 shrink-0 bg-surface-2 border border-border rounded-lg px-2 py-2 text-xs text-ink focus:outline-none focus:border-o2-green/50"
-            >
-              <option value="member">Membro</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button
-              onClick={addMember}
-              disabled={addingMember || !newMember.email}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs bg-o2-green/10 text-o2-green rounded-lg hover:bg-o2-green/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-            >
-              <UserPlus size={13} />
-              {addingMember ? "..." : "Adicionar"}
-            </button>
-          </div>
-          {slackConfigured && (
-            <p className="text-xs text-ink-faint mt-1.5">Informando o Slack ID, o convite já é mandado por DM assim que a pessoa for adicionada.</p>
-          )}
-
-          {lastInvite && (
-            <div className="mt-3 bg-surface-2 rounded-lg px-4 py-3">
-              <p className="text-xs text-ink-mid mb-2">
-                {lastInvite.slackSent
-                  ? <>Convite enviado por DM no Slack pra <strong className="text-ink-soft">{lastInvite.email}</strong>. Se quiser, também dá pra mandar o link direto:</>
-                  : <>Copie o link abaixo e envie pra <strong className="text-ink-soft">{lastInvite.email}</strong> por onde preferir (Slack, WhatsApp etc.):</>}
-              </p>
-              <div className="flex items-center gap-2">
+          <div className="space-y-2.5 mb-6">
+            {users.length === 0 ? (
+              <div className="h-10 bg-surface-2 rounded-lg animate-pulse" />
+            ) : users.map((u) => (
+              <div key={u.id} className="flex items-center gap-3">
+                <UserAvatar name={u.name} image={u.image} size="sm" />
+                <div className="w-32 shrink-0">
+                  <p className="text-sm text-ink truncate">{u.name || u.email}</p>
+                  <p className="text-xs text-ink-faint truncate">{u.email}</p>
+                </div>
                 <input
                   type="text"
-                  readOnly
-                  value={lastInvite.url}
-                  className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs text-ink font-mono focus:outline-none"
+                  placeholder="Cargo (ex: CFO)"
+                  value={cargoDrafts[u.id] ?? u.cargo ?? ""}
+                  onChange={(e) => setCargoDrafts((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                  onBlur={() => saveCargo(u.id)}
+                  className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
                 />
-                <button
-                  type="button"
-                  onClick={copyInviteLink}
-                  className="shrink-0 p-2 bg-surface border border-border rounded-lg text-ink-mid hover:text-o2-green hover:border-o2-green/50 transition-colors"
-                  title="Copiar"
+                {isAdmin ? (
+                  <select
+                    value={u.role ?? "member"}
+                    onChange={(e) => changeRole(u.id, e.target.value)}
+                    className="w-28 shrink-0 bg-surface-2 border border-border rounded-lg px-2 py-2 text-xs text-ink focus:outline-none focus:border-o2-green/50"
+                  >
+                    <option value="member">Membro</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                ) : (
+                  <span className="w-28 shrink-0 text-xs text-ink-faint text-center">
+                    {u.role === "admin" ? "Admin" : "Membro"}
+                  </span>
+                )}
+                {!isAdmin ? null : confirmingRemoveId === u.id ? (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-xs text-ink-mid">Remover mesmo?</span>
+                    <button
+                      onClick={() => removeMember(u.id)}
+                      disabled={removingId === u.id}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                    >
+                      {removingId === u.id ? "..." : "Sim"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingRemoveId(null)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-surface-2 border border-border text-ink-mid hover:text-ink"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingRemoveId(u.id)}
+                    className="p-2 text-ink-faint hover:text-red-400 transition-colors shrink-0"
+                    title="Remover da equipe"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {isAdmin && (
+            <div className="border-t border-border pt-5">
+              <p className="text-xs text-ink-mid mb-2.5">Adicionar membro</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Nome"
+                  value={newMember.name}
+                  onChange={(e) => setNewMember((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-28 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                />
+                <input
+                  type="email"
+                  placeholder="E-mail"
+                  value={newMember.email}
+                  onChange={(e) => setNewMember((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                />
+                <input
+                  type="text"
+                  placeholder="Cargo"
+                  value={newMember.cargo}
+                  onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
+                  className="flex-1 min-w-24 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                />
+                {slackConfigured && (
+                  <input
+                    type="text"
+                    placeholder="Slack ID (p/ mandar convite)"
+                    value={newMember.slackUserId}
+                    onChange={(e) => setNewMember((prev) => ({ ...prev, slackUserId: e.target.value }))}
+                    className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                  />
+                )}
+                <select
+                  value={newMember.role}
+                  onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
+                  className="w-28 shrink-0 bg-surface-2 border border-border rounded-lg px-2 py-2 text-xs text-ink focus:outline-none focus:border-o2-green/50"
                 >
-                  <Copy size={14} />
+                  <option value="member">Membro</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button
+                  onClick={addMember}
+                  disabled={addingMember || !newMember.email}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs bg-o2-green/10 text-o2-green rounded-lg hover:bg-o2-green/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                >
+                  <UserPlus size={13} />
+                  {addingMember ? "..." : "Adicionar"}
                 </button>
               </div>
+              {slackConfigured && (
+                <p className="text-xs text-ink-faint mt-1.5">Informando o Slack ID, o convite já é mandado por DM assim que a pessoa for adicionada.</p>
+              )}
+
+              {lastInvite && (
+                <div className="mt-3 bg-surface-2 rounded-lg px-4 py-3">
+                  <p className="text-xs text-ink-mid mb-2">
+                    {lastInvite.slackSent
+                      ? <>Convite enviado por DM no Slack pra <strong className="text-ink-soft">{lastInvite.email}</strong>. Se quiser, também dá pra mandar o link direto:</>
+                      : <>Copie o link abaixo e envie pra <strong className="text-ink-soft">{lastInvite.email}</strong> por onde preferir (Slack, WhatsApp etc.):</>}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={lastInvite.url}
+                      className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs text-ink font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={copyInviteLink}
+                      className="shrink-0 p-2 bg-surface border border-border rounded-lg text-ink-mid hover:text-o2-green hover:border-o2-green/50 transition-colors"
+                      title="Copiar"
+                    >
+                      <Copy size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

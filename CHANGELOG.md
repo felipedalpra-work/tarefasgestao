@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (ajustes na aba Equipe: mais visível + organograma só de visualização)
+
+- Dois ajustes pedidos pelo usuário logo depois da aba Equipe entrar no ar: (1) o item "Equipe" estava escondido dentro do grupo recolhível "Sistema" no menu; (2) não queria a ação de adicionar pessoa embutida direto no organograma.
+- **"Equipe" virou item de topo no menu lateral**, ao lado de "Dashboard" — sempre visível, sem precisar abrir nenhum grupo.
+- **`/equipe` agora tem duas sub-abas**: "Organograma" (só visualização — clicar num card mostra nome/cargo/perfil num painel de leitura, sem nenhum controle de edição, sem o botão de adicionar que existia antes) e "Membros" (toda a gestão: cargo editável, perfil Admin/Membro, remover, formulário de adicionar com o link de convite — o que antes estava misturado no organograma).
+- Validado contra o servidor real: as duas abas renderizam, o link "Equipe" aparece fora do grupo "Sistema" no menu.
+
 ## 2026-08-13 (nova aba Equipe com organograma visual)
 
 - Pedido do usuário: a gestão de equipe vivia espremida dentro de Configurações — queria uma aba própria, com organograma visual e interativo.
