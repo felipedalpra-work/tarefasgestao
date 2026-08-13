@@ -102,7 +102,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Google: só permite emails do squad
       if (account?.provider === "google") {
         const exists = await prisma.user.findUnique({ where: { email: profile?.email! } });
-        return !!exists;
+        if (!exists) return false;
+
+        // Login via Google nunca toca o token de convite (Invite) — sem isso, a
+        // pessoa aparece pra sempre como "pendente" no histórico de convites
+        // mesmo já usando a plataforma normalmente há tempos.
+        await prisma.invite.updateMany({
+          where: { email: profile!.email!, acceptedAt: null },
+          data: { acceptedAt: new Date() },
+        });
+
+        return true;
       }
       return true;
     },

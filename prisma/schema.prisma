@@ -59,6 +59,27 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+// Convite de membro pro squad — deliberadamente SEM relação/FK pro User (ao
+// contrário de PasswordResetToken, que cascade-deleta junto quando o membro é
+// removido). Assim o histórico ("quem convidamos, quem aceitou, quem não")
+// sobrevive mesmo que a pessoa seja removida depois. Status é sempre computado
+// na leitura a partir de acceptedAt/expiresAt (ver GET /api/invites), não
+// guardado como campo — evita ficar dessincronizado.
+model Invite {
+  id            String    @id @default(cuid())
+  squadId       String
+  email         String
+  name          String?
+  role          String
+  invitedByName String?
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([squadId])
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String

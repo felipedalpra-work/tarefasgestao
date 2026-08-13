@@ -4,6 +4,16 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (histórico de convites: pendente/aceito/expirado + reenviar)
+
+- Quarta etapa do plano: não havia nenhum jeito de saber quem foi convidado e ainda não aceitou, nem de reenviar um convite. O link só aparecia uma vez, na hora, e sumia se a página fosse recarregada.
+- **Novo model `Invite`** (`prisma/schema.prisma`, `db push` aditivo), de propósito **sem relação com `User`** — diferente do antigo `PasswordResetToken` (que cascade-deletava junto quando o membro era removido), o histórico de convite agora sobrevive mesmo que a pessoa seja removida do squad depois.
+- `POST /api/users` (convidar membro) passa a criar um `Invite` em vez de reaproveitar a tabela do "esqueci minha senha". `POST /api/auth/reset-password` (mesma URL/página de sempre) checa `Invite` primeiro e cai no fluxo antigo se não achar — nada mudou pra quem só está redefinindo a própria senha.
+- **Aceite via Google também passa a contar**: antes, entrar direto com Google nunca "batia" em token nenhum — a pessoa ficava para sempre como pendente mesmo já usando a plataforma normalmente. Agora o callback `signIn` (`src/lib/auth.ts`) marca o convite como aceito nesse caminho também.
+- **Nova sub-aba "Convites"** em `/equipe` (admin-only): lista com badge de status (Aceito/Pendente/Expirado), quem convidou, quando, e um botão **Reenviar** — gera um token novo (invalida o anterior) e reenvia por Slack se já tiver o Slack ID salvo pra essa pessoa.
+- **Validado com bateria completa contra o servidor real** (18 checagens): convite cria `Invite` (não mais `PasswordResetToken`); aparece pendente em `GET /api/invites`; aceitar via link marca `acceptedAt` e a pessoa loga no squad certo; a mesma marcação funciona pro caminho de aceite via Google; reenviar invalida o token antigo e o novo funciona; e o convite **sobrevive** à remoção do membro (não cascateia mais). Dados de teste removidos depois.
+- Nota técnica: o `prisma db push` só atualiza o banco — o processo do servidor já rodando continuava com o Prisma Client antigo em memória (sem o model `Invite`) até reiniciar. Servidor de desenvolvimento reiniciado pra pegar o client novo antes de validar.
+
 ## 2026-08-13 (referência de permissões em Equipe)
 
 - Terceira etapa do plano: nenhum lugar do app explicava, de forma direta, o que Admin pode fazer que Membro não pode.

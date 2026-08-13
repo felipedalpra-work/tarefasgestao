@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { UserPlus, Trash2, Copy, Crown, X, Check } from "lucide-react";
+import { UserPlus, Trash2, Copy, Crown, X, Check, RefreshCw } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { UserAvatar } from "@/components/UserAvatar";
 import { cn } from "@/lib/utils";
 
 type SquadMember = { id: string; name: string | null; email: string; image?: string | null; cargo?: string | null; role?: string };
+type Invite = { id: string; email: string; name: string | null; role: string; invitedByName: string | null; expiresAt: string; acceptedAt: string | null; createdAt: string };
 
-type Tab = "org" | "membros" | "permissoes";
+type Tab = "org" | "membros" | "convites" | "permissoes";
 
 // Referência fixa — não vem do banco, é a regra de negócio documentada (a única
 // checagem real é isAdmin, ver src/lib/authz.ts). Manter em sincronia manualmente
@@ -46,15 +49,49 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
   const [addingMember, setAddingMember] = useState(false);
   const [lastInvite, setLastInvite] = useState<{ email: string; url: string; slackSent: boolean } | null>(null);
 
+  // Convites (histórico)
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [invitesLoaded, setInvitesLoaded] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
   useEffect(() => {
     fetch("/api/settings/slack")
       .then((r) => r.json())
       .then((d) => setSlackConfigured(!!d.configured));
   }, []);
 
+  useEffect(() => {
+    if (!isAdmin || tab !== "convites" || invitesLoaded) return;
+    fetch("/api/invites")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { setInvites(Array.isArray(d) ? d : []); setInvitesLoaded(true); });
+  }, [isAdmin, tab, invitesLoaded]);
+
   const admins = users.filter((u) => u.role === "admin");
   const members = users.filter((u) => u.role !== "admin");
   const viewingUser = users.find((u) => u.id === viewingId) ?? null;
+
+  function inviteStatus(inv: Invite): { label: string; cls: string } {
+    if (inv.acceptedAt) return { label: "Aceito", cls: "bg-o2-green/10 text-o2-green" };
+    if (new Date(inv.expiresAt) < new Date()) return { label: "Expirado", cls: "bg-surface-3 text-ink-faint" };
+    return { label: "Pendente", cls: "bg-yellow-400/10 text-yellow-400" };
+  }
+
+  async function resendInvite(id: string) {
+    setResendingId(id);
+    const res = await fetch(`/api/invites/${id}/resend`, { method: "POST" });
+    setResendingId(null);
+    if (res.ok) {
+      const data = await res.json();
+      navigator.clipboard.writeText(data.inviteUrl);
+      toast(data.slackSent ? "Convite reenviado no Slack (link também copiado)" : "Convite reenviado — link copiado", "success");
+      const refreshed = await fetch("/api/invites").then((r) => r.json());
+      setInvites(Array.isArray(refreshed) ? refreshed : []);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || "Erro ao reenviar", "error");
+    }
+  }
 
   async function saveCargo(userId: string) {
     const cargo = cargoDrafts[userId];
@@ -151,6 +188,17 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
         >
           Membros ({users.length})
         </button>
+        {isAdmin && (
+          <button
+            onClick={() => setTab("convites")}
+            className={cn(
+              "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+              tab === "convites" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
+            )}
+          >
+            Convites
+          </button>
+        )}
         <button
           onClick={() => setTab("permissoes")}
           className={cn(
@@ -363,6 +411,46 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "convites" && isAdmin && (
+        <div className="bg-surface border border-surface-3 rounded-xl p-6">
+          <p className="text-xs text-ink-mid mb-6">Histórico de convites enviados pro squad — quem já aceitou e quem ainda não.</p>
+          <div className="space-y-2.5">
+            {!invitesLoaded ? (
+              <div className="h-10 bg-surface-2 rounded-lg animate-pulse" />
+            ) : invites.length === 0 ? (
+              <p className="text-sm text-ink-faint text-center py-8">Nenhum convite enviado ainda.</p>
+            ) : invites.map((inv) => {
+              const status = inviteStatus(inv);
+              return (
+                <div key={inv.id} className="flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-ink truncate">{inv.name || inv.email}</p>
+                    <p className="text-xs text-ink-faint truncate">
+                      {inv.email} · {inv.role === "admin" ? "Admin" : "Membro"}
+                      {inv.invitedByName ? ` · convidado por ${inv.invitedByName}` : ""}
+                    </p>
+                  </div>
+                  <span className="text-xs text-ink-faint shrink-0 hidden sm:inline">
+                    {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true, locale: ptBR })}
+                  </span>
+                  <span className={cn("text-[10px] font-medium px-2 py-1 rounded-full shrink-0", status.cls)}>{status.label}</span>
+                  {status.label !== "Aceito" && (
+                    <button
+                      onClick={() => resendInvite(inv.id)}
+                      disabled={resendingId === inv.id}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-surface border border-border text-ink-mid hover:text-o2-green hover:border-o2-green/50 disabled:opacity-50 shrink-0 transition-colors"
+                    >
+                      <RefreshCw size={11} />
+                      {resendingId === inv.id ? "..." : "Reenviar"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

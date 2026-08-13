@@ -24,13 +24,15 @@ export async function GET() {
 
 // Convida um novo membro pro squad de quem está convidando. Além do login com
 // Google (src/lib/auth.ts, callback signIn — liberado porque o e-mail já tem uma
-// linha em User), a pessoa também ganha um link de convite (mesmo mecanismo de
-// token do "esqueci minha senha", PasswordResetToken) pra definir senha própria e
-// entrar por credenciais. Envio por email foi abandonado (não chegava de forma
-// confiável) — o convite vai por DM do Slack quando o admin já sabe o Slack User ID
-// da pessoa (squad precisa ter o bot do Slack configurado), e o link sempre volta
-// na resposta pra copiar/repassar por qualquer canal como alternativa. Só admin
-// (o CFO) pode convidar/definir o perfil de quem entra.
+// linha em User), a pessoa também ganha um link de convite (model Invite, com
+// token próprio — não é mais o PasswordResetToken do "esqueci minha senha",
+// pra ter histórico e sobreviver à remoção do membro, ver prisma/schema.prisma)
+// pra definir senha própria e entrar por credenciais. Envio por email foi
+// abandonado (não chegava de forma confiável) — o convite vai por DM do Slack
+// quando o admin já sabe o Slack User ID da pessoa (squad precisa ter o bot do
+// Slack configurado), e o link sempre volta na resposta pra copiar/repassar por
+// qualquer canal como alternativa. Só admin (o CFO) pode convidar/definir o
+// perfil de quem entra.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,8 +63,16 @@ export async function POST(req: NextRequest) {
 
   const rawToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-  await prisma.passwordResetToken.create({
-    data: { tokenHash, userId: user.id, expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS) },
+  await prisma.invite.create({
+    data: {
+      squadId: session.user.squadId,
+      email: user.email,
+      name: user.name,
+      role,
+      invitedByName: session.user.name,
+      tokenHash,
+      expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS),
+    },
   });
   const inviteUrl = `${getBaseUrl()}/reset-password?token=${rawToken}`;
 
