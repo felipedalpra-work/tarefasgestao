@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (Configurações em abas + corrige controles que falhavam silenciosamente pra membro)
+
+- Segunda etapa do plano: usuário achou `/settings` confusa — tudo empilhado numa pilha vertical só, sem separação clara entre o que é pessoal, do squad, ou do Slack.
+- **Três abas** (mesmo padrão pílula já usado em `/equipe` e `/sugestoes-ia`): "Perfil" (perfil + conexão Google, pessoal), "Squad" (Meet Recaps, Minuta de cobrança, n8n — tudo squad-wide), "Slack" (bot token, Slack ID por membro, notificações por tipo). Nenhuma rota de API nova, só reorganização visual.
+- **Corrigida uma inconsistência de UX** encontrada na auditoria da etapa anterior: os controles de Meet Recap/Slack/Notificações continuavam clicáveis pra membro comum, mas a API já rejeitava com 403 — a pessoa preenchia, clicava salvar, e só recebia um erro genérico sem entender por quê. Agora esses controles vêm `disabled` com a mesma frase que "Minuta de cobrança" já usava ("Só admin do squad pode alterar/configurar"), consistente em toda a tela.
+- Validado: typecheck/lint limpos, e um teste real contra o servidor confirmando que as 3 abas aparecem pra um squad de teste.
+
 ## 2026-08-13 (fecha 2 buracos reais de permissão: excluir cliente e controlar automação)
 
 - Primeira etapa de um plano maior pedido pelo usuário (histórico de convites, permissões mais claras, Configurações reorganizada, onboarding animado). Auditoria completa de tudo que é `isAdmin` hoje encontrou 2 ações destrutivas/operacionais liberadas pra qualquer membro do squad, quando deveriam ser só do admin (mesmo nível de "remover membro", que já é admin-only).

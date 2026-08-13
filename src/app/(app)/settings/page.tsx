@@ -2,10 +2,13 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, MessageSquare, Send, Save, Sparkles, Copy, RefreshCw } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw } from "lucide-react";
 import { toast } from "@/components/Toaster";
+import { cn } from "@/lib/utils";
 
 type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null; role?: string };
+
+type Tab = "perfil" | "squad" | "slack";
 
 // Espelha NOTIFICATION_TYPES/DEFAULT_NOTIFICATION_PREFS de src/lib/settings.ts — duplicado
 // aqui (não importado) porque aquele arquivo puxa o Prisma, que não pode ir pro bundle do client.
@@ -53,6 +56,7 @@ const NOTIFICATION_GROUPS: { title: string; items: { key: string; label: string;
 export default function SettingsPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
+  const [tab, setTab] = useState<Tab>("perfil");
   const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -261,300 +265,350 @@ export default function SettingsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-ink">Configurações</h1>
         <p className="text-ink-mid text-sm mt-0.5">Gerencie suas integrações</p>
       </div>
 
-      {/* Perfil */}
-      <div className="bg-surface border border-surface-3 rounded-xl p-6 mb-4">
-        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-4">Perfil</h2>
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-o2-green/20 flex items-center justify-center text-o2-green font-bold text-lg">
-            {session?.user?.name?.[0] || "?"}
-          </div>
-          <div>
-            <p className="font-medium text-ink">{session?.user?.name}</p>
-            <p className="text-sm text-ink-mid">{session?.user?.email}</p>
-          </div>
-        </div>
+      <div className="flex items-center gap-2 mb-6">
+        <button
+          onClick={() => setTab("perfil")}
+          className={cn(
+            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            tab === "perfil" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
+          )}
+        >
+          Perfil
+        </button>
+        <button
+          onClick={() => setTab("squad")}
+          className={cn(
+            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            tab === "squad" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
+          )}
+        >
+          Squad
+        </button>
+        <button
+          onClick={() => setTab("slack")}
+          className={cn(
+            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            tab === "slack" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
+          )}
+        >
+          Slack
+        </button>
       </div>
 
-      {/* Google Integration */}
-      <div className="bg-surface border border-surface-3 rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">
-          Integração Google
-        </h2>
-        <p className="text-xs text-ink-mid mb-6">
-          Conecte sua conta Google para sincronizar Gmail e Calendar com o sistema.
-        </p>
-
-        <div className="space-y-3 mb-6">
-          {[
-            { icon: Mail, label: "Gmail", desc: "Detectar emails que viram tarefas + Meet Recaps" },
-            { icon: Calendar, label: "Google Calendar", desc: "Ver reuniões e criar tarefas a partir de eventos" },
-          ].map(({ icon: Icon, label, desc }) => (
-            <div key={label} className="flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3">
-              <Icon size={16} className={googleConnected ? "text-o2-green" : "text-ink-faint"} />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-ink">{label}</p>
-                <p className="text-xs text-ink-dim">{desc}</p>
+      {tab === "perfil" && (
+        <div className="space-y-4">
+          {/* Perfil */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-4">Perfil</h2>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-o2-green/20 flex items-center justify-center text-o2-green font-bold text-lg">
+                {session?.user?.name?.[0] || "?"}
               </div>
-              {googleConnected ? (
-                <CheckCircle2 size={15} className="text-o2-green" />
+              <div>
+                <p className="font-medium text-ink">{session?.user?.name}</p>
+                <p className="text-sm text-ink-mid">{session?.user?.email}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Google Integration */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">
+              Integração Google
+            </h2>
+            <p className="text-xs text-ink-mid mb-6">
+              Conecte sua conta Google para sincronizar Gmail e Calendar com o sistema.
+            </p>
+
+            <div className="space-y-3 mb-6">
+              {[
+                { icon: Mail, label: "Gmail", desc: "Detectar emails que viram tarefas + Meet Recaps" },
+                { icon: Calendar, label: "Google Calendar", desc: "Ver reuniões e criar tarefas a partir de eventos" },
+              ].map(({ icon: Icon, label, desc }) => (
+                <div key={label} className="flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3">
+                  <Icon size={16} className={googleConnected ? "text-o2-green" : "text-ink-faint"} />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-ink">{label}</p>
+                    <p className="text-xs text-ink-dim">{desc}</p>
+                  </div>
+                  {googleConnected ? (
+                    <CheckCircle2 size={15} className="text-o2-green" />
+                  ) : (
+                    <AlertCircle size={15} className="text-ink-faint" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {loading ? (
+              <div className="h-10 bg-surface-2 rounded-xl animate-pulse" />
+            ) : googleConnected ? (
+              <div className="flex items-center gap-2 text-sm text-o2-green bg-o2-green/10 px-4 py-3 rounded-xl">
+                <CheckCircle2 size={15} />
+                Conta Google conectada com sucesso
+              </div>
+            ) : (
+              <button
+                onClick={connectGoogle}
+                className="w-full flex items-center justify-center gap-3 bg-o2-green text-bg font-bold py-3 px-4 rounded-xl hover:bg-o2-green-bright transition-all text-sm"
+              >
+                <Globe size={16} />
+                Conectar conta Google
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "squad" && (
+        <div className="space-y-4">
+          {/* Meet Recap suggestions */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Meet Recaps (IA)</h2>
+            <p className="text-xs text-ink-mid mb-6">
+              Sugestão automática de tarefa a partir dos Meet Recaps do Gmail. Os recaps continuam sincronizando normalmente — isso só liga/desliga a IA gerar sugestões em <span className="text-ink-soft">/sugestoes-ia</span>. As tarefas do workflow n8n não são afetadas.
+            </p>
+            <label className={cn("flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3", isAdmin ? "cursor-pointer" : "cursor-not-allowed opacity-70")}>
+              <input
+                type="checkbox"
+                checked={meetRecapEnabled}
+                disabled={meetRecapSaving || !isAdmin}
+                onChange={(e) => toggleMeetRecap(e.target.checked)}
+                className="accent-o2-green"
+              />
+              <Sparkles size={16} className={meetRecapEnabled ? "text-o2-green" : "text-ink-faint"} />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-ink">Gerar sugestões de tarefa dos Meet Recaps</p>
+                <p className="text-xs text-ink-dim">{meetRecapEnabled ? "Ativado" : "Desativado — nenhuma sugestão nova até religar"}</p>
+              </div>
+            </label>
+
+            <div className="mt-4 pt-4 border-t border-surface-3">
+              <label className="block text-xs text-ink-mid mb-1.5">Conta Gmail sincronizada</label>
+              <p className="text-xs text-ink-faint mb-2">
+                Se mais de uma conta sincronizar, o mesmo recap chega duplicado (uma cópia em cada caixa) e pode gerar sugestões divergentes. Recomendado manter só uma conta.
+              </p>
+              <select
+                value={meetRecapGmailUserId ?? ""}
+                disabled={meetRecapGmailSaving || !isAdmin}
+                onChange={(e) => saveMeetRecapGmailUser(e.target.value || null)}
+                className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+              >
+                <option value="">Todas as contas conectadas (não recomendado)</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                ))}
+              </select>
+              {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
+            </div>
+          </div>
+
+          {/* Minuta de cobrança */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Minuta de cobrança</h2>
+            <p className="text-xs text-ink-mid mb-4">
+              Tarefa do cliente vencida (sem responsável interno) cria um <span className="text-ink-soft">rascunho</span> — nunca envia — no Gmail de quem estiver aqui, já redigido pra cobrar o cliente. Sem ninguém selecionado, esse recurso fica desligado.
+            </p>
+            <select
+              value={billingDraftOwnerId ?? ""}
+              disabled={billingDraftSaving || !isAdmin}
+              onChange={(e) => saveBillingDraftOwner(e.target.value || null)}
+              className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+            >
+              <option value="">Desligado</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name || u.email}</option>
+              ))}
+            </select>
+            {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
+          </div>
+
+          {/* n8n webhook (visível só pra admin — é uma credencial) */}
+          {isAdmin && (
+            <div className="bg-surface border border-surface-3 rounded-xl p-6">
+              <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Integração n8n</h2>
+              <p className="text-xs text-ink-mid mb-4">
+                Cole esse secret no header <code className="text-ink-soft">Authorization: Bearer &lt;secret&gt;</code> do seu workflow n8n. Cada squad tem o seu — itens recebidos entram como sugestão pendente em <span className="text-ink-soft">/sugestoes-ia</span>.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={n8nSecret ?? "Carregando..."}
+                  className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink font-mono placeholder:text-ink-ghost focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={copyN8nSecret}
+                  disabled={!n8nSecret}
+                  title="Copiar"
+                  className="shrink-0 p-2.5 bg-surface-2 border border-border rounded-lg text-ink-mid hover:text-o2-green hover:border-o2-green/50 transition-colors disabled:opacity-50"
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+
+              {!n8nConfirmRegen ? (
+                <button
+                  type="button"
+                  onClick={() => setN8nConfirmRegen(true)}
+                  className="mt-3 flex items-center gap-1.5 text-xs text-ink-faint hover:text-ink-mid transition-colors"
+                >
+                  <RefreshCw size={12} />
+                  Gerar novo secret
+                </button>
               ) : (
-                <AlertCircle size={15} className="text-ink-faint" />
+                <div className="mt-3 flex items-center gap-2 bg-red-400/10 rounded-lg px-3 py-2">
+                  <p className="text-xs text-red-400 flex-1">Isso invalida o secret atual — o workflow n8n vai parar de funcionar até você atualizar o valor lá. Confirma?</p>
+                  <button
+                    type="button"
+                    onClick={regenerateN8nSecret}
+                    disabled={n8nRegenerating}
+                    className="shrink-0 text-xs font-medium text-red-400 hover:underline disabled:opacity-50"
+                  >
+                    {n8nRegenerating ? "Gerando..." : "Confirmar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setN8nConfirmRegen(false)}
+                    className="shrink-0 text-xs text-ink-faint hover:text-ink-mid"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               )}
             </div>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="h-10 bg-surface-2 rounded-xl animate-pulse" />
-        ) : googleConnected ? (
-          <div className="flex items-center gap-2 text-sm text-o2-green bg-o2-green/10 px-4 py-3 rounded-xl">
-            <CheckCircle2 size={15} />
-            Conta Google conectada com sucesso
-          </div>
-        ) : (
-          <button
-            onClick={connectGoogle}
-            className="w-full flex items-center justify-center gap-3 bg-o2-green text-bg font-bold py-3 px-4 rounded-xl hover:bg-o2-green-bright transition-all text-sm"
-          >
-            <Globe size={16} />
-            Conectar conta Google
-          </button>
-        )}
-      </div>
-
-      {/* Meet Recap suggestions */}
-      <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
-        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Meet Recaps (IA)</h2>
-        <p className="text-xs text-ink-mid mb-6">
-          Sugestão automática de tarefa a partir dos Meet Recaps do Gmail. Os recaps continuam sincronizando normalmente — isso só liga/desliga a IA gerar sugestões em <span className="text-ink-soft">/sugestoes-ia</span>. As tarefas do workflow n8n não são afetadas.
-        </p>
-        <label className="flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={meetRecapEnabled}
-            disabled={meetRecapSaving}
-            onChange={(e) => toggleMeetRecap(e.target.checked)}
-            className="accent-o2-green"
-          />
-          <Sparkles size={16} className={meetRecapEnabled ? "text-o2-green" : "text-ink-faint"} />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-ink">Gerar sugestões de tarefa dos Meet Recaps</p>
-            <p className="text-xs text-ink-dim">{meetRecapEnabled ? "Ativado" : "Desativado — nenhuma sugestão nova até religar"}</p>
-          </div>
-        </label>
-
-        <div className="mt-4 pt-4 border-t border-surface-3">
-          <label className="block text-xs text-ink-mid mb-1.5">Conta Gmail sincronizada</label>
-          <p className="text-xs text-ink-faint mb-2">
-            Se mais de uma conta sincronizar, o mesmo recap chega duplicado (uma cópia em cada caixa) e pode gerar sugestões divergentes. Recomendado manter só uma conta.
-          </p>
-          <select
-            value={meetRecapGmailUserId ?? ""}
-            disabled={meetRecapGmailSaving}
-            onChange={(e) => saveMeetRecapGmailUser(e.target.value || null)}
-            className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
-          >
-            <option value="">Todas as contas conectadas (não recomendado)</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.name || u.email}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Minuta de cobrança */}
-      <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
-        <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Minuta de cobrança</h2>
-        <p className="text-xs text-ink-mid mb-4">
-          Tarefa do cliente vencida (sem responsável interno) cria um <span className="text-ink-soft">rascunho</span> — nunca envia — no Gmail de quem estiver aqui, já redigido pra cobrar o cliente. Sem ninguém selecionado, esse recurso fica desligado.
-        </p>
-        <select
-          value={billingDraftOwnerId ?? ""}
-          disabled={billingDraftSaving || !isAdmin}
-          onChange={(e) => saveBillingDraftOwner(e.target.value || null)}
-          className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
-        >
-          <option value="">Desligado</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>{u.name || u.email}</option>
-          ))}
-        </select>
-        {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
-      </div>
-
-      {/* n8n webhook (visível só pra admin — é uma credencial) */}
-      {isAdmin && (
-        <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
-          <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Integração n8n</h2>
-          <p className="text-xs text-ink-mid mb-4">
-            Cole esse secret no header <code className="text-ink-soft">Authorization: Bearer &lt;secret&gt;</code> do seu workflow n8n. Cada squad tem o seu — itens recebidos entram como sugestão pendente em <span className="text-ink-soft">/sugestoes-ia</span>.
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              readOnly
-              value={n8nSecret ?? "Carregando..."}
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink font-mono placeholder:text-ink-ghost focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={copyN8nSecret}
-              disabled={!n8nSecret}
-              title="Copiar"
-              className="shrink-0 p-2.5 bg-surface-2 border border-border rounded-lg text-ink-mid hover:text-o2-green hover:border-o2-green/50 transition-colors disabled:opacity-50"
-            >
-              <Copy size={16} />
-            </button>
-          </div>
-
-          {!n8nConfirmRegen ? (
-            <button
-              type="button"
-              onClick={() => setN8nConfirmRegen(true)}
-              className="mt-3 flex items-center gap-1.5 text-xs text-ink-faint hover:text-ink-mid transition-colors"
-            >
-              <RefreshCw size={12} />
-              Gerar novo secret
-            </button>
-          ) : (
-            <div className="mt-3 flex items-center gap-2 bg-red-400/10 rounded-lg px-3 py-2">
-              <p className="text-xs text-red-400 flex-1">Isso invalida o secret atual — o workflow n8n vai parar de funcionar até você atualizar o valor lá. Confirma?</p>
-              <button
-                type="button"
-                onClick={regenerateN8nSecret}
-                disabled={n8nRegenerating}
-                className="shrink-0 text-xs font-medium text-red-400 hover:underline disabled:opacity-50"
-              >
-                {n8nRegenerating ? "Gerando..." : "Confirmar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setN8nConfirmRegen(false)}
-                className="shrink-0 text-xs text-ink-faint hover:text-ink-mid"
-              >
-                Cancelar
-              </button>
-            </div>
+          )}
+          {!isAdmin && (
+            <p className="text-xs text-ink-faint px-1">A integração n8n é uma credencial de acesso — só admin do squad consegue ver/gerar.</p>
           )}
         </div>
       )}
 
-      {/* Slack Integration */}
-      <div className="bg-surface border border-surface-3 rounded-xl p-6 mt-4">
-        <div className="flex items-center gap-2 mb-1">
-          <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Integração Slack</h2>
-          {slackConfigured && <CheckCircle2 size={14} className="text-o2-green" />}
-        </div>
-        <p className="text-xs text-ink-mid mb-6">
-          Envie notificações automáticas no Slack quando uma tarefa for criada e atribuída.
-        </p>
-
-        {/* Bot Token */}
-        <div className="mb-5">
-          <label className="block text-xs text-ink-mid mb-1.5">Bot Token</label>
-          <input
-            type="password"
-            placeholder={slackConfigured ? "••••••••••••• (salvo — cole para atualizar)" : "xoxb-00000000000-..."}
-            value={slackToken}
-            onChange={(e) => setSlackToken(e.target.value)}
-            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-          />
-          <p className="text-xs text-ink-faint mt-1">
-            Crie em <span className="text-o2-green/70">api.slack.com/apps</span> → OAuth &amp; Permissions → Bot Token Scopes: <code className="text-ink-mid">chat:write</code>
+      {tab === "slack" && (
+        <div className="bg-surface border border-surface-3 rounded-xl p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Integração Slack</h2>
+            {slackConfigured && <CheckCircle2 size={14} className="text-o2-green" />}
+          </div>
+          <p className="text-xs text-ink-mid mb-6">
+            Envie notificações automáticas no Slack quando uma tarefa for criada e atribuída.
           </p>
-        </div>
 
-        {/* Slack User IDs per member */}
-        <div className="mb-5">
-          <label className="block text-xs text-ink-mid mb-2.5">Slack User ID por membro</label>
-          <div className="space-y-2.5">
-            {users.length === 0 ? (
-              <div className="h-8 bg-surface-2 rounded-lg animate-pulse" />
-            ) : users.map((u) => (
-              <div key={u.id} className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-o2-green/20 flex items-center justify-center text-o2-green text-xs font-bold shrink-0">
-                  {(u.name || u.email)[0].toUpperCase()}
+          {!isAdmin && (
+            <p className="text-xs text-ink-faint bg-surface-2 rounded-lg px-3 py-2 mb-5">Só admin do squad pode configurar o Slack — abaixo é só visualização.</p>
+          )}
+
+          {/* Bot Token */}
+          <div className="mb-5">
+            <label className="block text-xs text-ink-mid mb-1.5">Bot Token</label>
+            <input
+              type="password"
+              placeholder={slackConfigured ? "••••••••••••• (salvo — cole para atualizar)" : "xoxb-00000000000-..."}
+              value={slackToken}
+              disabled={!isAdmin}
+              onChange={(e) => setSlackToken(e.target.value)}
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+            />
+            <p className="text-xs text-ink-faint mt-1">
+              Crie em <span className="text-o2-green/70">api.slack.com/apps</span> → OAuth &amp; Permissions → Bot Token Scopes: <code className="text-ink-mid">chat:write</code>
+            </p>
+          </div>
+
+          {/* Slack User IDs per member */}
+          <div className="mb-5">
+            <label className="block text-xs text-ink-mid mb-2.5">Slack User ID por membro</label>
+            <div className="space-y-2.5">
+              {users.length === 0 ? (
+                <div className="h-8 bg-surface-2 rounded-lg animate-pulse" />
+              ) : users.map((u) => (
+                <div key={u.id} className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-o2-green/20 flex items-center justify-center text-o2-green text-xs font-bold shrink-0">
+                    {(u.name || u.email)[0].toUpperCase()}
+                  </div>
+                  <span className="text-sm text-ink-soft w-28 shrink-0 truncate">{u.name || u.email}</span>
+                  <input
+                    type="text"
+                    placeholder="U0XXXXXXXXX"
+                    value={slackUserIds[u.id] || ""}
+                    disabled={!isAdmin}
+                    onChange={(e) => setSlackUserIds((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                    className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+                  />
+                  <button
+                    onClick={() => testSlack(u.id)}
+                    disabled={!isAdmin || testingId === u.id || !slackUserIds[u.id]}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs bg-surface-2 border border-border text-ink-mid rounded-lg hover:border-o2-green/50 hover:text-o2-green disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                  >
+                    <Send size={12} />
+                    {testingId === u.id ? "..." : "Testar"}
+                  </button>
                 </div>
-                <span className="text-sm text-ink-soft w-28 shrink-0 truncate">{u.name || u.email}</span>
-                <input
-                  type="text"
-                  placeholder="U0XXXXXXXXX"
-                  value={slackUserIds[u.id] || ""}
-                  onChange={(e) => setSlackUserIds((prev) => ({ ...prev, [u.id]: e.target.value }))}
-                  className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                />
-                <button
-                  onClick={() => testSlack(u.id)}
-                  disabled={testingId === u.id || !slackUserIds[u.id]}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs bg-surface-2 border border-border text-ink-mid rounded-lg hover:border-o2-green/50 hover:text-o2-green disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-                >
-                  <Send size={12} />
-                  {testingId === u.id ? "..." : "Testar"}
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
+            <p className="text-xs text-ink-faint mt-2">
+              Para encontrar o User ID: perfil do usuário no Slack → ⋯ → Copiar ID do membro
+            </p>
           </div>
-          <p className="text-xs text-ink-faint mt-2">
-            Para encontrar o User ID: perfil do usuário no Slack → ⋯ → Copiar ID do membro
-          </p>
-        </div>
 
-        {/* Feedback message */}
-        {slackMsg && (
-          <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-xl mb-4 ${slackMsg.type === "ok" ? "text-o2-green bg-o2-green/10" : "text-red-400 bg-red-400/10"}`}>
-            {slackMsg.type === "ok" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-            {slackMsg.text}
-          </div>
-        )}
+          {/* Feedback message */}
+          {slackMsg && (
+            <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-xl mb-4 ${slackMsg.type === "ok" ? "text-o2-green bg-o2-green/10" : "text-red-400 bg-red-400/10"}`}>
+              {slackMsg.type === "ok" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+              {slackMsg.text}
+            </div>
+          )}
 
-        {/* Notificações por tipo */}
-        <div className="border-t border-surface-3 pt-5 mb-5">
-          <h3 className="text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Notificações por tipo</h3>
-          <p className="text-xs text-ink-faint mb-4">
-            Desative o que não quiser mais receber no Slack. A notificação in-app (sino) continua normalmente — isso só liga/desliga a mensagem no Slack.
-          </p>
-          <div className="space-y-5">
-            {NOTIFICATION_GROUPS.map((group) => (
-              <div key={group.title}>
-                <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-2">{group.title}</p>
-                <div className="space-y-1.5">
-                  {group.items.map((item) => (
-                    <label key={item.key} className="flex items-center gap-3 bg-surface-2 rounded-lg px-3 py-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={notificationPrefs[item.key]}
-                        disabled={notifSavingKey === item.key}
-                        onChange={(e) => toggleNotification(item.key, e.target.checked)}
-                        className="accent-o2-green"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-ink">{item.label}</p>
-                        <p className="text-[10px] text-ink-dim">{item.desc}</p>
-                      </div>
-                    </label>
-                  ))}
+          {/* Notificações por tipo */}
+          <div className="border-t border-surface-3 pt-5 mb-5">
+            <h3 className="text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Notificações por tipo</h3>
+            <p className="text-xs text-ink-faint mb-4">
+              Desative o que não quiser mais receber no Slack. A notificação in-app (sino) continua normalmente — isso só liga/desliga a mensagem no Slack.
+            </p>
+            <div className="space-y-5">
+              {NOTIFICATION_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-2">{group.title}</p>
+                  <div className="space-y-1.5">
+                    {group.items.map((item) => (
+                      <label key={item.key} className={cn("flex items-center gap-3 bg-surface-2 rounded-lg px-3 py-2.5", isAdmin ? "cursor-pointer" : "cursor-not-allowed opacity-70")}>
+                        <input
+                          type="checkbox"
+                          checked={notificationPrefs[item.key]}
+                          disabled={!isAdmin || notifSavingKey === item.key}
+                          onChange={(e) => toggleNotification(item.key, e.target.checked)}
+                          className="accent-o2-green"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-ink">{item.label}</p>
+                          <p className="text-[10px] text-ink-dim">{item.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+
+          {/* Save button */}
+          {isAdmin && (
+            <button
+              onClick={saveSlack}
+              disabled={slackSaving || (!slackToken && !slackConfigured && Object.keys(slackUserIds).length === 0)}
+              className="w-full flex items-center justify-center gap-2 bg-o2-green text-bg font-bold py-3 px-4 rounded-xl hover:bg-o2-green-bright transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save size={16} />
+              {slackSaving ? "Salvando..." : "Salvar configurações Slack"}
+            </button>
+          )}
         </div>
-
-        {/* Save button */}
-        <button
-          onClick={saveSlack}
-          disabled={slackSaving || (!slackToken && !slackConfigured && Object.keys(slackUserIds).length === 0)}
-          className="w-full flex items-center justify-center gap-2 bg-o2-green text-bg font-bold py-3 px-4 rounded-xl hover:bg-o2-green-bright transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Save size={16} />
-          {slackSaving ? "Salvando..." : "Salvar configurações Slack"}
-        </button>
-      </div>
-
+      )}
     </div>
   );
 }
