@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getCalendarEvents, getAllTasks, getUsers } from "@/lib/queries";
 import { CalendarGrid } from "@/components/CalendarGrid";
 
@@ -72,7 +73,8 @@ export default async function CalendarPage({
   searchParams: Promise<{ year?: string; month?: string }>;
 }) {
   const session = await auth();
-  const squadId = session!.user.squadId;
+  if (!session) redirect("/login");
+  const squadId = session.user.squadId;
   const params = await searchParams;
   const now = new Date();
   const year = parseInt(params.year ?? String(now.getFullYear()));

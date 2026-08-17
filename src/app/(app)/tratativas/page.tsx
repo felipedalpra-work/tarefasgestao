@@ -1,10 +1,12 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getTratativas, getUsers, getClientsTable } from "@/lib/queries";
 import { TratativasBoard } from "./TratativasBoard";
 
 export default async function TratativasPage() {
   const session = await auth();
-  const squadId = session!.user.squadId;
+  if (!session) redirect("/login");
+  const squadId = session.user.squadId;
   const [tratativas, users, clients] = await Promise.all([getTratativas(squadId), getUsers(squadId), getClientsTable(squadId)]);
 
   return (

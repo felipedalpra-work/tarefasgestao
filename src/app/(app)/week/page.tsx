@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getAllTasks } from "@/lib/queries";
 import { format, isToday, isTomorrow, differenceInCalendarDays } from "date-fns";
@@ -28,8 +29,9 @@ type Task = Awaited<ReturnType<typeof getAllTasks>>[number];
 
 export default async function WeekPage() {
   const session = await auth();
-  const userId = session?.user?.id ?? "";
-  const allTasks = await getAllTasks(session!.user.squadId);
+  if (!session) redirect("/login");
+  const userId = session.user.id;
+  const allTasks = await getAllTasks(session.user.squadId);
   const mine = allTasks.filter((t) => t.assigneeId === userId && t.status !== "done");
 
   const now = new Date();

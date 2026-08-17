@@ -1,10 +1,12 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getUsers } from "@/lib/queries";
 import { EquipeClient } from "./EquipeClient";
 
 export default async function EquipePage() {
   const session = await auth();
-  const squadId = session!.user.squadId;
+  if (!session) redirect("/login");
+  const squadId = session.user.squadId;
   const users = await getUsers(squadId);
 
   return (

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getAllTasks, getUsers, getClientsOverview } from "@/lib/queries";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -38,8 +39,9 @@ const statusConfig = {
 
 export default async function DashboardPage() {
   const session = await auth();
-  const userId = session?.user?.id ?? "";
-  const { myTasks, allTasks, productivity, topClients, maxClientTasks, users } = await getStats(session!.user.squadId, userId);
+  if (!session) redirect("/login");
+  const userId = session.user.id;
+  const { myTasks, allTasks, productivity, topClients, maxClientTasks, users } = await getStats(session.user.squadId, userId);
 
   const counts = {
     todo: myTasks.filter((t) => t.status === "todo").length,

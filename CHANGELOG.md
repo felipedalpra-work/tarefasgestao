@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-13 (bateria de regressão completa antes de liberar pra outros squads + correção de robustez)
+
+- Pedido do usuário: rodar testes de verdade garantindo que está tudo certo antes de anunciar a plataforma pros outros squads. Escrita e rodada uma suite de 47 checagens reais contra o servidor (mesmo banco Neon compartilhado dev+prod de sempre — não existe um Postgres local separado neste projeto, confirmado no `.env`), cobrindo tudo que mudou nas últimas etapas: isolamento multi-tenant (2 squads adversariais com cliente de mesmo nome, tarefa, automação — nada vaza entre eles), signup (slugs únicos, squad novo nasce vazio), ciclo de vida completo de convite (criar → aceitar por link → reenviar invalidando o token antigo → sobreviver à remoção do membro), as 13 restrições admin-only (excluir cliente, controlar automação, remover/promover gente, todas as configs de squad), webhook do n8n resolvendo por secret, e o onboarding (nasce pendente, aparece, conclui, some). Todas as 47 passaram. Squads/usuários de teste removidos depois — confirmado que só sobraram os 3 squads reais (O2, CFO partners, Squadito).
+- **Achado durante o teste, corrigido**: 6 páginas (`dashboard`, `week`, `tratativas`, `clientes`, `calendar`, `equipe`) confiavam que o layout já tinha barrado sessão nula (`session!.user...`, non-null assertion) em vez de checar explicitamente — sob certas condições de renderização do Next 16, isso gerava um erro feio no log do servidor pra requisição sem sessão (o redirect pro `/login` ainda acontecia certo no final, mas com um `TypeError` sujando o log no meio do caminho). Todas as 6 ganharam a checagem explícita `if (!session) redirect("/login")`, mesmo padrão já usado no layout.
+- **Veredito**: pode liberar pros outros squads — nenhuma falha de isolamento, permissão ou fluxo encontrada.
+
 ## 2026-08-13 (onboarding animado no primeiro login — fecha o plano de 5 etapas)
 
 - Última etapa do plano: nada guiava quem acabou de criar o squad (ou acabou de aceitar um convite) a configurar o essencial — a pessoa caía direto no dashboard vazio.
