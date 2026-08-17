@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-17 (onboarding vira um tour em formato de chat, "conduzido" pelo assistente)
+
+- Pedido do usuário: o onboarding devia passar pelas funcionalidades da plataforma num formato de "showroom", como se um agente de IA estivesse conduzindo a apresentação — mantendo a coleta de Google/Slack já existente.
+- Confirmado com o usuário: texto fixo/roteirizado (sem chamar o Groq de verdade — evita gastar a cota diária já compartilhada com Meet Recap/assistente) e cobertura curada (não as ~11 telas, só os módulos mais importantes do dia a dia).
+- `src/components/OnboardingGate.tsx` reescrito: em vez de um painel cheio por etapa, agora é uma **transcrição de chat** dentro do mesmo cartão (visual idêntico ao `AiAssistant.tsx` — cabeçalho "Assistente O2", balões `bg-surface-2`, indicador "digitando…" com o mesmo `Loader2` giratório) que vai acumulando uma mensagem por etapa conforme a pessoa avança, em vez de trocar de tela.
+- Roteiro: boas-vindas → Tarefas/Kanban → Clientes → Meet Recaps + Sugestões da IA → Equipe → o próprio Assistente de IA → conectar Google → (só admin) Slack → concluído. Sempre pulável, nunca bloqueia o resto do app — mesmo comportamento de antes.
+- Validado: typecheck/lint limpos; teste real confirmando que a transcrição aparece certo no HTML renderizado no servidor (persona + primeira mensagem, com o nome do squad certo), que só a 1ª mensagem vem revelada antes de qualquer clique, e que concluir via `PATCH /api/users/me/onboarding` continua funcionando e escondendo o tour na visita seguinte.
+
 ## 2026-08-17 (perfil Owner: dashboard cross-squad de métricas da plataforma)
 
 - Pedido do usuário: ele roda a plataforma como um todo (não só o squad da O2), e quer um dashboard vendo dado de uso agregado de **todos** os squads — métricas por funcionalidade, clientes, etc. Isso é uma exceção deliberada ao isolamento entre squads que validamos na bateria de regressão — desenhada com cuidado pra não virar uma porta acidental.
