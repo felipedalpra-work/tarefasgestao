@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-17 (link "Painel da plataforma" no menu, só pra quem é owner)
+
+- Usuário perguntou como acessar `/owner` sem digitar a URL na mão. Adicionado um link discreto ("Painel da plataforma", ícone de coroa) no rodapé do menu lateral, acima de "Sair" — só aparece pra quem tem `PlatformOwner` (hoje, Gustavo e Felipe). Continua sem aparecer pra ninguém mais, mantendo a decisão original de não ter uma UI de auto-concessão.
+- Validado: link ausente pra sessão comum, aparece na mesma sessão assim que o acesso é concedido (sem re-login), aponta pra `/owner`.
+
 ## 2026-08-17 (onboarding passa a navegar pelas telas reais em vez de ficar num modal isolado)
 
 - Correção pedida pelo usuário logo depois do tour em chat: enquanto o assistente falava sobre o Kanban, a pessoa via só o texto — não a tela de Kanban de verdade. "Tem que estar aparecendo a página pro usuário."

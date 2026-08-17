@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles, ChevronDown, Zap, Users } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles, ChevronDown, Zap, Users, Crown } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationsBell } from "./NotificationsBell";
@@ -60,6 +60,8 @@ const STORAGE_KEY = "sidebar-open-groups";
 
 export function Sidebar() {
   const path = usePathname();
+  const { data: session } = useSession();
+  const isOwner = session?.user?.isOwner === true;
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
@@ -193,7 +195,19 @@ export function Sidebar() {
       </nav>
 
       {/* Sign out */}
-      <div className="px-3 pb-4 border-t border-surface-3 pt-4">
+      <div className="px-3 pb-4 border-t border-surface-3 pt-4 space-y-1">
+        {isOwner && (
+          <Link
+            href="/owner"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+              path === "/owner" ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink hover:bg-surface-3"
+            )}
+          >
+            <Crown size={16} />
+            Painel da plataforma
+          </Link>
+        )}
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-ink-mid hover:text-red-400 hover:bg-red-400/10 transition-all w-full"
