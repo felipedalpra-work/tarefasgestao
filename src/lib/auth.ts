@@ -60,11 +60,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // virou admin/membro na aba Equipe) sem precisar deslogar e logar de novo.
       const userId = (token.id as string | undefined) ?? token.sub;
       if (userId) {
-        const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { squadId: true, role: true } });
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { squadId: true, role: true, platformOwner: true },
+        });
         if (dbUser) {
           token.id = userId;
           token.squadId = dbUser.squadId;
           token.role = dbUser.role;
+          token.isOwner = !!dbUser.platformOwner;
         }
       }
       // quando conecta Google, salva o token no banco
@@ -96,6 +100,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token?.id) session.user.id = token.id as string;
       if (token?.squadId) session.user.squadId = token.squadId as string;
       if (token?.role) session.user.role = token.role as string;
+      session.user.isOwner = token?.isOwner === true;
       return session;
     },
     async signIn({ account, profile }) {

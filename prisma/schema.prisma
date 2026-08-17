@@ -42,6 +42,7 @@ model User {
   createdTratativas  Tratativa[] @relation("TratativaCreatedBy")
   uploadedRecaps     MeetRecap[] @relation("UploadedRecaps")
   assistantMessages  AssistantMessage[]
+  platformOwner      PlatformOwner?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -79,6 +80,16 @@ model Invite {
   createdAt     DateTime  @default(now())
 
   @@index([squadId])
+}
+
+// Acesso de dono da plataforma (cross-squad, dashboard de métricas globais). Só
+// gerenciável manualmente (script/SQL direto) — nunca por UI, nunca auto-concedível
+// por um admin de squad. Deliberadamente fora de SCOPED_MODELS (tenant-prisma.ts) —
+// nunca deve passar por forSquad().
+model PlatformOwner {
+  userId    String   @id
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {
