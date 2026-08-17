@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-17 (onboarding passa a navegar pelas telas reais em vez de ficar num modal isolado)
+
+- Correção pedida pelo usuário logo depois do tour em chat: enquanto o assistente falava sobre o Kanban, a pessoa via só o texto — não a tela de Kanban de verdade. "Tem que estar aparecendo a página pro usuário."
+- `OnboardingGate` deixou de ser um modal `fixed inset-0` que cobre a tela inteira (com o fundo animado `LoginFX` do login) — agora é um **painel flutuante não-bloqueante** (canto superior direito, mesmo espírito do botão do assistente real), e cada passo do tour **navega de verdade** pra página daquela funcionalidade: Kanban → `/kanban`, Clientes → `/clientes`, Meet Recaps → `/recaps`, Equipe → `/equipe`, Google/Slack → `/settings`. A pessoa vê a tela real por trás do balão enquanto lê sobre ela.
+- Continua sempre pulável e persiste o passo em `localStorage` (sobrevive ao redirect de "Conectar Google").
+- Validado: typecheck/lint limpos; teste real confirmando que o painel aparece corretamente em 8 páginas diferentes (dashboard, kanban, clientes, recaps, equipe, settings, tratativas, calendar) sem quebrar nenhuma, e que o conteúdo real do Kanban e o balão do onboarding aparecem juntos na mesma resposta HTML — prova de que não é mais bloqueio de tela cheia.
+
 ## 2026-08-17 (onboarding vira um tour em formato de chat, "conduzido" pelo assistente)
 
 - Pedido do usuário: o onboarding devia passar pelas funcionalidades da plataforma num formato de "showroom", como se um agente de IA estivesse conduzindo a apresentação — mantendo a coleta de Google/Slack já existente.
