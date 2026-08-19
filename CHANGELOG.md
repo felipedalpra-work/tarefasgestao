@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-17 ("Nova Tarefa" ganha a opção de atribuir ao cliente)
+
+- Usuário reportou: ao criar tarefa manualmente, o campo "Responsável" só listava gente do squad — sem jeito de marcar que quem deve a próxima ação é o próprio cliente (ex: "cliente entrega para a O2"). Esse recurso já existia na edição de sugestões da IA (`/sugestoes-ia`), só faltava na criação manual (`NewTaskModal`).
+- Quando "Cliente entrega para a O2" é escolhido no campo Entrega, o "Responsável" ganha uma opção extra "Cliente (nome do cliente)" — reaproveitando o mesmo sentinel/convenção já usado em `/sugestoes-ia` (`assigneeId: null` + `noAssignee: true` na criação, pra não cair no padrão de "responsável = quem criou"). Se a Entrega ou o Cliente mudarem de um jeito que isso deixe de fazer sentido, volta sozinho pro responsável padrão.
+- Validado: typecheck/lint limpos; teste real criando uma tarefa com esse payload exato e confirmando no banco que `assigneeId` fica `null` (não vira automaticamente quem criou) e `deliverTo` salva como `"o2"`.
+
 ## 2026-08-17 (campos de descrição param de cortar texto — cresce junto com o conteúdo)
 
 - Usuário mandou print de um campo de "Descrição" (edição de sugestão da IA) onde o texto ficava cortado, sem dar pra ver tudo o que tinha escrito.

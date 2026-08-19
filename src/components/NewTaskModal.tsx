@@ -7,6 +7,10 @@ import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 type User = { id: string; name?: string | null; email: string };
 
+// Mesmo sentinel já usado na edição de sugestões da IA (src/app/(app)/sugestoes-ia/page.tsx)
+// — "responsável" é o cliente, não ninguém do squad (assigneeId vai null na criação).
+const CLIENT_CHOICE = "__client__";
+
 export function NewTaskModal({
   users,
   currentUserId,
@@ -38,10 +42,22 @@ export function NewTaskModal({
       .catch(() => {});
   }, []);
 
+  // "Cliente" como responsável só faz sentido quando é o cliente que deve algo pra
+  // O2 (deliverTo "o2") — se isso deixar de valer, volta pro responsável padrão.
+  function updateClient(value: string) {
+    setClient(value);
+    if (assigneeId === CLIENT_CHOICE && !(deliverTo === "o2" && value.trim())) setAssigneeId(currentUserId);
+  }
+  function updateDeliverTo(value: string) {
+    setDeliverTo(value);
+    if (assigneeId === CLIENT_CHOICE && !(value === "o2" && client.trim())) setAssigneeId(currentUserId);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
     setLoading(true);
+    const isClientChoice = assigneeId === CLIENT_CHOICE;
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -49,7 +65,8 @@ export function NewTaskModal({
         title,
         description,
         priority,
-        assigneeId,
+        assigneeId: isClientChoice ? null : assigneeId,
+        noAssignee: isClientChoice,
         dueDate: dueDate || null,
         client: client.trim() || null,
         deliverTo: deliverTo || null,
@@ -131,7 +148,7 @@ export function NewTaskModal({
               <input
                 list="client-options"
                 value={client}
-                onChange={(e) => setClient(e.target.value)}
+                onChange={(e) => updateClient(e.target.value)}
                 placeholder="Opcional"
                 className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder-ink-faint focus:outline-none focus:border-o2-green transition-colors"
               />
@@ -160,7 +177,7 @@ export function NewTaskModal({
               <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Entrega</label>
               <select
                 value={deliverTo}
-                onChange={(e) => setDeliverTo(e.target.value)}
+                onChange={(e) => updateDeliverTo(e.target.value)}
                 className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
               >
                 <option value="">Interna (não aparece no calendário)</option>
@@ -182,6 +199,9 @@ export function NewTaskModal({
                   {u.name || u.email}
                 </option>
               ))}
+              {deliverTo === "o2" && client.trim() && (
+                <option value={CLIENT_CHOICE}>Cliente ({client.trim()})</option>
+              )}
             </select>
           </div>
 
