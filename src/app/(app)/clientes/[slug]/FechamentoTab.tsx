@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { toast } from "@/components/Toaster";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 type Fechamento = {
   year: number;
@@ -123,24 +124,24 @@ export function FechamentoTab({ client }: { client: string }) {
 
       <div>
         <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Pendências anotadas</label>
-        <textarea
+        <AutoGrowTextarea
           key={`pendencias-${selected.year}-${selected.month}`}
           defaultValue={current.pendenciasAnotadas ?? ""}
           onBlur={(e) => e.target.value !== (current.pendenciasAnotadas ?? "") && patch({ pendenciasAnotadas: e.target.value || null })}
           rows={2}
-          className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green/50 resize-none"
+          className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green/50"
         />
       </div>
 
       <div>
         <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Maturidade do fechamento</label>
-        <textarea
+        <AutoGrowTextarea
           key={`maturidade-${selected.year}-${selected.month}`}
           defaultValue={current.maturidade ?? ""}
           onBlur={(e) => e.target.value !== (current.maturidade ?? "") && patch({ maturidade: e.target.value || null })}
           rows={2}
           placeholder="Avaliação livre: o quanto o fechamento deste mês está maduro/confiável"
-          className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none"
+          className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
         />
       </div>
 

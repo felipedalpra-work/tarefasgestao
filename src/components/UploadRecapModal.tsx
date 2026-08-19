@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Upload, X, FileText, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 export function UploadRecapModal({
   onCancel,
@@ -94,12 +95,13 @@ export function UploadRecapModal({
               </label>
             </div>
             {fileName && <p className="text-[11px] text-ink-faint mb-1.5">{fileName}</p>}
-            <textarea
+            <AutoGrowTextarea
               value={text}
               onChange={(e) => { setText(e.target.value); setFileName(null); setDuplicate(null); }}
               placeholder="Cole aqui o texto da transcrição, ou escolha um arquivo acima…"
               rows={8}
-              className="w-full bg-surface border border-surface-3 rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none font-mono"
+              maxHeight={420}
+              className="w-full bg-surface border border-surface-3 rounded-xl px-3 py-2 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 font-mono"
             />
             {tooShort && <p className="text-[11px] text-yellow-400 mt-1">Muito curto — a IA precisa de mais conteúdo pra identificar tarefas.</p>}
           </div>

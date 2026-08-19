@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "./Toaster";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 type User = { id: string; name?: string | null; email: string };
 
@@ -90,12 +91,12 @@ export function NewTaskModal({
 
           <div>
             <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Descrição</label>
-            <textarea
+            <AutoGrowTextarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detalhes adicionais..."
               rows={3}
-              className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder-ink-faint focus:outline-none focus:border-o2-green transition-colors resize-none"
+              className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder-ink-faint focus:outline-none focus:border-o2-green transition-colors"
             />
           </div>
 

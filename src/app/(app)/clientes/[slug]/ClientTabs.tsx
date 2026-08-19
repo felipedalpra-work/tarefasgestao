@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck, Plus, X } from "lucide-react";
 import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { OnboardingTab } from "./OnboardingTab";
 import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
@@ -668,22 +669,23 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
             <>
               <div>
                 <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Contatos</label>
-                <textarea
+                <AutoGrowTextarea
                   value={contacts}
                   onChange={(e) => setContacts(e.target.value)}
                   rows={3}
                   placeholder={"Nome — email — telefone\nUm contato por linha"}
-                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-3 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none"
+                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-3 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
                 />
               </div>
               <div>
                 <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Notas do cliente</label>
-                <textarea
+                <AutoGrowTextarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={8}
+                  maxHeight={480}
                   placeholder="Contexto, preferências, acordos, histórico…"
-                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-3 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none"
+                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-3 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
                 />
               </div>
               <button

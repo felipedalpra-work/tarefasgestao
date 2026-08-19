@@ -4,6 +4,14 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-17 (campos de descrição param de cortar texto — cresce junto com o conteúdo)
+
+- Usuário mandou print de um campo de "Descrição" (edição de sugestão da IA) onde o texto ficava cortado, sem dar pra ver tudo o que tinha escrito.
+- Achado: era um padrão sistêmico, não um caso isolado — praticamente todo campo de texto livre do app (`rows` fixo + `resize-none`) tinha o mesmo problema: o navegador deixa rolar por dentro, mas sem nenhuma barra visível a maioria das pessoas nem percebe que dá pra rolar, e sente como "cortado".
+- **Novo `src/components/AutoGrowTextarea.tsx`**: cresce junto com o texto (até uma altura máxima, aí sim passa a rolar por dentro — pra colar uma transcrição inteira não virar uma caixa gigante) — substitui `resize-none` na maioria dos campos.
+- Trocado em **9 lugares**: edição de sugestão da IA (`/sugestoes-ia`, o do print), Meet Recap (`/recaps`), nova tarefa e edição de tarefa (`NewTaskModal`/`TaskDetailPanel`), Contatos/Notas do cliente (`ClientTabs`), Pendências/Maturidade do fechamento (`FechamentoTab`), Plano de ação da tratativa (`TratativaCard`), nova tratativa (`NewTratativaForm`), e colar transcrição manual (`UploadRecapModal`). Deixados de fora de propósito: o campo de mensagem do assistente de IA e o de comentário de tarefa — são caixas de conversa curtas (Enter envia), não campos de descrição longa.
+- Validado: typecheck/lint limpos (só avisos pré-existentes, confirmados via `git stash`); 6 páginas reais (Kanban, Clientes, Meet Recaps, Sugestões da IA, Tratativas, detalhe de cliente) testadas autenticadas, todas OK.
+
 ## 2026-08-17 (link "Painel da plataforma" no menu, só pra quem é owner)
 
 - Usuário perguntou como acessar `/owner` sem digitar a URL na mão. Adicionado um link discreto ("Painel da plataforma", ícone de coroa) no rodapé do menu lateral, acima de "Sair" — só aparece pra quem tem `PlatformOwner` (hoje, Gustavo e Felipe). Continua sem aparecer pra ninguém mais, mantendo a decisão original de não ter uma UI de auto-concessão.

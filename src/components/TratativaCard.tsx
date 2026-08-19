@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 export type TratativaData = {
   id: string;
@@ -163,12 +164,12 @@ export function TratativaCard({
 
       <div>
         <label className="text-xs text-ink-faint block mb-1">Plano de ação</label>
-        <textarea
+        <AutoGrowTextarea
           defaultValue={tratativa.planoDeAcao ?? ""}
           rows={2}
           onBlur={(e) => e.target.value !== (tratativa.planoDeAcao ?? "") && patch({ planoDeAcao: e.target.value || null })}
           placeholder="Ação combinada com o cliente"
-          className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none"
+          className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
         />
       </div>
 

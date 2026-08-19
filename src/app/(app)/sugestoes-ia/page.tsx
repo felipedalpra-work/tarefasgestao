@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 type SuggestionStatus = "pending" | "accepted" | "edited" | "rejected" | "duplicate";
 
@@ -399,11 +400,11 @@ export default function SugestoesIaPage() {
                     </div>
                     <div>
                       <label className="text-xs text-ink-dim block mb-1">Descrição</label>
-                      <textarea
+                      <AutoGrowTextarea
                         value={draft.description}
                         onChange={(e) => setDraft((d) => d && { ...d, description: e.target.value })}
                         rows={2}
-                        className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 resize-none"
+                        className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">

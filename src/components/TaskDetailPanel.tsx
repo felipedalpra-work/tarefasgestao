@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn, priorityColor, priorityLabel, statusLabel, dueDateOnly, isTaskOverdue } from "@/lib/utils";
 import { toast } from "./Toaster";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 type Comment = {
@@ -370,8 +371,8 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
             </div>
             <div>
               <label className="text-xs text-ink-dim block mb-1">Descrição</label>
-              <textarea value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={3}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 resize-none" />
+              <AutoGrowTextarea value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={3}
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

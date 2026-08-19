@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "@/components/Toaster";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import type { TratativaData } from "@/components/TratativaCard";
 
 export function NewTratativaForm({
@@ -112,12 +113,12 @@ export function NewTratativaForm({
 
       <div>
         <label className="text-xs text-ink-faint block mb-1">Descrição</label>
-        <textarea
+        <AutoGrowTextarea
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
           rows={2}
           placeholder="Contexto do que aconteceu"
-          className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none"
+          className="w-full bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
         />
       </div>
 

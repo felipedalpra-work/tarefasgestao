@@ -9,6 +9,7 @@ import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
 import { UploadRecapModal } from "@/components/UploadRecapModal";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 type EditForm = {
   title: string;
@@ -380,11 +381,11 @@ function RecapsPageInner() {
                               onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
                               className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 text-sm text-ink focus:outline-none focus:border-o2-green/50"
                             />
-                            <textarea
+                            <AutoGrowTextarea
                               value={editForm.description}
                               onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                               rows={2}
-                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-o2-green/50 resize-none"
+                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-o2-green/50"
                             />
                             <div className="flex flex-wrap items-center gap-2">
                               <select
