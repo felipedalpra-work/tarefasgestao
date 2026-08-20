@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-17 (corrige descoberta da opção "Cliente" como responsável)
+
+- A versão anterior só mostrava "Cliente" no Responsável depois de DOIS passos manuais: preencher Cliente e também escolher "Cliente entrega para a O2" em Entrega. Usuário reportou que "não está funcionando" — testou só preenchendo Cliente (sem mexer em Entrega ainda) e a opção não apareceu.
+- Invertida a dependência: agora "Cliente (nome)" aparece no Responsável assim que o campo Cliente é preenchido — não depende mais de mexer em Entrega antes. Escolher "Cliente" como responsável já ajusta a Entrega pra "Cliente entrega para a O2" sozinho (continua dando pra mudar depois). Sem cliente preenchido, aparece uma dica: "Preencha o Cliente acima pra poder atribuir a tarefa a ele."
+- Validado: typecheck/lint limpos. A interação em si (opção aparecendo ao digitar, seleção sincronizando a Entrega) é lógica client-side pura — não tenho como simular clique/digitação num navegador real aqui, só confirmei que a tela continua carregando normalmente.
+
 ## 2026-08-17 ("Nova Tarefa" ganha a opção de atribuir ao cliente)
 
 - Usuário reportou: ao criar tarefa manualmente, o campo "Responsável" só listava gente do squad — sem jeito de marcar que quem deve a próxima ação é o próprio cliente (ex: "cliente entrega para a O2"). Esse recurso já existia na edição de sugestões da IA (`/sugestoes-ia`), só faltava na criação manual (`NewTaskModal`).

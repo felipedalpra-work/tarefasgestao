@@ -42,15 +42,20 @@ export function NewTaskModal({
       .catch(() => {});
   }, []);
 
-  // "Cliente" como responsável só faz sentido quando é o cliente que deve algo pra
-  // O2 (deliverTo "o2") — se isso deixar de valer, volta pro responsável padrão.
+  // "Cliente" como responsável só precisa de um nome de cliente preenchido — não
+  // depende de mexer no campo Entrega primeiro. Escolher "Cliente" aqui já ajusta
+  // a Entrega pra "Cliente entrega para a O2" sozinho (mas dá pra mudar depois).
   function updateClient(value: string) {
     setClient(value);
-    if (assigneeId === CLIENT_CHOICE && !(deliverTo === "o2" && value.trim())) setAssigneeId(currentUserId);
+    if (assigneeId === CLIENT_CHOICE && !value.trim()) setAssigneeId(currentUserId);
   }
   function updateDeliverTo(value: string) {
     setDeliverTo(value);
-    if (assigneeId === CLIENT_CHOICE && !(value === "o2" && client.trim())) setAssigneeId(currentUserId);
+    if (assigneeId === CLIENT_CHOICE && value !== "o2") setAssigneeId(currentUserId);
+  }
+  function updateAssignee(value: string) {
+    setAssigneeId(value);
+    if (value === CLIENT_CHOICE && deliverTo !== "o2") setDeliverTo("o2");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -191,7 +196,7 @@ export function NewTaskModal({
             <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Responsável</label>
             <select
               value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
+              onChange={(e) => updateAssignee(e.target.value)}
               className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
             >
               {users.map((u) => (
@@ -199,10 +204,13 @@ export function NewTaskModal({
                   {u.name || u.email}
                 </option>
               ))}
-              {deliverTo === "o2" && client.trim() && (
+              {client.trim() && (
                 <option value={CLIENT_CHOICE}>Cliente ({client.trim()})</option>
               )}
             </select>
+            {!client.trim() && (
+              <p className="text-xs text-ink-faint mt-1">Preencha o Cliente acima pra poder atribuir a tarefa a ele.</p>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">
