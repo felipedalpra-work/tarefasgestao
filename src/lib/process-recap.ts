@@ -1,14 +1,8 @@
 import { prisma } from "./prisma";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
-import Groq from "groq-sdk";
+import { getGroq, GROQ_MODEL } from "./groq";
 import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
-
-let groq: Groq | null = null;
-function getGroq() {
-  if (!groq) groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  return groq;
-}
 
 type SuggestedTask = {
   title?: string;
@@ -115,7 +109,7 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
 
   try {
     const completion = await getGroq().chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: GROQ_MODEL,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
       max_tokens: 2048,

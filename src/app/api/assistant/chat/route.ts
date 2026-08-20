@@ -2,14 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Groq, { RateLimitError } from "groq-sdk";
+import { getGroq, GROQ_MODEL } from "@/lib/groq";
 import { ASSISTANT_TOOLS, ASSISTANT_HISTORY_LIMIT, runTool } from "@/lib/assistant-tools";
 import { log } from "@/lib/logger";
-
-let groq: Groq | null = null;
-function getGroq() {
-  if (!groq) groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  return groq;
-}
 
 const SYSTEM_PROMPT = `Você é o assistente interno da O2 Squad Tasks, plataforma de gestão da equipe de CFO as a Service da O2 Inc.
 
@@ -66,7 +61,7 @@ export async function POST(req: NextRequest) {
       let completion;
       try {
         completion = await getGroq().chat.completions.create({
-          model: "llama-3.3-70b-versatile",
+          model: GROQ_MODEL,
           messages: conversation,
           tools: ASSISTANT_TOOLS,
           tool_choice: "auto",
@@ -85,7 +80,7 @@ export async function POST(req: NextRequest) {
         // conversa toda, tenta mais uma vez sem ferramentas, só pra dar alguma resposta
         await log("ai-assistant", "Groq rejeitou a chamada de ferramenta, tentando sem ferramentas", { level: "error", detail: String(err) });
         const fallback = await getGroq().chat.completions.create({
-          model: "llama-3.3-70b-versatile",
+          model: GROQ_MODEL,
           messages: conversation,
           temperature: 0.3,
           max_tokens: 1024,

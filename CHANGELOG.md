@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-20 (assistente de IA e extração de Meet Recap voltam a funcionar — Groq removeu o modelo do catálogo)
+
+- Usuário reportou erro ao consultar o assistente de IA. Log real (`PlatformLog`) mostrou um 404 `model_not_found` pra `llama-3.3-70b-versatile` — diferente dos erros de limite diário (429) já conhecidos, esse era novo: a Groq removeu a linha inteira de modelos Llama 3.3 do catálogo (confirmado consultando `GET /v1/models` da Groq direto, não é rate limit nem instabilidade passageira).
+- Substituído por `openai/gpt-oss-120b`, validado com chamadas reais antes de trocar em produção — tanto pro uso com tool-calling (assistente) quanto extração de JSON puro (Meet Recap). Outros candidatos testados e descartados: `groq/compound-mini` (não suporta tool-calling), `qwen/qwen3.6-27b` (retornou vazio, sem `tool_calls` nem `content`).
+- O nome do modelo estava hardcoded e duplicado em **5 arquivos separados** (`chat/route.ts`, `process-recap.ts`, mais 3 scripts de teste) — foi exatamente essa duplicação que deixou o problema mais fácil de corrigir pela metade. Criado `src/lib/groq.ts` como fonte única (`GROQ_MODEL` + `getGroq()`), os dois arquivos de produção agora importam de lá; os 3 scripts (`scripts/process-all-recaps.mjs`, `scripts/test-groq.mjs`, `scripts/test-process-recap.mjs`) continuam com a string literal (são `.mjs` standalone, fora do build do Next.js) mas todos atualizados.
+- Validado: typecheck/lint limpos; teste real de ponta a ponta rodando o código de produção de verdade (não só a SDK isolada) — `processRecap()` extraindo 2 sugestões de um recap sintético, e o assistente chamando `get_urgent_items` via `ASSISTANT_TOOLS`/`runTool` reais — squad/usuários/tarefas sintéticos removidos ao final.
+
 ## 2026-08-17 (corrige descoberta da opção "Cliente" como responsável)
 
 - A versão anterior só mostrava "Cliente" no Responsável depois de DOIS passos manuais: preencher Cliente e também escolher "Cliente entrega para a O2" em Entrega. Usuário reportou que "não está funcionando" — testou só preenchendo Cliente (sem mexer em Entrega ainda) e a opção não apareceu.
