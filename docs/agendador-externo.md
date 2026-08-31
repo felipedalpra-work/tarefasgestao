@@ -20,7 +20,15 @@ Actions — só o `task-reminders` precisa ser pontual.
 1. Criar conta gratuita em <https://cron-job.org> (UptimeRobot ou qualquer serviço de
    ping serve igual — o que importa é chamar a URL a cada 5 min).
 2. **Create cronjob** com:
-   - **URL:** `https://tarefasgestao-zeta.vercel.app/api/cron/task-reminders`
+   - **URL** — copiar com o `https://` e sem barra no fim:
+
+     ```
+     https://tarefasgestao-zeta.vercel.app/api/cron/task-reminders
+     ```
+
+     Sem o `https://`, o serviço assume `http://` e leva **308** (o Vercel redireciona
+     pra https, e o cron-job.org não segue redirect). Com barra no fim, o Next
+     redireciona igual. Nos dois casos o job nunca executa de verdade.
    - **Schedule:** every 5 minutes
    - **Request method:** GET
    - **Time zone:** America/Sao_Paulo (não muda nada num intervalo de 5 min, mas
@@ -57,6 +65,9 @@ Actions — só o `task-reminders` precisa ser pontual.
 - Resposta esperada: `{"ok":true,"job":"task-reminders"}` com HTTP 200.
 - HTTP 401 = secret errado, não configurado na Vercel, ou o toggle de Basic auth
   ligado por cima do header (ver aviso acima).
+- HTTP 308 = URL sem `https://` ou com barra no fim (ver passo 2). Comprovado:
+  `http://` responde 308 com `Location` da URL https completa, barra no fim responde
+  308 com `Location: /api/cron/task-reminders`, e a URL correta responde 200.
 - O histórico de execuções do próprio cron-job.org mostra os horários reais — é ali
   que se confirma a pontualidade.
 - Sinal no app: tarefa com horário marcado pra hoje gera notificação no sino e DM no
