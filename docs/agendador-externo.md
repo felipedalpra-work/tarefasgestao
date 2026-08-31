@@ -23,27 +23,40 @@ Actions — só o `task-reminders` precisa ser pontual.
    - **URL:** `https://tarefasgestao-zeta.vercel.app/api/cron/task-reminders`
    - **Schedule:** every 5 minutes
    - **Request method:** GET
-3. Autenticação — nas opções avançadas, o **jeito preferido** é mandar o header:
+   - **Time zone:** America/Sao_Paulo (não muda nada num intervalo de 5 min, mas
+     deixa o histórico legível)
+3. Autenticação: em **Headers**, adicionar
 
-   ```
-   Authorization: Bearer <CRON_SECRET>
-   ```
+   | Key | Value |
+   | --- | --- |
+   | `Authorization` | `Bearer <CRON_SECRET>` |
 
-   Se o plano gratuito não permitir header customizado, usar o secret na URL:
+   O `Bearer ` faz parte do valor. O plano gratuito do cron-job.org permite header
+   customizado, então é esse o caminho.
+
+   ⚠️ **Deixar o toggle "Requires HTTP authentication" DESLIGADO.** Ele é HTTP Basic
+   auth (usuário/senha) e ocupa o mesmo header `Authorization` que a rota precisa —
+   ligado, sobrescreve o Bearer e a chamada volta 401.
+
+4. Se algum dia o serviço usado não permitir header customizado, existe o fallback
+   de mandar o secret na URL:
 
    ```
    https://tarefasgestao-zeta.vercel.app/api/cron/task-reminders?key=<CRON_SECRET>
    ```
 
-   O `?key=` funciona igual, mas o secret aparece no histórico/log do serviço — só
-   usar se não tiver header.
-4. O valor do `<CRON_SECRET>` é o mesmo que já está nas env vars da Vercel (e no
-   `.env` local). Copiar de lá — não precisa criar um novo.
+   Funciona igual, mas o secret aparece no histórico/log do serviço — usar só nesse
+   caso.
+5. O valor do `<CRON_SECRET>` é o mesmo que já está nas env vars da Vercel (e no
+   `.env` local, `Get-Content .env | Select-String CRON_SECRET`). Copiar de lá — não
+   precisa criar um novo.
 
 ## Como saber se está funcionando
 
+- Usar o botão **TEST RUN** do cron-job.org antes de confiar no agendamento.
 - Resposta esperada: `{"ok":true,"job":"task-reminders"}` com HTTP 200.
-- HTTP 401 = secret errado (ou não configurado na Vercel).
+- HTTP 401 = secret errado, não configurado na Vercel, ou o toggle de Basic auth
+  ligado por cima do header (ver aviso acima).
 - O histórico de execuções do próprio cron-job.org mostra os horários reais — é ali
   que se confirma a pontualidade.
 - Sinal no app: tarefa com horário marcado pra hoje gera notificação no sino e DM no
