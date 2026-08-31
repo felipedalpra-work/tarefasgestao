@@ -2,6 +2,8 @@ import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
 import { notifyUser } from "./slack";
 import { isNotificationEnabled } from "./settings";
+import { brtNow, timeToMinutes } from "./utils";
+import { describeRecurrence } from "./recurrence";
 
 // Evita re-notificar todo mundo toda vez que o cron roda (2x/dia) — só 1 aviso
 // por dia pra cada combinação (type + link).
@@ -143,6 +145,57 @@ export async function checkStaleRecapSuggestions(squadId: string): Promise<numbe
   const message = `🤖 ${count} sugestão(ões) da IA aguardando revisão há mais de 3 dias`;
   await broadcast(squadId, users, "recap_pendente", message, "/sugestoes-ia", await isNotificationEnabled(squadId, "staleRecapSuggestions"));
   return count;
+}
+
+// "Hora de fazer": tarefa com horário marcado pra hoje cuja hora já chegou.
+//
+// Roda no cron de 5 em 5 minutos (job "task-reminders"), e a condição é "já passou
+// da hora" em vez de "está dentro da janela de 5 min" de propósito — o agendador do
+// GitHub Actions atrasa com frequência, e com janela fixa um atraso engoliria o
+// aviso do dia. O dedup por dia (alreadyNotifiedToday) garante um aviso só, mesmo
+// com o cron passando várias vezes depois da hora.
+export async function checkTaskDueTimes(squadId: string): Promise<number> {
+  const db = forSquad(squadId);
+  const { today, minutesOfDay } = brtNow();
+
+  // faixa do dia em vez de igualdade: dueDate normalmente é meia-noite UTC exata
+  // (vem de <input type="date">), mas tarefa criada por outra fonte pode ter hora
+  // embutida e ficaria de fora de um `dueDate: today`
+  const tomorrow = new Date(today);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+
+  const tasks = await db.task.findMany({
+    where: { dueTime: { not: null }, status: { not: "done" }, dueDate: { gte: today, lt: tomorrow } },
+    select: {
+      id: true, title: true, client: true, dueTime: true, assigneeId: true, createdById: true,
+      recurrence: true, recurrenceWeekdays: true,
+    },
+  });
+
+  const slackEnabled = await isNotificationEnabled(squadId, "taskDueTime");
+  let notified = 0;
+
+  for (const task of tasks) {
+    const due = timeToMinutes(task.dueTime);
+    if (due === null || minutesOfDay < due) continue; // ainda não deu a hora
+
+    // sem responsável (ex: tarefa do cliente) o aviso vai pra quem criou — senão
+    // uma rotina com horário marcado não avisaria ninguém
+    const userId = task.assigneeId ?? task.createdById;
+    const repeat = describeRecurrence(task.recurrence, task.recurrenceWeekdays);
+    const message = `⏰ ${task.dueTime} — hora de: ${task.title}${task.client ? ` (${task.client})` : ""}${repeat ? ` · ${repeat}` : ""}`;
+    await notifyOne(squadId, userId, `task_hora_${task.id}`, message, `/tasks?task=${task.id}`, slackEnabled);
+    notified++;
+  }
+
+  return notified;
+}
+
+export async function checkAllTaskDueTimes(): Promise<void> {
+  const squads = await prisma.squad.findMany({ select: { id: true } });
+  for (const { id: squadId } of squads) {
+    await checkTaskDueTimes(squadId).catch((e) => console.error(`[task-hora] squad ${squadId}:`, e));
+  }
 }
 
 export async function checkAllReminders(): Promise<void> {

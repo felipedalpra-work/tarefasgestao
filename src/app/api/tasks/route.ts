@@ -4,6 +4,8 @@ import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { sendNewTaskEmail } from "@/lib/email";
 import { notifyTaskAssigned } from "@/lib/slack";
+import { firstOccurrence, isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
+import { brtNow } from "@/lib/utils";
 
 export async function GET() {
   const session = await auth();
@@ -30,6 +32,21 @@ export async function POST(req: NextRequest) {
   const db = forSquad(session.user.squadId);
 
   const body = await req.json();
+
+  const recurrence = isValidRecurrence(body.recurrence) ? body.recurrence : null;
+  const recurrenceWeekdays = recurrence === "weekdays" ? normalizeWeekdays(body.recurrenceWeekdays) : [];
+  if (recurrence === "weekdays" && recurrenceWeekdays.length === 0) {
+    return NextResponse.json({ error: "Escolha pelo menos um dia da semana" }, { status: 400 });
+  }
+  if (body.dueTime && !isValidTime(body.dueTime)) {
+    return NextResponse.json({ error: "Horário inválido (use HH:MM)" }, { status: 400 });
+  }
+
+  // Série com recorrência mas sem prazo nunca geraria a próxima ocorrência nem
+  // dispararia lembrete — ancora na primeira data válida a partir de hoje.
+  const explicitDue = body.dueDate ? new Date(body.dueDate) : null;
+  const dueDate = explicitDue ?? (recurrence ? firstOccurrence(recurrence, recurrenceWeekdays, brtNow().today) : null);
+
   const task = await db.task.create({
     data: {
       squadId: session.user.squadId,
@@ -40,14 +57,16 @@ export async function POST(req: NextRequest) {
       // via deliverTo), não cai no padrão de "quem clicou criou/aceitou"
       assigneeId: body.noAssignee ? null : body.assigneeId || session.user.id,
       createdById: session.user.id,
-      dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      dueDate,
+      dueTime: body.dueTime || null,
       source: body.source || "manual",
       sourceRef: body.sourceRef || null,
       client: body.client || null,
       deliverTo: body.deliverTo || null,
       meetingTitle: body.meetingTitle || null,
       meetingDate: body.meetingDate ? new Date(body.meetingDate) : null,
-      recurrence: body.recurrence || null,
+      recurrence,
+      recurrenceWeekdays,
     },
     include: {
       assignee: { select: { id: true, name: true, email: true, image: true } },

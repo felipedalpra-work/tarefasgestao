@@ -136,7 +136,10 @@ model Task {
   meetingDate  DateTime? // data da reunião de origem
   clientDraftCreatedAt DateTime? // quando o rascunho de cobrança pro cliente foi criado (evita duplicar)
   sortOrder   Float     @default(0)
-  recurrence  String?   // "weekly" | "biweekly" | "monthly"
+  dueTime     String? // "HH:MM" no horário de Brasília — dueDate é só o dia (meia-noite UTC, ver dueDateOnly em src/lib/utils.ts), então a hora fica separada em vez de mudar a semântica de dueDate em todo o app
+  recurrence  String?   // "weekly" | "biweekly" | "monthly" | "weekdays"
+  recurrenceWeekdays Int[] @default([]) // 0=domingo..6=sábado — só usado quando recurrence = "weekdays" (ex: [2,5] = toda terça e sexta)
+  recurrenceSpawned  Boolean @default(false) // a próxima ocorrência desta já foi criada (por conclusão ou pelo cron), pra não duplicar a série
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   assignee    User?          @relation("AssignedTasks", fields: [assigneeId], references: [id])

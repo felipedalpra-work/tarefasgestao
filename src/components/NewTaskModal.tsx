@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import { WeekdayPicker } from "./WeekdayPicker";
+import { describeRecurrence } from "@/lib/recurrence";
 
 type User = { id: string; name?: string | null; email: string };
 
@@ -29,9 +31,11 @@ export function NewTaskModal({
   const [priority, setPriority] = useState("medium");
   const [assigneeId, setAssigneeId] = useState(currentUserId);
   const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
   const [client, setClient] = useState(defaultClient ?? "");
   const [deliverTo, setDeliverTo] = useState("");
   const [recurrence, setRecurrence] = useState("");
+  const [weekdays, setWeekdays] = useState<number[]>([]);
   const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -61,6 +65,10 @@ export function NewTaskModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    if (recurrence === "weekdays" && weekdays.length === 0) {
+      toast("Escolha pelo menos um dia da semana", "error");
+      return;
+    }
     setLoading(true);
     const isClientChoice = assigneeId === CLIENT_CHOICE;
     const res = await fetch("/api/tasks", {
@@ -73,9 +81,11 @@ export function NewTaskModal({
         assigneeId: isClientChoice ? null : assigneeId,
         noAssignee: isClientChoice,
         dueDate: dueDate || null,
+        dueTime: dueTime || null,
         client: client.trim() || null,
         deliverTo: deliverTo || null,
         recurrence: recurrence || null,
+        recurrenceWeekdays: recurrence === "weekdays" ? weekdays : [],
       }),
     });
     setLoading(false);
@@ -137,18 +147,6 @@ export function NewTaskModal({
             </div>
 
             <div>
-              <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Prazo</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
               <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Cliente</label>
               <input
                 list="client-options"
@@ -161,20 +159,59 @@ export function NewTaskModal({
                 {clientOptions.map((c) => <option key={c} value={c} />)}
               </datalist>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Prazo</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
+              />
+            </div>
 
             <div>
-              <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Recorrência</label>
-              <select
-                value={recurrence}
-                onChange={(e) => setRecurrence(e.target.value)}
+              <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Horário</label>
+              <input
+                type="time"
+                value={dueTime}
+                onChange={(e) => setDueTime(e.target.value)}
                 className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
-              >
-                <option value="">Nenhuma</option>
-                <option value="weekly">Semanal</option>
-                <option value="biweekly">Quinzenal</option>
-                <option value="monthly">Mensal</option>
-              </select>
+              />
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Recorrência</label>
+            <select
+              value={recurrence}
+              onChange={(e) => setRecurrence(e.target.value)}
+              className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
+            >
+              <option value="">Nenhuma</option>
+              <option value="weekdays">Em dias da semana (ex: terça e sexta)</option>
+              <option value="weekly">Semanal</option>
+              <option value="biweekly">Quinzenal</option>
+              <option value="monthly">Mensal</option>
+            </select>
+
+            {recurrence === "weekdays" && (
+              <div className="mt-2.5">
+                <WeekdayPicker value={weekdays} onChange={setWeekdays} />
+              </div>
+            )}
+
+            {recurrence && (
+              <p className="text-xs text-ink-faint mt-2">
+                {describeRecurrence(recurrence, weekdays, dueTime) || "Escolha os dias"}
+                {dueTime
+                  ? " — você recebe um aviso nesse horário e a próxima ocorrência é criada sozinha."
+                  : " — preencha o Horário pra receber o aviso na hora de fazer."}
+                {!dueDate && " Sem prazo, a série começa na próxima data válida."}
+              </p>
+            )}
           </div>
 
           {client.trim() && (

@@ -4,6 +4,9 @@ import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { recordTaskChanges } from "@/lib/activity";
 import { notifyTaskCompleted } from "@/lib/slack";
+import { isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
+import { spawnNextOccurrence } from "@/lib/task-recurrence";
+import { brtNow } from "@/lib/utils";
 
 const TASK_INCLUDE = {
   assignee: { select: { id: true, name: true, image: true } },
@@ -22,16 +25,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json(task);
 }
 
-function nextDueDate(current: Date | null, recurrence: string): Date | null {
-  const base = current ?? new Date();
-  const next = new Date(base);
-  if (recurrence === "weekly") next.setDate(next.getDate() + 7);
-  else if (recurrence === "biweekly") next.setDate(next.getDate() + 14);
-  else if (recurrence === "monthly") next.setMonth(next.getMonth() + 1);
-  else return null;
-  return next;
-}
-
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,6 +39,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   });
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // "" (Nenhuma) vira null; valor desconhecido é rejeitado em vez de virar null
+  // silenciosamente, senão um typo mataria a série sem ninguém perceber
+  let recurrence: string | null | undefined;
+  if (body.recurrence !== undefined) {
+    if (!body.recurrence) recurrence = null;
+    else if (isValidRecurrence(body.recurrence)) recurrence = body.recurrence;
+    else return NextResponse.json({ error: "Recorrência inválida" }, { status: 400 });
+  }
+  if (body.dueTime !== undefined && body.dueTime && !isValidTime(body.dueTime)) {
+    return NextResponse.json({ error: "Horário inválido (use HH:MM)" }, { status: 400 });
+  }
+  const effectiveRecurrence = recurrence !== undefined ? recurrence : before.recurrence;
+  let recurrenceWeekdays: number[] | undefined;
+  if (body.recurrenceWeekdays !== undefined || recurrence !== undefined) {
+    recurrenceWeekdays =
+      effectiveRecurrence === "weekdays"
+        ? normalizeWeekdays(body.recurrenceWeekdays ?? before.recurrenceWeekdays)
+        : [];
+    if (effectiveRecurrence === "weekdays" && recurrenceWeekdays.length === 0) {
+      return NextResponse.json({ error: "Escolha pelo menos um dia da semana" }, { status: 400 });
+    }
+  }
+
   const task = await db.task.update({
     where: { id },
     data: {
@@ -55,9 +71,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(body.priority && { priority: body.priority }),
       ...(body.assigneeId !== undefined && { assigneeId: body.assigneeId }),
       ...(body.dueDate !== undefined && { dueDate: body.dueDate ? new Date(body.dueDate) : null }),
+      ...(body.dueTime !== undefined && { dueTime: body.dueTime || null }),
       ...(body.client !== undefined && { client: body.client }),
       ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
-      ...(body.recurrence !== undefined && { recurrence: body.recurrence }),
+      ...(recurrence !== undefined && { recurrence }),
+      ...(recurrenceWeekdays !== undefined && { recurrenceWeekdays }),
     },
     include: TASK_INCLUDE,
   });
@@ -105,26 +123,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }).catch((e) => console.error("[slack]", e));
   }
 
-  // recorrência: ao concluir, cria a próxima ocorrência
-  if (body.status === "done" && before.status !== "done" && before.recurrence) {
-    const due = nextDueDate(before.dueDate, before.recurrence);
-    if (due) {
-      await db.task.create({
-        data: {
-          squadId: session.user.squadId,
-          title: before.title,
-          description: before.description,
-          priority: before.priority,
-          assigneeId: before.assigneeId,
-          createdById: before.createdById,
-          dueDate: due,
-          source: "recurrence",
-          client: before.client,
-          deliverTo: before.deliverTo,
-          recurrence: before.recurrence,
-        },
-      }).catch((e) => console.error("[recurrence]", e));
-    }
+  // Recorrência: ao concluir, cria a próxima ocorrência. O `recurrenceSpawned` do
+  // before é o que evita duplicar — sem ele, concluir → reabrir → concluir criava
+  // duas ocorrências, e o cron (que mantém a série viva mesmo sem ninguém concluir)
+  // criaria uma terceira. Quem gera de fato é spawnNextOccurrence.
+  if (body.status === "done" && before.status !== "done" && before.recurrence && !before.recurrenceSpawned) {
+    await spawnNextOccurrence(
+      { ...before, recurrence: recurrence !== undefined ? recurrence : before.recurrence },
+      brtNow().today
+    ).catch((e) => console.error("[recurrence]", e));
   }
 
   revalidateTag("tasks", "max");

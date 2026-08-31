@@ -8,7 +8,8 @@ export async function register() {
     const { default: cron } = await import("node-cron");
     const { syncAllUsers } = await import("./lib/gmail-sync");
     const { checkDeadlines } = await import("./lib/deadline-check");
-    const { checkAllReminders } = await import("./lib/reminders");
+    const { checkAllReminders, checkAllTaskDueTimes } = await import("./lib/reminders");
+    const { advanceRecurringTasks } = await import("./lib/task-recurrence");
     const { syncAllCalendars } = await import("./lib/calendar-sync");
     const { sendMeetingBriefings } = await import("./lib/meeting-briefing");
     const { sendWeeklyDigest } = await import("./lib/weekly-digest");
@@ -17,6 +18,13 @@ export async function register() {
     cron.schedule("*/5 * * * *", async () => {
       try { await syncAllUsers(); }
       catch (err) { console.error("[cron] gmail sync:", err); }
+    });
+
+    // tarefas recorrentes + lembrete de tarefa com horário marcado: a cada 5 minutos
+    // (mesma frequência do job "task-reminders" no GitHub Actions)
+    cron.schedule("*/5 * * * *", async () => {
+      try { await advanceRecurringTasks(); await checkAllTaskDueTimes(); }
+      catch (err) { console.error("[cron] task reminders:", err); }
     });
 
     // sincroniza Google Calendar a cada 30 minutos
@@ -52,6 +60,7 @@ export async function register() {
     });
 
     console.log("[cron] ✓ Gmail sync        — a cada 5 min");
+    console.log("[cron] ✓ Tarefas recorrentes + hora da tarefa — a cada 5 min");
     console.log("[cron] ✓ Calendar sync     — a cada 30 min");
     console.log("[cron] ✓ Alertas de prazo  — 8h e 17h");
     console.log("[cron] ✓ Briefing reunião  — 18h (para reuniões do dia seguinte)");

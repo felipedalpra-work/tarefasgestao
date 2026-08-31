@@ -7,7 +7,7 @@ name: Scheduled jobs
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # gmail-sync — a cada 5 min
+    - cron: "*/5 * * * *"  # gmail-sync + task-reminders — a cada 5 min
     - cron: "*/30 * * * *" # calendar-sync — a cada 30 min
     - cron: "0 11 * * *"   # deadlines — 8h BRT
     - cron: "0 20 * * *"   # deadlines — 17h BRT
@@ -19,41 +19,48 @@ on:
         description: "Job pra rodar manualmente"
         required: true
         type: choice
-        options: [gmail-sync, calendar-sync, deadlines, briefing, digest]
+        options: [gmail-sync, calendar-sync, task-reminders, deadlines, briefing, digest]
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Determina qual job rodar
+      - name: Determina qual(is) job(s) rodar
         id: pick
         run: |
           if [ -n "${{ github.event.inputs.job }}" ]; then
-            echo "job=${{ github.event.inputs.job }}" >> "$GITHUB_OUTPUT"
+            echo "jobs=${{ github.event.inputs.job }}" >> "$GITHUB_OUTPUT"
           else
             case "${{ github.event.schedule }}" in
-              "*/5 * * * *")  echo "job=gmail-sync" >> "$GITHUB_OUTPUT" ;;
-              "*/30 * * * *") echo "job=calendar-sync" >> "$GITHUB_OUTPUT" ;;
-              "0 11 * * *")   echo "job=deadlines" >> "$GITHUB_OUTPUT" ;;
-              "0 20 * * *")   echo "job=deadlines" >> "$GITHUB_OUTPUT" ;;
-              "0 21 * * *")   echo "job=briefing" >> "$GITHUB_OUTPUT" ;;
-              "0 11 * * 1")   echo "job=digest" >> "$GITHUB_OUTPUT" ;;
-              *) echo "job=gmail-sync" >> "$GITHUB_OUTPUT" ;;
+              # dois jobs no mesmo slot: duas entradas de cron idênticas não dariam pra
+              # distinguir aqui (github.event.schedule seria a mesma string), e uma
+              # segunda entrada */5 dobraria o consumo de minutos do Actions
+              "*/5 * * * *")  echo "jobs=gmail-sync task-reminders" >> "$GITHUB_OUTPUT" ;;
+              "*/30 * * * *") echo "jobs=calendar-sync" >> "$GITHUB_OUTPUT" ;;
+              "0 11 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
+              "0 20 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
+              "0 21 * * *")   echo "jobs=briefing" >> "$GITHUB_OUTPUT" ;;
+              "0 11 * * 1")   echo "jobs=digest" >> "$GITHUB_OUTPUT" ;;
+              *) echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
             esac
           fi
 
-      - name: Chama /api/cron/${{ steps.pick.outputs.job }}
+      - name: Chama /api/cron (${{ steps.pick.outputs.jobs }})
         env:
           APP_URL: https://tarefasgestao-zeta.vercel.app
         run: |
-          http_code=$(curl -s --max-time 60 -o response.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "$APP_URL/api/cron/${{ steps.pick.outputs.job }}")
-          echo "HTTP status: $http_code"
-          echo "Resposta:"
-          cat response.json
-          echo
-          if [ "$http_code" -ge 400 ]; then
-            echo "::error::Job ${{ steps.pick.outputs.job }} falhou com HTTP $http_code"
-            exit 1
-          fi
+          failed=0
+          for job in ${{ steps.pick.outputs.jobs }}; do
+            http_code=$(curl -s --max-time 60 -o response.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+              "$APP_URL/api/cron/$job")
+            echo "[$job] HTTP status: $http_code"
+            echo "[$job] Resposta:"
+            cat response.json
+            echo
+            if [ "$http_code" -ge 400 ]; then
+              echo "::error::Job $job falhou com HTTP $http_code"
+              failed=1
+            fi
+          done
+          exit $failed

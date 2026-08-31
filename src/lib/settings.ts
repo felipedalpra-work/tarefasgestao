@@ -160,6 +160,7 @@ export const NOTIFICATION_TYPES = [
   "taskAssigned",
   "taskCompleted",
   "taskReminder",
+  "taskDueTime",
   "commentMention",
   "tratativaOverdue",
   "onboardingDelay",
@@ -177,6 +178,7 @@ const DEFAULT_NOTIFICATION_PREFS: Record<NotificationType, boolean> = {
   taskAssigned: true,
   taskCompleted: true,
   taskReminder: true,
+  taskDueTime: true, // lembrete no horário marcado da tarefa (rotinas recorrentes)
   commentMention: true,
   tratativaOverdue: true,
   onboardingDelay: false, // já era só in-app antes desse painel existir

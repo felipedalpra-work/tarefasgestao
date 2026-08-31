@@ -70,6 +70,36 @@ export function dueDateOnly(date: string | Date): Date {
   return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
+// O servidor roda em UTC (Vercel) e a operação é toda no Brasil: comparar um horário
+// de tarefa ("09:00") com `new Date()` erraria em 3 horas, e "hoje" viraria o dia
+// seguinte depois das 21h. Devolve o dia de hoje em Brasília já na convenção do
+// `dueDate` (meia-noite UTC do dia, ver dueDateOnly) + quantos minutos do dia já
+// passaram. Usa Intl em vez de somar -3h fixo pra não quebrar se o horário de verão
+// voltar algum dia.
+export function brtNow(now: Date = new Date()): { today: Date; minutesOfDay: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return {
+    today: new Date(Date.UTC(get("year"), get("month") - 1, get("day"))),
+    minutesOfDay: get("hour") * 60 + get("minute"),
+  };
+}
+
+// "09:00" → 540. Retorna null se não for um horário válido.
+export function timeToMinutes(time: string | null | undefined): number | null {
+  if (!time || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
 export function isTaskOverdue(dueDate: string | Date | null | undefined, status: string): boolean {
   if (!dueDate || status === "done") return false;
   const today = new Date();

@@ -9,8 +9,10 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn, priorityColor, priorityLabel, statusLabel, dueDateOnly, isTaskOverdue } from "@/lib/utils";
+import { describeRecurrence } from "@/lib/recurrence";
 import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import { WeekdayPicker } from "./WeekdayPicker";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 type Comment = {
@@ -47,12 +49,6 @@ const STATUS_COLORS: Record<string, string> = {
 };
 const ALL_STATUSES = ["todo", "in_progress", "blocked", "done"];
 
-const RECURRENCE_LABELS: Record<string, string> = {
-  weekly: "Semanal",
-  biweekly: "Quinzenal",
-  monthly: "Mensal",
-};
-
 export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUpdated, users = [] }: Props) {
   const { data: session } = useSession();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -71,7 +67,8 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
-  const [editForm, setEditForm] = useState({ title: "", description: "", priority: "", dueDate: "", assigneeId: "", client: "", recurrence: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", priority: "", dueDate: "", dueTime: "", assigneeId: "", client: "", recurrence: "" });
+  const [editWeekdays, setEditWeekdays] = useState<number[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -94,10 +91,12 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       description: task.description ?? "",
       priority: task.priority,
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : "",
+      dueTime: task.dueTime ?? "",
       assigneeId: task.assignee?.id ?? "",
       client: task.client ?? "",
       recurrence: task.recurrence ?? "",
     });
+    setEditWeekdays(task.recurrenceWeekdays ?? []);
     fetch(`/api/tasks/${task.id}/comments`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setComments(data); });
@@ -130,6 +129,10 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
 
   async function saveEdit() {
     if (!task || saving) return;
+    if (editForm.recurrence === "weekdays" && editWeekdays.length === 0) {
+      toast("Escolha pelo menos um dia da semana", "error");
+      return;
+    }
     setSaving(true);
     const res = await fetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
@@ -139,9 +142,11 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
         description: editForm.description || null,
         priority: editForm.priority,
         dueDate: editForm.dueDate || null,
+        dueTime: editForm.dueTime || null,
         assigneeId: editForm.assigneeId || null,
         client: editForm.client.trim() || null,
         recurrence: editForm.recurrence || null,
+        recurrenceWeekdays: editForm.recurrence === "weekdays" ? editWeekdays : [],
       }),
     });
     if (res.ok) {
@@ -385,27 +390,44 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                 </select>
               </div>
               <div>
-                <label className="text-xs text-ink-dim block mb-1">Prazo</label>
-                <input type="date" value={editForm.dueDate} onChange={e => setEditForm(f => ({ ...f, dueDate: e.target.value }))}
-                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
                 <label className="text-xs text-ink-dim block mb-1">Cliente</label>
                 <input value={editForm.client} onChange={e => setEditForm(f => ({ ...f, client: e.target.value }))} placeholder="Nome do cliente"
                   className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-ink-dim block mb-1">Recorrência</label>
-                <select value={editForm.recurrence} onChange={e => setEditForm(f => ({ ...f, recurrence: e.target.value }))}
-                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50">
-                  <option value="">Nenhuma</option>
-                  <option value="weekly">Semanal</option>
-                  <option value="biweekly">Quinzenal</option>
-                  <option value="monthly">Mensal</option>
-                </select>
+                <label className="text-xs text-ink-dim block mb-1">Prazo</label>
+                <input type="date" value={editForm.dueDate} onChange={e => setEditForm(f => ({ ...f, dueDate: e.target.value }))}
+                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50" />
               </div>
+              <div>
+                <label className="text-xs text-ink-dim block mb-1">Horário</label>
+                <input type="time" value={editForm.dueTime} onChange={e => setEditForm(f => ({ ...f, dueTime: e.target.value }))}
+                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-ink-dim block mb-1">Recorrência</label>
+              <select value={editForm.recurrence} onChange={e => setEditForm(f => ({ ...f, recurrence: e.target.value }))}
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50">
+                <option value="">Nenhuma</option>
+                <option value="weekdays">Em dias da semana (ex: terça e sexta)</option>
+                <option value="weekly">Semanal</option>
+                <option value="biweekly">Quinzenal</option>
+                <option value="monthly">Mensal</option>
+              </select>
+              {editForm.recurrence === "weekdays" && (
+                <div className="mt-2.5">
+                  <WeekdayPicker value={editWeekdays} onChange={setEditWeekdays} />
+                </div>
+              )}
+              {editForm.recurrence && (
+                <p className="text-xs text-ink-faint mt-2">
+                  {describeRecurrence(editForm.recurrence, editWeekdays, editForm.dueTime) || "Escolha os dias"}
+                  {!editForm.dueTime && " — preencha o Horário pra receber o aviso na hora de fazer."}
+                </p>
+              )}
             </div>
             {users.length > 0 && (
               <div>
@@ -431,13 +453,21 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                 <MetaRow icon={Calendar} label="Prazo">
                   <span className={cn("text-xs", isOverdue ? "text-red-400" : "text-ink-soft")}>
                     {format(dueDateOnly(task.dueDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                    {task.dueTime && ` às ${task.dueTime}`}
                     {isOverdue && " · Atrasada"}
                   </span>
                 </MetaRow>
               )}
+              {!task.dueDate && task.dueTime && (
+                <MetaRow icon={Clock} label="Horário">
+                  <span className="text-xs text-ink-soft">{task.dueTime}</span>
+                </MetaRow>
+              )}
               {task.recurrence && (
                 <MetaRow icon={Repeat} label="Repete">
-                  <span className="text-xs text-ink-soft">{RECURRENCE_LABELS[task.recurrence] ?? task.recurrence}</span>
+                  <span className="text-xs text-ink-soft">
+                    {describeRecurrence(task.recurrence, task.recurrenceWeekdays, task.dueTime)}
+                  </span>
                 </MetaRow>
               )}
               {task.assignee ? (

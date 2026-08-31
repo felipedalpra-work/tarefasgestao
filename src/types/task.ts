@@ -6,10 +6,12 @@ export type TaskListItem = {
   status: string;
   priority: string;
   dueDate?: string | Date | null;
+  dueTime?: string | null; // "HH:MM" (horário de Brasília)
   client?: string | null;
   source: string;
   sortOrder?: number;
   recurrence?: string | null;
+  recurrenceWeekdays?: number[] | null;
   deliverTo?: string | null;
   meetingTitle?: string | null;
   meetingDate?: string | Date | null;

@@ -134,6 +134,7 @@ export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem
             <div className={cn("flex items-center gap-1 text-xs", isOverdue ? "text-red-400" : "text-ink-dim")}>
               <Calendar size={11} />
               {format(dueDateOnly(task.dueDate), "dd MMM", { locale: ptBR })}
+              {task.dueTime && ` ${task.dueTime}`}
             </div>
           )}
           {task.assignee ? (
