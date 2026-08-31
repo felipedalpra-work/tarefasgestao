@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { forSquad, type SquadPrisma } from "@/lib/tenant-prisma";
+import { getIgnoredClients, matchesIgnoredClient, removeIgnoredClient } from "@/lib/settings";
 
 // Lista de nomes de clientes conhecidos (carteira em ClientNote + eventos, recaps e tarefas —
 // ClientNote é a fonte de verdade de quais clientes existem, ver getClientsTable em src/lib/queries.ts;
@@ -11,12 +12,15 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const db = forSquad(session.user.squadId);
 
-  const names = await knownClientNames(db);
+  const names = await knownClientNames(db, session.user.squadId);
   return NextResponse.json([...names].sort((a, b) => a.localeCompare(b)));
 }
 
-async function knownClientNames(db: SquadPrisma): Promise<Set<string>> {
-  const [notes, events, recaps, tasks] = await Promise.all([
+// squadId é o mesmo do `db`, mas a lista de ignorados vive numa Setting (fora do escopo
+// do forSquad), então precisa vir explícito
+async function knownClientNames(db: SquadPrisma, squadId: string): Promise<Set<string>> {
+  const [ignored, notes, events, recaps, tasks] = await Promise.all([
+    getIgnoredClients(squadId),
     db.clientNote.findMany({ select: { client: true } }),
     db.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } }, distinct: ["client"] }),
     db.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
@@ -24,10 +28,15 @@ async function knownClientNames(db: SquadPrisma): Promise<Set<string>> {
   ]);
 
   const names = new Set<string>();
-  notes.forEach((n) => n.client && names.add(n.client));
-  events.forEach((e) => e.client && names.add(e.client));
-  recaps.forEach((r) => r.client && names.add(r.client));
-  tasks.forEach((t) => t.client && names.add(t.client));
+  const add = (client: string | null) => {
+    // nome ignorado não é da carteira: fica fora mesmo se ainda sobrou registro apontando
+    // pra ele (evento de agenda que o sync ainda não limpou, tarefa antiga solta...)
+    if (client && !matchesIgnoredClient(ignored, client)) names.add(client);
+  };
+  notes.forEach((n) => add(n.client));
+  events.forEach((e) => add(e.client));
+  recaps.forEach((r) => add(r.client));
+  tasks.forEach((t) => add(t.client));
   return names;
 }
 
@@ -45,7 +54,7 @@ export async function POST(req: NextRequest) {
   // client é só uma string espalhada em várias tabelas (não é entidade própria) — compara
   // sem diferenciar maiúsculas/minúsculas contra TODAS as fontes, não só ClientNote, senão
   // "fismatek" e "Fismatek" viram dois clientes diferentes na tabela.
-  const existing = await knownClientNames(db);
+  const existing = await knownClientNames(db, session.user.squadId);
   const lowerExisting = new Set([...existing].map((n) => n.toLowerCase()));
   if (lowerExisting.has(client.toLowerCase())) {
     return NextResponse.json({ error: "Já existe um cliente com esse nome" }, { status: 409 });
@@ -53,7 +62,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const note = await db.clientNote.create({ data: { squadId: session.user.squadId, client } });
+    // cadastrar o nome de novo é o "desfazer" da exclusão, que deixou ele na lista de
+    // ignorados — sem tirar de lá, o cliente entraria na carteira já invisível na listagem
+    // e as reuniões dele continuariam sendo apagadas a cada sync da agenda
+    await removeIgnoredClient(session.user.squadId, client);
     revalidateTag("clients", "max");
+    revalidateTag("calendar", "max");
     return NextResponse.json(note, { status: 201 });
   } catch {
     // corrida rara: alguém criou o mesmo nome entre a checagem acima e o create

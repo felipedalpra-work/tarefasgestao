@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "./prisma";
+import { normalizeText } from "./utils";
 
 const MEET_RECAP_SUGGESTIONS_KEY = "meet_recap_suggestions_enabled";
 const MEET_RECAP_GMAIL_USER_KEY = "meet_recap_gmail_user_id";
@@ -91,6 +92,63 @@ export async function setBillingDraftOwnerUserId(squadId: string, userId: string
     update: { value: userId },
     create: { squadId, key: BILLING_DRAFT_OWNER_KEY, value: userId },
   });
+}
+
+// Empresas que aparecem na agenda de alguém do squad mas NÃO são da carteira.
+// "Cliente" não é entidade própria, é uma string — e uma das fontes dela é o Google
+// Calendar: todo evento "O2 Inc & <Nome> | ..." na agenda de quem conectou a conta vira
+// CalendarEvent e faz <Nome> aparecer como cliente na carteira. Sem essa lista, excluir
+// o cliente não resolve nada: o próximo sync (cron a cada poucos minutos) traz de volta.
+// Guardado como JSON num Setting só (mesmo motivo das prefs de notificação: dá pra
+// crescer sem função nova), na grafia original — a comparação é por normalizeText, então
+// "StartGov", "startgov" e "Start Gov" contam como o mesmo nome.
+const IGNORED_CLIENTS_KEY = "ignored_clients";
+
+export async function getIgnoredClients(squadId: string): Promise<string[]> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: IGNORED_CLIENTS_KEY } } });
+  if (!row) return [];
+  try {
+    const parsed: unknown = JSON.parse(row.value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((n): n is string => typeof n === "string" && n.trim() !== "");
+  } catch {
+    return [];
+  }
+}
+
+export function matchesIgnoredClient(ignored: string[], client: string | null | undefined): boolean {
+  if (!client) return false;
+  const target = normalizeText(client);
+  return ignored.some((name) => normalizeText(name) === target);
+}
+
+export async function isClientIgnored(squadId: string, client: string): Promise<boolean> {
+  return matchesIgnoredClient(await getIgnoredClients(squadId), client);
+}
+
+async function saveIgnoredClients(squadId: string, names: string[]): Promise<string[]> {
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: IGNORED_CLIENTS_KEY } },
+    update: { value: JSON.stringify(sorted) },
+    create: { squadId, key: IGNORED_CLIENTS_KEY, value: JSON.stringify(sorted) },
+  });
+  return sorted;
+}
+
+export async function addIgnoredClient(squadId: string, client: string): Promise<string[]> {
+  const name = client.trim();
+  if (!name) return getIgnoredClients(squadId);
+  const current = await getIgnoredClients(squadId);
+  if (matchesIgnoredClient(current, name)) return current;
+  return saveIgnoredClients(squadId, [...current, name]);
+}
+
+export async function removeIgnoredClient(squadId: string, client: string): Promise<string[]> {
+  const current = await getIgnoredClients(squadId);
+  const kept = current.filter((name) => !matchesIgnoredClient([name], client));
+  if (kept.length === current.length) return current;
+  return saveIgnoredClients(squadId, kept);
 }
 
 // Liga/desliga cada tipo de notificação do Slack, por tipo (squad todo, não por pessoa —

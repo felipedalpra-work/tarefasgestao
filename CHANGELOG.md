@@ -4,6 +4,16 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-08-31 (empresa da agenda que não é da carteira: Unimag e StartGov fora, e não voltam mais)
+
+- Usuário pediu pra remover Unimag e StartGov do squad da O2: apareciam como clientes só porque estão na agenda da Tainara, mas não são da carteira. Conferido no banco antes de mexer: as duas existiam **apenas** como `CalendarEvent` (7 eventos cada, todos vindos do sync da agenda dela) — nenhuma tarefa, recap, tratativa, fechamento, login ou `ClientNote`.
+- Excluir o cliente não resolvia sozinho: `calendar-sync` transforma todo evento `O2 Inc & <Nome> | ...` da agenda de qualquer membro em `CalendarEvent`, e é isso que faz o nome virar cliente (client não é entidade própria, é string). O cron de 5 em 5 minutos traria as duas de volta.
+- **Nova lista de clientes ignorados por squad** (`Setting` `ignored_clients`, JSON com a grafia original; comparação por `normalizeText`, então "StartGov"/"startgov"/"Start Gov" são o mesmo nome): `calendar-sync` pula evento de nome ignorado **e** apaga o que já tinha espelhado. A limpeza precisa ficar no sync, não só no `continue`: a busca no Google cobre só os próximos 30 dias, então evento passado já espelhado nunca mais seria revisitado e ficaria segurando o nome na carteira pra sempre.
+- Ligado ao fluxo que já existia: excluir cliente (`DELETE /api/clients/[name]`) agora coloca o nome na lista — é o que faz a exclusão valer daqui pra frente; cadastrar o mesmo nome de novo (`POST /api/clients`) tira. `getClientsOverview` e `/api/clients` filtram os ignorados (e a tag `clients` entrou no cache de `getClientsOverview`, senão ignorar/liberar não refletiria — `getClientsTable` chama ela por dentro, e revalidar só a de fora devolve o valor cacheado da de dentro).
+- UI: card "Clientes ignorados" em Configurações → Squad, listando os nomes com ação "Liberar" (admin) — reuniões futuras voltam no sync seguinte, as passadas não. O modal de excluir cliente passou a avisar que o nome também deixa de ser puxado da agenda.
+- Aplicado no banco: as duas na lista de ignorados do squad da O2 e os 14 eventos apagados. Isso mexe só no espelho do app — a agenda do Google da Tainara continua intacta (o sync só lê).
+- Validado: typecheck/lint limpos; **teste real de ponta a ponta** — `/api/cron/calendar-sync` rodado contra as agendas reais (43 eventos sincronizados) e confirmado no banco que Unimag/StartGov não voltaram em nenhuma tabela, quando antes esse mesmo sync recriava os 14 eventos.
+
 ## 2026-08-20 (assistente de IA e extração de Meet Recap voltam a funcionar — Groq removeu o modelo do catálogo)
 
 - Usuário reportou erro ao consultar o assistente de IA. Log real (`PlatformLog`) mostrou um 404 `model_not_found` pra `llama-3.3-70b-versatile` — diferente dos erros de limite diário (429) já conhecidos, esse era novo: a Groq removeu a linha inteira de modelos Llama 3.3 do catálogo (confirmado consultando `GET /v1/models` da Groq direto, não é rate limit nem instabilidade passageira).

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { isAdmin } from "@/lib/authz";
 import { forSquad } from "@/lib/tenant-prisma";
 import { ensureOnboardingDeliverables } from "@/lib/onboarding-deliverables";
+import { addIgnoredClient } from "@/lib/settings";
 
 type Params = { params: Promise<{ name: string }> };
 
@@ -180,6 +181,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     db.clientLogin.deleteMany({ where: { client } }),
     db.clientNote.deleteMany({ where: { client } }),
   ]);
+
+  // Sem isso a exclusão não se sustenta: se a empresa tem reunião "O2 Inc & <Nome> | ..."
+  // na agenda de alguém do squad, o próximo sync do Google Calendar recria os eventos e o
+  // nome reaparece na carteira. Entrar na lista de ignorados (visível em Configurações →
+  // Squad, de onde dá pra liberar de novo) é o que faz a exclusão valer daqui pra frente.
+  // Cadastrar o mesmo nome outra vez (POST /api/clients) tira ele da lista.
+  await addIgnoredClient(session.user.squadId, client);
 
   revalidateTag("clients", "max");
   revalidateTag("calendar", "max");

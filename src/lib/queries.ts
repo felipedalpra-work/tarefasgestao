@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { forSquad } from "./tenant-prisma";
+import { getIgnoredClients, matchesIgnoredClient } from "./settings";
 
 // Cached: lista de usuários (muda raramente) — squadId entra como argumento da função
 // cacheada, então o Next já diferencia o cache por squad automaticamente (não precisa
@@ -73,22 +74,29 @@ export const getCalendarEvents = unstable_cache(
 export const getClientsOverview = unstable_cache(
   async (squadId: string) => {
     const db = forSquad(squadId);
-    const [events, recaps, tasks] = await Promise.all([
+    const [ignored, events, recaps, tasks] = await Promise.all([
+      getIgnoredClients(squadId),
       db.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } } }),
       db.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } } }),
       db.task.findMany({ select: { client: true, status: true }, where: { client: { not: null } } }),
     ]);
 
     const map: Record<string, { meetings: number; recaps: number; tasks: number; openTasks: number }> = {};
-    const ensure = (c: string) => { if (!map[c]) map[c] = { meetings: 0, recaps: 0, tasks: 0, openTasks: 0 }; };
+    // empresa marcada como ignorada não é da carteira do squad (veio da agenda de alguém) —
+    // fica fora da lista mesmo se ainda houver registro apontando pro nome
+    const counts = (c: string | null) => {
+      if (!c || matchesIgnoredClient(ignored, c)) return null;
+      if (!map[c]) map[c] = { meetings: 0, recaps: 0, tasks: 0, openTasks: 0 };
+      return map[c];
+    };
 
-    events.forEach((e) => { if (e.client) { ensure(e.client); map[e.client].meetings++; } });
-    recaps.forEach((r) => { if (r.client) { ensure(r.client); map[r.client].recaps++; } });
+    events.forEach((e) => { const m = counts(e.client); if (m) m.meetings++; });
+    recaps.forEach((r) => { const m = counts(r.client); if (m) m.recaps++; });
     tasks.forEach((t) => {
-      if (t.client) {
-        ensure(t.client);
-        map[t.client].tasks++;
-        if (t.status !== "done") map[t.client].openTasks++;
+      const m = counts(t.client);
+      if (m) {
+        m.tasks++;
+        if (t.status !== "done") m.openTasks++;
       }
     });
 
@@ -97,7 +105,10 @@ export const getClientsOverview = unstable_cache(
       .sort((a, b) => a.name.localeCompare(b.name));
   },
   ["clients-overview"],
-  { tags: ["calendar", "recaps", "tasks"], revalidate: 60 }
+  // tag "clients" também porque a lista de ignorados entra no resultado — sem ela,
+  // ignorar/liberar um nome não refletiria aqui (nem em getClientsTable, que chama esta
+  // função por dentro: revalidar só a de fora devolve o valor cacheado da de dentro)
+  { tags: ["calendar", "recaps", "tasks", "clients"], revalidate: 60 }
 );
 
 // Cached: clientes com status geral + situação na Oxy, para a tabela de clientes

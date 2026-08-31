@@ -2,7 +2,7 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +86,10 @@ export default function SettingsPage() {
   const [billingDraftOwnerId, setBillingDraftOwnerId] = useState<string | null>(null);
   const [billingDraftSaving, setBillingDraftSaving] = useState(false);
 
+  // Clientes ignorados (empresa que aparece na agenda mas não é da carteira) state
+  const [ignoredClients, setIgnoredClients] = useState<string[]>([]);
+  const [unignoring, setUnignoring] = useState<string | null>(null);
+
   useEffect(() => {
     fetch("/api/settings/google-status")
       .then((r) => r.json())
@@ -102,6 +106,10 @@ export default function SettingsPage() {
     fetch("/api/settings/notifications")
       .then((r) => r.json())
       .then((d) => setNotificationPrefs((prev) => ({ ...prev, ...d })));
+
+    fetch("/api/settings/ignored-clients")
+      .then((r) => r.json())
+      .then((d) => setIgnoredClients(d.clients ?? []));
 
     // load squad users + slack settings in parallel
     Promise.all([
@@ -169,6 +177,20 @@ export default function SettingsPage() {
     } else {
       setBillingDraftOwnerId(prev);
       toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function unignoreClient(name: string) {
+    setUnignoring(name);
+    const res = await fetch(`/api/settings/ignored-clients?client=${encodeURIComponent(name)}`, { method: "DELETE" });
+    setUnignoring(null);
+    if (res.ok) {
+      const d = await res.json();
+      setIgnoredClients(d.clients ?? []);
+      toast(`${name} liberado — volta pra carteira no próximo sync da agenda`, "success");
+    } else {
+      const d = await res.json().catch(() => ({}));
+      toast(d.error || "Erro ao liberar cliente", "error");
     }
   }
 
@@ -426,6 +448,45 @@ export default function SettingsPage() {
               ))}
             </select>
             {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
+          </div>
+
+          {/* Clientes ignorados */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Clientes ignorados</h2>
+            <p className="text-xs text-ink-mid mb-4">
+              Reunião <span className="text-ink-soft">O2 Inc &amp; Empresa | ...</span> na agenda de alguém do squad
+              faz a empresa entrar na carteira sozinha. Excluir um cliente coloca o nome aqui, pra ele não voltar no
+              próximo sync da agenda. Liberar traz de volta: as reuniões futuras reaparecem no sync seguinte.
+            </p>
+            {ignoredClients.length === 0 ? (
+              <p className="text-xs text-ink-faint bg-surface-2 rounded-lg px-3 py-2.5">
+                Nenhum nome ignorado — toda empresa que aparecer na agenda entra na carteira.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {ignoredClients.map((name) => (
+                  <div key={name} className="flex items-center gap-3 bg-surface-2 rounded-lg px-3 py-2.5">
+                    <EyeOff size={14} className="text-ink-faint shrink-0" />
+                    <span className="text-sm text-ink-soft flex-1 min-w-0 truncate">{name}</span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => unignoreClient(name)}
+                        disabled={unignoring === name}
+                        title="Liberar — volta pra carteira"
+                        className="shrink-0 flex items-center gap-1 text-xs text-ink-faint hover:text-o2-green transition-colors disabled:opacity-50"
+                      >
+                        <X size={12} />
+                        {unignoring === name ? "Liberando..." : "Liberar"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isAdmin && ignoredClients.length > 0 && (
+              <p className="text-xs text-ink-faint mt-2">Só admin do squad pode liberar.</p>
+            )}
           </div>
 
           {/* n8n webhook (visível só pra admin — é uma credencial) */}

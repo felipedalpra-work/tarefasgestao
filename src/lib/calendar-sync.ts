@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
 import { google } from "googleapis";
 import { log } from "./logger";
+import { getIgnoredClients, matchesIgnoredClient } from "./settings";
 
 // extrai o nome do cliente do título: "O2 Inc. & Zé do Flor | Semanal" → "Zé do Flor"
 // exige o "|" — sem ele não dá pra distinguir reunião de cliente de reunião pessoal
@@ -43,6 +44,22 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
 
   const emailMap = emailToUserId ?? (await buildEmailToUserId(user.squadId));
 
+  // empresa na lista de ignorados (Configurações → Squad) não é da carteira do squad:
+  // não entra no espelho e o que já entrou sai. A limpeza roda aqui, e não só no `continue`
+  // do laço abaixo, porque a busca no Google cobre só os próximos 30 dias — evento passado
+  // já espelhado nunca mais seria revisitado e ficaria pra sempre segurando o nome na carteira.
+  const ignoredClients = await getIgnoredClients(user.squadId);
+  if (ignoredClients.length > 0) {
+    const mirrored = await db.calendarEvent.findMany({ select: { client: true }, distinct: ["client"] });
+    const toRemove = mirrored.map((e) => e.client).filter((c) => matchesIgnoredClient(ignoredClients, c));
+    if (toRemove.length > 0) {
+      const { count } = await db.calendarEvent.deleteMany({ where: { client: { in: toRemove } } });
+      if (count > 0) {
+        await log("calendar-sync", `${count} evento(s) removido(s) de cliente ignorado: ${toRemove.join(", ")}`);
+      }
+    }
+  }
+
   try {
     const oauth2 = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -76,6 +93,7 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
       const title = event.summary || "";
       const client = extractClientFromTitle(title);
       if (!client) continue;
+      if (matchesIgnoredClient(ignoredClients, client)) continue;
 
       const startAt = new Date(event.start?.dateTime || event.start?.date || "");
       const endAt = new Date(event.end?.dateTime || event.end?.date || "");

@@ -296,9 +296,13 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-sm font-semibold text-ink mb-3">Excluir cliente?</h3>
-            <p className="text-xs text-ink-soft mb-5">
+            <p className="text-xs text-ink-soft mb-3">
               Isso apaga <span className="text-ink font-medium">{deleteTarget.name}</span> e{" "}
               {deleteTarget.tasks} tarefa(s), {deleteTarget.meetings} reunião(ões), {deleteTarget.recaps} recap(s). Não pode ser desfeito.
+            </p>
+            <p className="text-xs text-ink-faint mb-5">
+              O nome também passa a ser ignorado no sync da agenda — reunião com ele na agenda de alguém do squad não
+              traz o cliente de volta. Dá pra liberar depois em Configurações → Squad.
             </p>
             <div className="flex gap-2 justify-end">
               <button
