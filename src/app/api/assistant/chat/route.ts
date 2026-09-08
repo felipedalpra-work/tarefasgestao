@@ -5,6 +5,25 @@ import Groq, { RateLimitError } from "groq-sdk";
 import { getGroq, GROQ_MODEL } from "@/lib/groq";
 import { ASSISTANT_TOOLS, ASSISTANT_HISTORY_LIMIT, runTool } from "@/lib/assistant-tools";
 import { log } from "@/lib/logger";
+import { brtNow } from "@/lib/utils";
+
+// O modelo não tem relógio: sem isso ele CHUTA que dia é hoje (chegou a responder
+// "hoje é 31 de agosto" quando era 9 de setembro) e, pior, preenchia dueBefore/dueAfter
+// com a data inventada — então a lista de "tarefas de hoje" vinha errada em silêncio.
+// A data é sempre a de Brasília, não a do servidor (a Vercel roda em UTC e vira o dia
+// às 21h daqui).
+function todayBlock(): string {
+  const { today } = brtNow();
+  const iso = today.toISOString().slice(0, 10);
+  const extenso = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric",
+  }).format(today);
+  const plus = (n: number) => new Date(today.getTime() + n * 86400000).toISOString().slice(0, 10);
+  return `DATA DE HOJE (horário de Brasília): ${iso} — ${extenso}.
+Amanhã é ${plus(1)}. Daqui a 7 dias é ${plus(7)}. Ontem foi ${plus(-1)}.
+Esta é a ÚNICA data válida. Nunca deduza o dia de hoje pela sua própria noção de tempo, nem por datas que apareçam em mensagens antigas da conversa (elas são de quando foram escritas). Se a pessoa perguntar que dia é hoje, responda exatamente a data acima.
+Pra filtrar tarefas por prazo relativo ("hoje", "amanhã", "essa semana", "atrasadas", "sem prazo"), use o parâmetro dueRelative da ferramenta search_tasks — ele é resolvido no servidor. Só use dueBefore/dueAfter quando a pessoa citar uma data específica.`;
+}
 
 const SYSTEM_PROMPT = `Você é o assistente interno da O2 Squad Tasks, plataforma de gestão da equipe de CFO as a Service da O2 Inc.
 
@@ -18,9 +37,16 @@ Regras importantes:
 - Se uma ferramenta não achar o que foi pedido (ex: cliente não encontrado), diga isso claramente em vez de inventar uma resposta.
 - Seja conciso. Respostas de chat, não relatórios — poucas frases ou uma lista curta, direto ao ponto.
 - Se a pergunta for genérica sobre a operação ("o que está pegando?", "alguma coisa urgente?"), use get_urgent_items primeiro.
-- Parâmetros numéricos de ferramentas (limit, days) sempre como número, nunca como texto entre aspas.`;
+- Parâmetros numéricos de ferramentas (limit, days) sempre como número, nunca como texto entre aspas.
+- Datas: só afirme uma data que veio da data de hoje informada acima ou de uma ferramenta. Nunca calcule "quantos dias faltam" de cabeça a partir de uma data que você supôs.
+- Responda SÓ com o que veio das ferramentas. Se a ferramenta devolveu lista vazia, diga que não há nada — não complete com exemplos, nem repita itens de respostas anteriores da conversa como se fossem o resultado de agora.
+- Não invente nome de cliente, de pessoa, título de tarefa nem número. Se precisar de um dado que nenhuma ferramenta te deu, diga que não tem essa informação.`;
 
 const MAX_TOOL_ROUNDS = 5;
+
+function fmtHistoryDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -39,7 +65,7 @@ export async function POST(req: NextRequest) {
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: ASSISTANT_HISTORY_LIMIT,
-    select: { role: true, content: true },
+    select: { role: true, content: true, createdAt: true },
   });
   history.reverse();
 
@@ -47,7 +73,16 @@ export async function POST(req: NextRequest) {
 
   const conversation: Groq.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
-    ...history.map((m) => ({ role: m.role === "assistant" ? ("assistant" as const) : ("user" as const), content: m.content })),
+    // separado do prompt fixo e logo antes da pergunta: fica mais perto do fim do
+    // contexto, onde o modelo presta mais atenção, e não se confunde com as datas
+    // que aparecem no histórico
+    { role: "system", content: todayBlock() },
+    ...history.map((m) => ({
+      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      // carimba a data de cada mensagem antiga — sem isso um "hoje é X" dito semana
+      // passada volta pro contexto parecendo atual e reforça a data errada
+      content: m.role === "assistant" ? m.content : `[${fmtHistoryDate(m.createdAt)}] ${m.content}`,
+    })),
     { role: "user", content: userMessage },
   ];
 
@@ -65,7 +100,9 @@ export async function POST(req: NextRequest) {
           messages: conversation,
           tools: ASSISTANT_TOOLS,
           tool_choice: "auto",
-          temperature: 0.3,
+          // 0 e não 0.3: é um assistente que relata dado real — variação aqui só
+          // aumenta a chance de ele "arredondar" um número ou um nome
+          temperature: 0,
           max_tokens: 1024,
         });
       } catch (err) {
@@ -82,7 +119,7 @@ export async function POST(req: NextRequest) {
         const fallback = await getGroq().chat.completions.create({
           model: GROQ_MODEL,
           messages: conversation,
-          temperature: 0.3,
+          temperature: 0,
           max_tokens: 1024,
         });
         return await finish(fallback.choices[0]?.message?.content || "Não consegui gerar uma resposta.");

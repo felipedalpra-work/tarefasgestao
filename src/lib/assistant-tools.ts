@@ -1,6 +1,6 @@
 import type Groq from "groq-sdk";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
-import { isTaskOverdue, normalizeText } from "./utils";
+import { isTaskOverdue, normalizeText, brtNow } from "./utils";
 
 // Ferramentas do assistente de IA (botão flutuante) — todas SOMENTE LEITURA de propósito.
 // O assistente responde perguntas sobre o que já existe na plataforma; ele nunca cria,
@@ -21,8 +21,47 @@ const MILESTONES = [
   { key: "oxyIntegratedAt", label: "Oxy integrada + Comitê Estratégico Mensal", offsetDays: 90 },
 ] as const;
 
-function fmtDate(d: Date | null | undefined): string | null {
+// Dois formatadores, de propósito — misturar os dois era o que fazia data aparecer
+// deslocada em um dia pro assistente:
+// - fmtDay: campos que são SÓ um dia (dueDate, prazo de tratativa, marco de onboarding).
+//   Ficam gravados como meia-noite UTC, então ler em UTC devolve o dia certo.
+// - fmtMoment: instantes de verdade (createdAt, início de reunião). Precisam ser lidos
+//   em America/Sao_Paulo, senão uma reunião das 9h vira "12:00" e um registro feito
+//   às 22h de Brasília vira o dia seguinte.
+function fmtDay(d: Date | null | undefined): string | null {
   return d ? d.toISOString().slice(0, 10) : null;
+}
+
+const BRT_DATETIME = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
+function fmtMoment(d: Date | null | undefined): string | null {
+  if (!d) return null;
+  const p = BRT_DATETIME.formatToParts(d);
+  const g = (t: Intl.DateTimeFormatPartTypes) => p.find((x) => x.type === t)?.value ?? "";
+  return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}`;
+}
+
+// Janela de datas a partir de um termo relativo, resolvida NO SERVIDOR com o dia de
+// Brasília. Sem isso o modelo tinha que inventar qual é "hoje" pra preencher
+// dueBefore/dueAfter — foi exatamente daí que veio o "hoje é 31 de agosto".
+export type DueRelative = "atrasadas" | "hoje" | "amanha" | "esta_semana" | "proximos_7_dias" | "sem_prazo";
+
+export function resolveDueWindow(term: DueRelative): { gte?: Date; lte?: Date; isNull?: boolean } {
+  const { today } = brtNow();
+  const day = (offset: number) => new Date(today.getTime() + offset * 24 * 60 * 60 * 1000);
+  switch (term) {
+    case "atrasadas": return { lte: new Date(today.getTime() - 1) };
+    case "hoje": return { gte: today, lte: today };
+    case "amanha": return { gte: day(1), lte: day(1) };
+    // semana corrente = de hoje até domingo (getUTCDay: 0=domingo)
+    case "esta_semana": return { gte: today, lte: day((7 - today.getUTCDay()) % 7) };
+    case "proximos_7_dias": return { gte: today, lte: day(7) };
+    case "sem_prazo": return { isNull: true };
+  }
 }
 
 // Resolve o nome "oficial" do cliente (como está gravado no banco) a partir do texto
@@ -58,13 +97,13 @@ async function getUrgentItems(squadId: string) {
   const overdueTasks = openTasks
     .filter((t) => isTaskOverdue(t.dueDate, t.status))
     .slice(0, 20)
-    .map((t) => ({ title: t.title, client: t.client, priority: t.priority, dueDate: fmtDate(t.dueDate), assignee: t.assignee?.name ?? null }));
+    .map((t) => ({ title: t.title, client: t.client, priority: t.priority, dueDate: fmtDay(t.dueDate), assignee: t.assignee?.name ?? null }));
 
   const overdueTratativas = tratativasAbertas.slice(0, 20).map((t) => ({
     client: t.client,
     motivo: t.motivo,
     tipo: t.tipo,
-    prazo: fmtDate(t.dataPrevistaFinalizacao),
+    prazo: fmtDay(t.dataPrevistaFinalizacao),
     responsavel: t.responsavel?.name ?? null,
   }));
 
@@ -75,7 +114,7 @@ async function getUrgentItems(squadId: string) {
       const target = new Date(c.onboardingStartAt!);
       target.setDate(target.getDate() + m.offsetDays);
       if (target >= now) continue;
-      onboardingAtrasado.push({ client: c.client, marco: m.label, prazo: fmtDate(target)! });
+      onboardingAtrasado.push({ client: c.client, marco: m.label, prazo: fmtDay(target)! });
     }
   }
 
@@ -109,6 +148,7 @@ async function searchTasks(squadId: string, args: {
   status?: string;
   client?: string;
   assigneeName?: string;
+  dueRelative?: DueRelative;
   dueBefore?: string;
   dueAfter?: string;
   textSearch?: string;
@@ -118,6 +158,40 @@ async function searchTasks(squadId: string, args: {
   // o Groq às vezes manda number como string (ex: "15") — não confiar no tipo declarado
   const limit = Math.min(Math.max(Number(args.limit) || 15, 1), 30);
   const resolvedClient = args.client ? await resolveClientName(db, args.client) : null;
+
+  // Prazo: `dueRelative` é o caminho preferido (resolvido aqui com o dia de Brasília,
+  // sem depender de o modelo saber que dia é hoje); dueBefore/dueAfter seguem valendo
+  // pra data específica que a pessoa disser.
+  const window = args.dueRelative ? resolveDueWindow(args.dueRelative) : null;
+  const dueFilter = window
+    ? window.isNull
+      ? { dueDate: null }
+      : { dueDate: { ...(window.gte ? { gte: window.gte } : {}), ...(window.lte ? { lte: window.lte } : {}) } }
+    : args.dueBefore || args.dueAfter
+    ? { dueDate: { ...(args.dueBefore ? { lte: new Date(args.dueBefore) } : {}), ...(args.dueAfter ? { gte: new Date(args.dueAfter) } : {}) } }
+    : {};
+
+  // Os filtros de "ou" vão em AND[] porque são DOIS: nome do responsável e texto livre.
+  // Como chaves `OR` irmãs no mesmo objeto, a segunda sobrescrevia a primeira — buscar
+  // "tarefa da Tainara sobre balancete" ignorava a Tainara calado.
+  const anyOf: object[] = [];
+  if (args.assigneeName) {
+    anyOf.push({
+      OR: [
+        { assignee: { name: { contains: args.assigneeName, mode: "insensitive" as const } } },
+        { assignees: { some: { user: { name: { contains: args.assigneeName, mode: "insensitive" as const } } } } },
+      ],
+    });
+  }
+  if (args.textSearch) {
+    anyOf.push({
+      OR: [
+        { title: { contains: args.textSearch, mode: "insensitive" as const } },
+        { description: { contains: args.textSearch, mode: "insensitive" as const } },
+      ],
+    });
+  }
+
   const tasks = await db.task.findMany({
     where: {
       ...(args.status ? { status: args.status } : {}),
@@ -126,22 +200,8 @@ async function searchTasks(squadId: string, args: {
         : args.client
         ? { client: { contains: args.client, mode: "insensitive" } }
         : {}),
-      // procurar por "tarefas da Tainara" tem que achar também aquelas em que ela é
-      // participante de uma tarefa em conjunto, não só as em que ela é a dona
-      ...(args.assigneeName
-        ? {
-            OR: [
-              { assignee: { name: { contains: args.assigneeName, mode: "insensitive" as const } } },
-              { assignees: { some: { user: { name: { contains: args.assigneeName, mode: "insensitive" as const } } } } },
-            ],
-          }
-        : {}),
-      ...(args.dueBefore || args.dueAfter
-        ? { dueDate: { ...(args.dueBefore ? { lte: new Date(args.dueBefore) } : {}), ...(args.dueAfter ? { gte: new Date(args.dueAfter) } : {}) } }
-        : {}),
-      ...(args.textSearch
-        ? { OR: [{ title: { contains: args.textSearch, mode: "insensitive" } }, { description: { contains: args.textSearch, mode: "insensitive" } }] }
-        : {}),
+      ...dueFilter,
+      ...(anyOf.length > 0 ? { AND: anyOf } : {}),
     },
     select: {
       title: true, status: true, priority: true, client: true, dueDate: true, deliverTo: true,
@@ -157,7 +217,7 @@ async function searchTasks(squadId: string, args: {
     status: t.status,
     priority: t.priority,
     client: t.client,
-    dueDate: fmtDate(t.dueDate),
+    dueDate: fmtDay(t.dueDate),
     quemEntrega: t.deliverTo,
     assignee: t.assignee?.name ?? null,
     ...(t.assignees.length > 0 && {
@@ -212,7 +272,7 @@ async function getClientOverview(squadId: string, args: { client: string }) {
   const milestones = MILESTONES.map((m) => ({
     marco: m.label,
     feito: !!note[m.key as keyof typeof note],
-    data: fmtDate(note[m.key as keyof typeof note] as Date | null),
+    data: fmtDay(note[m.key as keyof typeof note] as Date | null),
   }));
 
   return {
@@ -221,10 +281,10 @@ async function getClientOverview(squadId: string, args: { client: string }) {
     status: note.status,
     healthStatus: note.healthStatus,
     oxyStage: note.oxyStage,
-    onboardingStartAt: fmtDate(note.onboardingStartAt),
+    onboardingStartAt: fmtDay(note.onboardingStartAt),
     marcosDeOnboarding: milestones,
-    tarefasAbertas: openTasks.map((t) => ({ title: t.title, status: t.status, priority: t.priority, dueDate: fmtDate(t.dueDate) })),
-    tratativasAbertas: tratativas.map((t) => ({ motivo: t.motivo, tipo: t.tipo, status: t.status, prazo: fmtDate(t.dataPrevistaFinalizacao) })),
+    tarefasAbertas: openTasks.map((t) => ({ title: t.title, status: t.status, priority: t.priority, dueDate: fmtDay(t.dueDate) })),
+    tratativasAbertas: tratativas.map((t) => ({ motivo: t.motivo, tipo: t.tipo, status: t.status, prazo: fmtDay(t.dataPrevistaFinalizacao) })),
     fechamentoMesAtual: fechamento
       ? {
           comiteRealizado: fechamento.comiteRealizado,
@@ -266,7 +326,9 @@ async function getUpcomingMeetings(squadId: string, args: { days?: number | stri
     orderBy: { startAt: "asc" },
     take: 30,
   });
-  return events.map((e) => ({ title: e.title, client: e.client, data: e.startAt.toISOString(), tipo: e.meetingType }));
+  // hora de Brasília e não ISO em UTC — senão uma reunião das 09:00 chega ao modelo
+  // como "12:00Z" e ele reporta o horário errado
+  return events.map((e) => ({ title: e.title, client: e.client, data: fmtMoment(e.startAt), tipo: e.meetingType }));
 }
 
 async function getPendingAiSuggestions(squadId: string) {
@@ -283,7 +345,7 @@ async function getPendingAiSuggestions(squadId: string) {
     meetRecapDuplicadas: recapDuplicate,
     n8nPendentes: externalPending,
     n8nDuplicadas: externalDuplicate,
-    sugestaoMaisAntigaPendenteDesde: oldest ? fmtDate(oldest.createdAt) : null,
+    sugestaoMaisAntigaPendenteDesde: oldest ? fmtMoment(oldest.createdAt) : null,
   };
 }
 
@@ -316,7 +378,7 @@ async function getTratativas(squadId: string, args: { status?: string; client?: 
     tipo: t.tipo,
     motivo: t.motivo,
     status: t.status,
-    prazo: fmtDate(t.dataPrevistaFinalizacao),
+    prazo: fmtDay(t.dataPrevistaFinalizacao),
     desfecho: t.desfecho,
     responsavel: t.responsavel?.name ?? null,
   }));
@@ -336,15 +398,22 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "search_tasks",
-      description: "Busca tarefas por status, cliente, responsável, prazo ou texto no título/descrição.",
+      description:
+        "Busca tarefas por status, cliente, responsável, prazo ou texto no título/descrição. Para prazo relativo ('hoje', 'amanhã', 'essa semana', 'atrasadas') use dueRelative, que é resolvido no servidor.",
       parameters: {
         type: "object",
         properties: {
           status: { type: "string", enum: ["todo", "in_progress", "blocked", "done"], description: "Status da tarefa" },
           client: { type: "string", description: "Nome do cliente (busca parcial)" },
           assigneeName: { type: "string", description: "Nome do responsável (busca parcial) — acha tanto quem é dono quanto quem participa de tarefa em conjunto" },
-          dueBefore: { type: "string", description: "Prazo até essa data, formato YYYY-MM-DD" },
-          dueAfter: { type: "string", description: "Prazo a partir dessa data, formato YYYY-MM-DD" },
+          dueRelative: {
+            type: "string",
+            enum: ["atrasadas", "hoje", "amanha", "esta_semana", "proximos_7_dias", "sem_prazo"],
+            description:
+              "PREFIRA ESTE para prazo relativo ('hoje', 'amanhã', 'essa semana', 'atrasadas', 'sem prazo'). A data é calculada no servidor com o dia de hoje em Brasília — não tente converter pra YYYY-MM-DD você mesmo.",
+          },
+          dueBefore: { type: "string", description: "Só para data específica que a pessoa citou. Prazo até essa data, formato YYYY-MM-DD" },
+          dueAfter: { type: "string", description: "Só para data específica que a pessoa citou. Prazo a partir dessa data, formato YYYY-MM-DD" },
           textSearch: { type: "string", description: "Texto livre pra buscar no título/descrição" },
           limit: { type: ["number", "string"], description: "Máximo de resultados (padrão 15, máximo 30)" },
         },

@@ -100,9 +100,13 @@ export function timeToMinutes(time: string | null | undefined): number | null {
   return h * 60 + m;
 }
 
+// "Atrasada" é em relação ao dia de HOJE EM BRASÍLIA, não ao fuso de quem está olhando.
+// Antes usava a meia-noite local (`new Date()` + setHours(0,0,0,0)): na Vercel, que roda
+// em UTC, o dia virava às 21h de Brasília e toda tarefa que vencia "hoje" aparecia como
+// atrasada nas últimas 3 horas do dia — inclusive pro assistente de IA.
+// Os dois lados da comparação ficam na mesma convenção (meia-noite UTC do dia): `dueDate`
+// já é gravado assim (ver dueDateOnly) e `brtNow().today` também devolve assim.
 export function isTaskOverdue(dueDate: string | Date | null | undefined, status: string): boolean {
   if (!dueDate || status === "done") return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return dueDateOnly(dueDate) < today;
+  return new Date(dueDate).getTime() < brtNow().today.getTime();
 }
