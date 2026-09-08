@@ -3,10 +3,22 @@ import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import { isTaskOverdue, normalizeText, brtNow } from "./utils";
 import { findDuplicateNote } from "./duplicate-detection";
 import { log } from "./logger";
+import { revalidateTag } from "next/cache";
+import { prisma } from "./prisma";
+import { normalizeAssignees, syncTaskAssignees, CLIENT_CHOICE } from "./task-assignees";
+import { resolveTarget, buildChanges } from "./assistant-actions";
+
+const PRIORITIES_OK = ["high", "medium", "low"];
 
 // Quem esta falando com o assistente. So a ferramenta de propor tarefa usa (pra registrar
 // a pedido de quem a sugestao nasceu) — as de leitura sao todas escopadas por squad.
-export type ToolContext = { userId: string; userName: string | null };
+export type ToolContext = {
+  userId: string;
+  userName: string | null;
+  // canal de volta pra rota do chat: alterar_tarefa preenche com o id da acao que ficou
+  // esperando confirmacao, e a resposta do chat leva isso pro botao aparecer na tela
+  pendingActionId?: string | null;
+};
 
 // Ferramentas do assistente de IA (botão flutuante) — todas SOMENTE LEITURA de propósito.
 // O assistente responde perguntas sobre o que já existe na plataforma; ele nunca cria,
@@ -731,6 +743,154 @@ async function proporTarefa(
   };
 }
 
+
+// ---------------------------------------------------------------------------
+// AÇÕES — o assistente saiu de só-leitura em 2026-09-08. Duas faixas, separadas pelo
+// custo do erro (não pelo tipo da ação):
+//
+//   executa direto  → criar tarefa, comentar, item de checklist. Errar é barato: nasce
+//                     visível no Kanban e some com um clique.
+//   pede confirmação → mexer em tarefa que já existe. Não porque a ação seja perigosa,
+//                     mas porque o erro provável é acertar a ação e errar o ALVO.
+//
+// Apagar não existe como ferramenta, de propósito: excluir cliente faz cascade em 7
+// tabelas e excluir tarefa leva junto comentários e histórico. Isso continua sendo
+// decisão de tela, com os dois níveis de confirmação que já existem lá.
+
+async function criarTarefa(
+  squadId: string,
+  args: { title?: string; description?: string; client?: string; priority?: string; dueDate?: string; dueTime?: string; assigneeNames?: string[] | string },
+  ctx: ToolContext
+) {
+  const db = forSquad(squadId);
+  const title = (args.title || "").trim();
+  if (!title) return { erro: "Preciso de um título pra criar a tarefa." };
+
+  const nomes = Array.isArray(args.assigneeNames)
+    ? args.assigneeNames
+    : typeof args.assigneeNames === "string" && args.assigneeNames.trim()
+    ? [args.assigneeNames]
+    : [];
+
+  const people = await db.user.findMany({ select: { id: true, name: true, email: true } });
+  const ids: string[] = [];
+  for (const nome of nomes) {
+    const alvo = (nome || "").trim();
+    if (!alvo) continue;
+    if (alvo.toLowerCase() === "cliente") { ids.push(CLIENT_CHOICE); continue; }
+    const hits = people.filter((u) => (u.name || u.email).toLowerCase().includes(alvo.toLowerCase()));
+    if (hits.length === 0) return { erro: `Não achei "${alvo}" no squad. Pergunte pra quem é a tarefa.` };
+    if (hits.length > 1) return { erro: `"${alvo}" bate com mais de uma pessoa (${hits.map((h) => h.name).join(", ")}). Pergunte qual.` };
+    ids.push(hits[0].id);
+  }
+  // sem ninguém indicado, a tarefa fica com quem pediu — mesmo padrão da tela
+  if (ids.length === 0) ids.push(ctx.userId);
+
+  const validIds = new Set(people.map((u) => u.id));
+  const assignees = normalizeAssignees(ids.map((id) => ({ id })), validIds);
+  if (!assignees.ok) return { erro: assignees.error };
+
+  const resolvedClient = args.client ? (await resolveClientName(db, args.client)) ?? args.client.trim() : null;
+  const dueDate = args.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(args.dueDate) ? new Date(args.dueDate) : null;
+  if (args.dueDate && !dueDate) return { erro: `Prazo inválido: use YYYY-MM-DD (recebi "${args.dueDate}")` };
+  const dueTime = args.dueTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(args.dueTime) ? args.dueTime : null;
+
+  const task = await db.task.create({
+    data: {
+      squadId,
+      title,
+      description: args.description?.trim() || null,
+      priority: PRIORITIES_OK.includes(args.priority || "") ? args.priority! : "medium",
+      assigneeId: assignees.joint ? assignees.principalUserId : assignees.principalUserId,
+      createdById: ctx.userId,
+      dueDate,
+      dueTime,
+      client: resolvedClient,
+      deliverTo: !assignees.joint && assignees.clientOnly ? "o2" : null,
+      source: "assistente",
+    },
+    include: { assignee: { select: { name: true } } },
+  });
+
+  if (assignees.ok && assignees.joint) await syncTaskAssignees(db, task.id, assignees);
+
+  await db.taskActivity.create({
+    data: { taskId: task.id, userName: `${ctx.userName ?? "Alguém"} (via assistente)`, type: "created", detail: "Criada pelo assistente de IA" },
+  }).catch(() => {});
+
+  await log("ai-assistant", `Tarefa criada pelo assistente: "${title}"`, { detail: `por ${ctx.userName ?? ctx.userId}` });
+  revalidateTag("tasks", "max");
+
+  return {
+    criada: true,
+    tarefa: {
+      titulo: task.title,
+      responsavel: task.assignee?.name ?? (assignees.ok && !assignees.joint && assignees.clientOnly ? "Cliente" : null),
+      emConjunto: assignees.ok && assignees.joint ? assignees.rows.length : undefined,
+      cliente: task.client,
+      prazo: fmtDay(task.dueDate),
+      prioridade: task.priority,
+    },
+    observacao: "A tarefa já está no Kanban. Se estiver errada, dá pra apagar na tela.",
+  };
+}
+
+async function comentarTarefa(squadId: string, args: { title?: string; comment?: string }, ctx: ToolContext) {
+  const texto = (args.comment || "").trim();
+  if (!texto) return { erro: "Preciso do texto do comentário." };
+
+  const alvo = await resolveTarget(squadId, args.title || "");
+  if (!alvo.ok) return alvo;
+
+  await prisma.taskComment.create({ data: { taskId: alvo.task.id, userId: ctx.userId, content: `${texto}\n\n— via assistente de IA` } });
+  revalidateTag("tasks", "max");
+  return { comentado: true, tarefa: alvo.task.title, texto };
+}
+
+async function adicionarItemChecklist(squadId: string, args: { title?: string; item?: string }, ctx: ToolContext) {
+  const item = (args.item || "").trim();
+  if (!item) return { erro: "Preciso do texto do item." };
+
+  const alvo = await resolveTarget(squadId, args.title || "");
+  if (!alvo.ok) return alvo;
+
+  const ultimo = await prisma.subtask.findFirst({ where: { taskId: alvo.task.id }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
+  await prisma.subtask.create({ data: { taskId: alvo.task.id, title: item, sortOrder: (ultimo?.sortOrder ?? 0) + 1 } });
+  await prisma.taskActivity.create({
+    data: { taskId: alvo.task.id, userName: `${ctx.userName ?? "Alguém"} (via assistente)`, type: "created", detail: `Item de checklist: "${item}"` },
+  }).catch(() => {});
+  revalidateTag("tasks", "max");
+  return { adicionado: true, tarefa: alvo.task.title, item };
+}
+
+// Não altera nada: deixa a mudança PENDENTE e devolve o resumo pro chat mostrar com
+// botão de confirmar. Quem executa de fato é POST /api/assistant/actions/[id].
+async function alterarTarefa(
+  squadId: string,
+  args: { title?: string; status?: string; priority?: string; dueDate?: string; dueTime?: string; assigneeName?: string; client?: string },
+  ctx: ToolContext
+) {
+  const alvo = await resolveTarget(squadId, args.title || "");
+  if (!alvo.ok) return alvo;
+
+  const built = await buildChanges(squadId, alvo.task, args);
+  if (!built.ok) return { erro: built.erro };
+
+  const summary = `${alvo.task.title}${alvo.task.client ? ` (${alvo.task.client})` : ""} — ${built.linhas.join("; ")}`;
+  const action = await prisma.assistantAction.create({
+    data: { squadId, userId: ctx.userId, taskId: alvo.task.id, changes: JSON.stringify(built.changes), summary },
+  });
+  ctx.pendingActionId = action.id;
+
+  return {
+    aguardandoConfirmacao: true,
+    tarefaResolvida: { titulo: alvo.task.title, cliente: alvo.task.client, status: alvo.task.status },
+    vaiMudar: built.linhas,
+    instrucao:
+      "NÃO diga que já mudou — nada foi alterado ainda. Diga em uma frase qual tarefa você encontrou e o que vai mudar; a pessoa tem um botão Confirmar no chat.",
+  };
+}
+
 export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   {
     type: "function",
@@ -915,7 +1075,84 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "criar_tarefa",
+      description:
+        "CRIA a tarefa de verdade no Kanban (diferente de propor_tarefa, que só deixa uma sugestão esperando aprovação). Use quando a pessoa pedir claramente pra criar/abrir uma tarefa. Se ela não disser de quem é, a tarefa fica com quem pediu. Nunca invente responsável nem prazo: se não foi dito, deixe em branco.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título curto, no imperativo (ex: 'Revisar balancete de agosto')" },
+          description: { type: "string", description: "Detalhe do que precisa ser feito" },
+          client: { type: "string", description: "Cliente relacionado, se houver" },
+          priority: { type: "string", enum: ["high", "medium", "low"] },
+          dueDate: { type: "string", description: "Prazo YYYY-MM-DD, usando a data de hoje informada no início da conversa" },
+          dueTime: { type: "string", description: "Horário HH:MM (Brasília), só se a pessoa disser uma hora" },
+          assigneeNames: {
+            type: "array",
+            items: { type: "string" },
+            description: "Nomes dos responsáveis. Dois ou mais = tarefa em conjunto, e o primeiro vira o dono. Use 'Cliente' para atribuir ao cliente.",
+          },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "comentar_tarefa",
+      description: "Adiciona um comentário numa tarefa existente. O comentário é gravado em nome de quem está conversando, marcado como vindo do assistente.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título ou parte do título da tarefa" },
+          comment: { type: "string", description: "Texto do comentário" },
+        },
+        required: ["title", "comment"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "adicionar_item_checklist",
+      description: "Adiciona um item ao checklist (subtarefas) de uma tarefa existente.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título ou parte do título da tarefa" },
+          item: { type: "string", description: "Texto do item do checklist" },
+        },
+        required: ["title", "item"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "alterar_tarefa",
+      description:
+        "Prepara uma alteração numa tarefa que JÁ EXISTE (status, prazo, horário, prioridade, responsável, cliente) — inclui concluir e reabrir. NÃO altera na hora: deixa pendente e a pessoa confirma num botão no chat. Uma tarefa por chamada; se pedirem pra mudar várias, trate uma de cada vez. Se a busca por título devolver vários candidatos, PERGUNTE qual antes de tentar de novo — nunca escolha sozinho.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título ou parte do título da tarefa a alterar" },
+          status: { type: "string", enum: ["todo", "in_progress", "blocked", "done"], description: "'done' conclui, 'todo' reabre" },
+          priority: { type: "string", enum: ["high", "medium", "low"] },
+          dueDate: { type: "string", description: "Novo prazo YYYY-MM-DD, ou string vazia pra tirar o prazo" },
+          dueTime: { type: "string", description: "Novo horário HH:MM, ou string vazia pra tirar" },
+          assigneeName: { type: "string", description: "Nome do novo responsável, ou string vazia pra deixar sem responsável" },
+          client: { type: "string", description: "Novo cliente" },
+        },
+        required: ["title"],
+      },
+    },
+  },
 ];
+
 
 
 export async function runTool(
@@ -951,6 +1188,14 @@ export async function runTool(
       return getSquadStats(squadId, args);
     case "propor_tarefa":
       return proporTarefa(squadId, args, ctx);
+    case "criar_tarefa":
+      return criarTarefa(squadId, args, ctx);
+    case "comentar_tarefa":
+      return comentarTarefa(squadId, args, ctx);
+    case "adicionar_item_checklist":
+      return adicionarItemChecklist(squadId, args, ctx);
+    case "alterar_tarefa":
+      return alterarTarefa(squadId, args, ctx);
     default:
       return { error: `Ferramenta desconhecida: ${name}` };
   }

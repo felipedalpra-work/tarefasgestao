@@ -34,7 +34,12 @@ Você tem memória das conversas anteriores com essa pessoa (mensagens mais anti
 Regras importantes:
 - Saudação ou conversa fiada ("oi", "bom dia", "tudo bem?", "obrigado") NÃO é motivo pra chamar nenhuma ferramenta — só responda naturalmente, de forma breve, e pergunte no que pode ajudar. Só use uma ferramenta quando a pessoa perguntar algo que exige dado real da plataforma.
 - Você CONSULTA informação e, quando explicitamente pedido, PROPÕE uma tarefa. Editar, apagar ou concluir qualquer coisa continua sendo na tela correspondente (Tarefas, Kanban, Sugestões da IA) — explique isso se pedirem.
-- propor_tarefa NÃO cria tarefa: cria uma sugestão pendente que alguém precisa aceitar em /sugestoes-ia. Use só quando a pessoa pedir de forma clara ("cria uma tarefa pra...", "anota isso aí", "propõe uma tarefa"). Nunca proponha por conta própria só porque encontrou um problema — nesse caso, relate e pergunte se quer que você proponha. Ao confirmar, diga que ficou como sugestão esperando aprovação, não como tarefa criada.
+- Ações: você PODE criar tarefa (criar_tarefa), comentar, adicionar item de checklist e preparar alterações em tarefa existente (alterar_tarefa). Você NÃO apaga nada — nem tarefa, nem cliente, nem pessoa; se pedirem, explique que exclusão é só pela tela.
+- Só aja quando pedirem de forma clara ("cria uma tarefa pra...", "marca como concluída", "muda o prazo pra sexta"). Nunca aja por iniciativa própria só porque encontrou um problema — relate e pergunte se quer que você faça.
+- alterar_tarefa NÃO altera na hora: deixa pendente e a pessoa clica em Confirmar no chat. Depois de chamá-la, diga qual tarefa você encontrou e o que vai mudar — NUNCA diga que já está feito.
+- Uma tarefa por ação. Se pedirem pra mudar várias de uma vez, liste quais você faria e trate uma de cada vez, confirmando cada uma.
+- Se a busca por título achar mais de uma tarefa, PERGUNTE qual antes de agir. Nunca escolha sozinho entre candidatos parecidos.
+- criar_tarefa cria de verdade no Kanban; propor_tarefa só deixa uma sugestão em /sugestoes-ia. Use propor_tarefa quando o pedido for vago ou quando a ideia for sua, e criar_tarefa quando a pessoa mandar criar. Nunca invente responsável, cliente ou prazo que não foram ditos.
 - Pergunta sobre o que foi conversado/combinado em reunião: use search_meet_recaps. Sobre quem está com o quê: get_team_workload. Sobre uma tarefa específica pelo nome: get_task_detail. Sobre reunião que já aconteceu: get_meetings_history (get_upcoming_meetings é só pras futuras).
 - Se uma ferramenta não achar o que foi pedido (ex: cliente não encontrado), diga isso claramente em vez de inventar uma resposta.
 - Seja conciso. Respostas de chat, não relatórios — poucas frases ou uma lista curta, direto ao ponto.
@@ -88,9 +93,21 @@ export async function POST(req: NextRequest) {
     { role: "user", content: userMessage },
   ];
 
+  // alterar_tarefa nao altera nada: registra a intencao e devolve o id por aqui, pra
+  // resposta do chat carregar o botao de confirmar
+  const ctx = { userId, userName: session.user.name ?? null, pendingActionId: null as string | null };
+
   async function finish(reply: string) {
     await prisma.assistantMessage.create({ data: { userId, role: "assistant", content: reply } });
-    return NextResponse.json({ reply });
+    if (!ctx.pendingActionId) return NextResponse.json({ reply });
+    const action = await prisma.assistantAction.findUnique({
+      where: { id: ctx.pendingActionId },
+      select: { id: true, summary: true, status: true },
+    });
+    return NextResponse.json({
+      reply,
+      pendingAction: action && action.status === "pending" ? { id: action.id, summary: action.summary } : undefined,
+    });
   }
 
   try {
@@ -140,7 +157,7 @@ export async function POST(req: NextRequest) {
         let result: unknown;
         try {
           const args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-          result = await runTool(session.user.squadId, call.function.name, args, { userId, userName: session.user.name ?? null });
+          result = await runTool(session.user.squadId, call.function.name, args, ctx);
         } catch (err) {
           result = { error: String(err) };
         }

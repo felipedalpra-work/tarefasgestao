@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, X, Loader2, RotateCcw } from "lucide-react";
+import { Send, X, Loader2, RotateCcw, Check, AlertTriangle } from "lucide-react";
 import { LogoIcon } from "./LogoIcon";
 import { cn } from "@/lib/utils";
 
 type Message = { role: "user" | "assistant"; content: string };
+
+// Alteração que o assistente preparou numa tarefa que já existe e que só acontece
+// quando a pessoa clica em Confirmar. O que o assistente erra com mais chance não é a
+// ação, é o ALVO — por isso o card mostra a tarefa resolvida antes de mexer nela.
+type PendingAction = { id: string; summary: string };
 
 const SUGGESTIONS = ["O que está atrasado?", "Quais clientes estão com saúde vermelha?", "Tem sugestão da IA parada?"];
 
@@ -16,6 +21,8 @@ export function AiAssistant() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [resolvingAction, setResolvingAction] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -25,7 +32,11 @@ export function AiAssistant() {
     setHistoryLoaded(true);
     fetch("/api/assistant/messages")
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data.messages)) setMessages(data.messages); })
+      .then((data) => {
+        if (Array.isArray(data.messages)) setMessages(data.messages);
+        // ação pendente sobrevive ao F5 — senão o botão sumiria no meio da alteração
+        if (data.pendingAction) setPendingAction(data.pendingAction);
+      })
       .catch(() => {});
   }, [open, historyLoaded]);
 
@@ -43,6 +54,7 @@ export function AiAssistant() {
     setMessages((prev) => [...prev, { role: "user", content }]);
     setInput("");
     setError(null);
+    setPendingAction(null);
     setLoading(true);
     try {
       const res = await fetch("/api/assistant/chat", {
@@ -55,6 +67,7 @@ export function AiAssistant() {
         setError(data.error || "Erro ao consultar o assistente.");
       } else {
         setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+        if (data.pendingAction) setPendingAction(data.pendingAction);
       }
     } catch {
       setError("Não consegui falar com o assistente agora.");
@@ -63,9 +76,35 @@ export function AiAssistant() {
     }
   }
 
+  // Confirma ou descarta a alteração pendente. É esta chamada que muda a tarefa de
+  // fato — o chat só tinha registrado a intenção.
+  async function resolveAction(confirm: boolean) {
+    if (!pendingAction || resolvingAction) return;
+    setResolvingAction(true);
+    try {
+      const res = await fetch(`/api/assistant/actions/${pendingAction.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Não consegui concluir essa ação.");
+      } else {
+        setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+        setPendingAction(null);
+      }
+    } catch {
+      setError("Não consegui falar com o assistente agora.");
+    } finally {
+      setResolvingAction(false);
+    }
+  }
+
   async function resetConversation() {
     setMessages([]);
     setError(null);
+    setPendingAction(null);
     await fetch("/api/assistant/messages", { method: "DELETE" }).catch(() => {});
   }
 
@@ -130,6 +169,35 @@ export function AiAssistant() {
                 </div>
               </div>
             ))}
+
+            {pendingAction && (
+              <div className="flex justify-start">
+                <div className="max-w-[92%] w-full bg-surface-2 border border-yellow-500/30 rounded-xl p-3">
+                  <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 mb-1.5">
+                    <AlertTriangle size={11} />
+                    Confirma esta alteração?
+                  </p>
+                  <p className="text-xs text-ink leading-relaxed">{pendingAction.summary}</p>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <button
+                      onClick={() => resolveAction(true)}
+                      disabled={resolvingAction}
+                      className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-o2-green text-bg font-semibold hover:bg-o2-green-bright disabled:opacity-50 transition-colors"
+                    >
+                      <Check size={13} />
+                      {resolvingAction ? "Aplicando…" : "Confirmar"}
+                    </button>
+                    <button
+                      onClick={() => resolveAction(false)}
+                      disabled={resolvingAction}
+                      className="text-xs px-3 py-1.5 rounded-lg text-ink-mid hover:text-ink disabled:opacity-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {loading && (
               <div className="flex justify-start">

@@ -452,6 +452,31 @@ model AssistantMessage {
   @@index([userId, createdAt])
 }
 
+// Ação que o assistente de IA quer executar numa tarefa que JÁ EXISTE e que está
+// esperando alguém clicar "Confirmar" no chat.
+//
+// Existe por causa de um risco específico: o erro mais provável do assistente não é
+// fazer a coisa errada, é acertar a ação e errar o ALVO — "muda o prazo da tarefa do
+// balancete" quando há três com "balancete" no título. Guardar a intenção aqui deixa o
+// chat mostrar exatamente qual tarefa foi resolvida antes de mexer nela.
+//
+// Criar tarefa/comentário/item de checklist NÃO passa por aqui: errar ao criar é barato
+// (nasce visível e some com um clique). Apagar não existe como ação do assistente.
+model AssistantAction {
+  id         String    @id @default(cuid())
+  squadId    String
+  userId     String // quem pediu — a ação roda com a permissão dessa pessoa
+  taskId     String // alvo já resolvido, pra confirmação não depender de buscar de novo
+  changes    String // JSON dos campos a alterar
+  summary    String // texto curto do que vai acontecer, mostrado no chat
+  status     String    @default("pending") // "pending" | "confirmed" | "cancelled"
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, status])
+  @@index([squadId])
+}
+
 model PlatformLog {
   id        String   @id @default(cuid())
   squadId   String? // fica nullable pra sempre — algumas linhas são de sistema/cron, não de um squad específico
