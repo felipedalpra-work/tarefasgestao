@@ -49,6 +49,10 @@ const STATUS_COLORS: Record<string, string> = {
 };
 const ALL_STATUSES = ["todo", "in_progress", "blocked", "done"];
 
+// Mesmo sentinel do NewTaskModal e da edição de sugestões da IA — "responsável" é o
+// cliente, não alguém do squad. No banco isso é assigneeId null + deliverTo "o2".
+const CLIENT_CHOICE = "__client__";
+
 export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUpdated, users = [] }: Props) {
   const { data: session } = useSession();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -67,7 +71,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
-  const [editForm, setEditForm] = useState({ title: "", description: "", priority: "", dueDate: "", dueTime: "", assigneeId: "", client: "", recurrence: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", priority: "", dueDate: "", dueTime: "", assigneeId: "", client: "", deliverTo: "", recurrence: "" });
   const [editWeekdays, setEditWeekdays] = useState<number[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -92,8 +96,10 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       priority: task.priority,
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : "",
       dueTime: task.dueTime ?? "",
-      assigneeId: task.assignee?.id ?? "",
+      // tarefa que já é do cliente abre com "Cliente" selecionado, não com "Sem responsável"
+      assigneeId: task.assignee?.id ?? (task.deliverTo === "o2" ? CLIENT_CHOICE : ""),
       client: task.client ?? "",
+      deliverTo: task.deliverTo ?? "",
       recurrence: task.recurrence ?? "",
     });
     setEditWeekdays(task.recurrenceWeekdays ?? []);
@@ -127,6 +133,32 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // Cliente, Entrega e Responsável andam juntos: "responsável = Cliente" só faz sentido
+  // com um cliente preenchido e entrega "Cliente entrega para a O2". Mesmas regras do
+  // NewTaskModal — sem isso dava pra salvar tarefa com responsável do squad E marcada como
+  // entregue pelo cliente (2 tarefas já ficaram assim no banco).
+  function updateEditClient(value: string) {
+    setEditForm((f) => ({
+      ...f,
+      client: value,
+      assigneeId: f.assigneeId === CLIENT_CHOICE && !value.trim() ? "" : f.assigneeId,
+    }));
+  }
+  function updateEditDeliverTo(value: string) {
+    setEditForm((f) => ({
+      ...f,
+      deliverTo: value,
+      assigneeId: f.assigneeId === CLIENT_CHOICE && value !== "o2" ? "" : f.assigneeId,
+    }));
+  }
+  function updateEditAssignee(value: string) {
+    setEditForm((f) => ({
+      ...f,
+      assigneeId: value,
+      deliverTo: value === CLIENT_CHOICE && f.deliverTo !== "o2" ? "o2" : f.deliverTo,
+    }));
+  }
+
   async function saveEdit() {
     if (!task || saving) return;
     if (editForm.recurrence === "weekdays" && editWeekdays.length === 0) {
@@ -134,6 +166,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       return;
     }
     setSaving(true);
+    const isClientChoice = editForm.assigneeId === CLIENT_CHOICE;
     const res = await fetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -143,8 +176,9 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
         priority: editForm.priority,
         dueDate: editForm.dueDate || null,
         dueTime: editForm.dueTime || null,
-        assigneeId: editForm.assigneeId || null,
+        assigneeId: isClientChoice ? null : editForm.assigneeId || null,
         client: editForm.client.trim() || null,
+        deliverTo: editForm.deliverTo || null,
         recurrence: editForm.recurrence || null,
         recurrenceWeekdays: editForm.recurrence === "weekdays" ? editWeekdays : [],
       }),
@@ -391,7 +425,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
               </div>
               <div>
                 <label className="text-xs text-ink-dim block mb-1">Cliente</label>
-                <input value={editForm.client} onChange={e => setEditForm(f => ({ ...f, client: e.target.value }))} placeholder="Nome do cliente"
+                <input value={editForm.client} onChange={e => updateEditClient(e.target.value)} placeholder="Nome do cliente"
                   className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50" />
               </div>
             </div>
@@ -429,16 +463,31 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                 </p>
               )}
             </div>
-            {users.length > 0 && (
+            {editForm.client.trim() && (
               <div>
-                <label className="text-xs text-ink-dim block mb-1">Responsável</label>
-                <select value={editForm.assigneeId} onChange={e => setEditForm(f => ({ ...f, assigneeId: e.target.value }))}
+                <label className="text-xs text-ink-dim block mb-1">Entrega</label>
+                <select value={editForm.deliverTo} onChange={e => updateEditDeliverTo(e.target.value)}
                   className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50">
-                  <option value="">Sem responsável</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                  <option value="">Interna (não aparece no calendário)</option>
+                  <option value="client">O2 entrega para o cliente</option>
+                  <option value="o2">Cliente entrega para a O2</option>
                 </select>
               </div>
             )}
+            <div>
+              <label className="text-xs text-ink-dim block mb-1">Responsável</label>
+              <select value={editForm.assigneeId} onChange={e => updateEditAssignee(e.target.value)}
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50">
+                <option value="">Sem responsável</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                {editForm.client.trim() && (
+                  <option value={CLIENT_CHOICE}>Cliente ({editForm.client.trim()})</option>
+                )}
+              </select>
+              {!editForm.client.trim() && (
+                <p className="text-xs text-ink-faint mt-1">Preencha o Cliente acima pra poder atribuir a tarefa a ele.</p>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -708,6 +757,8 @@ function activityVerb(type: string): string {
     due_date: "mudou o prazo",
     priority: "mudou a prioridade",
     title: "renomeou a tarefa",
+    recurrence: "mudou a recorrência",
+    deliver_to: "mudou a entrega",
   };
   return map[type] ?? "atualizou a tarefa";
 }

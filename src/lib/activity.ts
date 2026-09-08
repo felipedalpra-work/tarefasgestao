@@ -9,9 +9,16 @@ type TaskSnapshot = {
   dueDate: Date | null;
   dueTime: string | null;
   assigneeId: string | null;
+  deliverTo: string | null;
   recurrence: string | null;
   recurrenceWeekdays: number[];
 };
+
+function deliverToLabel(value: string | null): string {
+  if (value === "client") return "O2 entrega para o cliente";
+  if (value === "o2") return "Cliente entrega para a O2";
+  return "interna";
+}
 
 // Compara o estado anterior com o body do PATCH e registra as mudanças
 export async function recordTaskChanges(
@@ -63,6 +70,12 @@ export async function recordTaskChanges(
       type: "assignee",
       detail: `${assigneeNames.before ?? "sem responsável"} → ${assigneeNames.after ?? "sem responsável"}`,
     });
+  }
+  if (body.deliverTo !== undefined) {
+    const newDeliverTo = body.deliverTo ? String(body.deliverTo) : null;
+    if (newDeliverTo !== before.deliverTo) {
+      entries.push({ type: "deliver_to", detail: `Entrega: ${deliverToLabel(before.deliverTo)} → ${deliverToLabel(newDeliverTo)}` });
+    }
   }
 
   if (entries.length === 0) return;

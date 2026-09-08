@@ -50,6 +50,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.dueTime !== undefined && body.dueTime && !isValidTime(body.dueTime)) {
     return NextResponse.json({ error: "Horário inválido (use HH:MM)" }, { status: 400 });
   }
+
+  // Entrega ("" = interna, "client" = O2 entrega pro cliente, "o2" = cliente entrega pra O2).
+  // Faltava aqui: sem aceitar esse campo no PATCH não havia como atribuir a tarefa ao cliente
+  // depois de criada — "responsável = Cliente" é assigneeId null + deliverTo "o2", e o segundo
+  // ficava congelado no valor da criação.
+  let deliverTo: string | null | undefined;
+  if (body.deliverTo !== undefined) {
+    if (!body.deliverTo) deliverTo = null;
+    else if (body.deliverTo === "client" || body.deliverTo === "o2") deliverTo = body.deliverTo;
+    else return NextResponse.json({ error: "Entrega inválida" }, { status: 400 });
+  }
   const effectiveRecurrence = recurrence !== undefined ? recurrence : before.recurrence;
   let recurrenceWeekdays: number[] | undefined;
   if (body.recurrenceWeekdays !== undefined || recurrence !== undefined) {
@@ -73,6 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(body.dueDate !== undefined && { dueDate: body.dueDate ? new Date(body.dueDate) : null }),
       ...(body.dueTime !== undefined && { dueTime: body.dueTime || null }),
       ...(body.client !== undefined && { client: body.client }),
+      ...(deliverTo !== undefined && { deliverTo }),
       ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
       ...(recurrence !== undefined && { recurrence }),
       ...(recurrenceWeekdays !== undefined && { recurrenceWeekdays }),
