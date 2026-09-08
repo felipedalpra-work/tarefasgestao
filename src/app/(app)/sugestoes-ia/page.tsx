@@ -380,7 +380,11 @@ export default function SugestoesIaPage() {
                     </Link>
                   ) : (
                     <span className="flex items-center gap-1.5 text-xs text-ink-faint truncate">
-                      <Workflow size={11} className="shrink-0" />
+                      {row.suggestion.source === "assistente" ? (
+                        <Sparkles size={11} className="shrink-0 text-o2-green" />
+                      ) : (
+                        <Workflow size={11} className="shrink-0" />
+                      )}
                       <span className="truncate">{row.suggestion.sourceRef || "n8n"}</span>
                       <span className="shrink-0">· {format(new Date(row.suggestion.createdAt), "dd 'de' MMM", { locale: ptBR })}</span>
                       {row.suggestion.client && <span className="shrink-0">· {row.suggestion.client}</span>}

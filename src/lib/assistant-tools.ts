@@ -1,6 +1,12 @@
 import type Groq from "groq-sdk";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import { isTaskOverdue, normalizeText, brtNow } from "./utils";
+import { findDuplicateNote } from "./duplicate-detection";
+import { log } from "./logger";
+
+// Quem esta falando com o assistente. So a ferramenta de propor tarefa usa (pra registrar
+// a pedido de quem a sugestao nasceu) — as de leitura sao todas escopadas por squad.
+export type ToolContext = { userId: string; userName: string | null };
 
 // Ferramentas do assistente de IA (botão flutuante) — todas SOMENTE LEITURA de propósito.
 // O assistente responde perguntas sobre o que já existe na plataforma; ele nunca cria,
@@ -384,6 +390,347 @@ async function getTratativas(squadId: string, args: { status?: string; client?: 
   }));
 }
 
+
+// ---------------------------------------------------------------------------
+// Busca no conteúdo dos Meet Recaps
+//
+// Duas restrições reais moldaram esta função:
+// 1. As 69 transcrições somam ~200 mil caracteres (~50 mil tokens). Mandar corpo
+//    inteiro estoura o contexto, então devolve TRECHO em volta do que casou.
+// 2. Só 1 dos 69 recaps tem `client` preenchido — esse campo é extraído pela IA e a
+//    extração está pausada desde 2026-07-21. Por isso filtrar por cliente procura o
+//    nome também no assunto/corpo, em vez de confiar na coluna.
+const RECAP_EXCERPT_RADIUS = 260;
+
+function excerptAround(body: string, term: string): string {
+  const clean = body.replace(/\s+/g, " ").trim();
+  const head = () => clean.slice(0, RECAP_EXCERPT_RADIUS * 2) + (clean.length > RECAP_EXCERPT_RADIUS * 2 ? "…" : "");
+  if (!term) return head();
+  const at = normalizeText(clean).indexOf(normalizeText(term));
+  if (at < 0) return head();
+  const from = Math.max(0, at - RECAP_EXCERPT_RADIUS);
+  const to = Math.min(clean.length, at + term.length + RECAP_EXCERPT_RADIUS);
+  return (from > 0 ? "…" : "") + clean.slice(from, to) + (to < clean.length ? "…" : "");
+}
+
+async function searchMeetRecaps(
+  squadId: string,
+  args: { textSearch?: string; client?: string; days?: number | string; limit?: number | string }
+) {
+  const db = forSquad(squadId);
+  const limit = Math.min(Math.max(Number(args.limit) || 5, 1), 10);
+  const term = (args.textSearch || "").trim();
+  const clientTerm = (args.client || "").trim();
+  if (!term && !clientTerm) {
+    return { erro: "Diga o que procurar (textSearch) ou de qual cliente (client)." };
+  }
+
+  const days = Number(args.days) || 0;
+  const since = days > 0 ? new Date(Date.now() - days * 86400000) : undefined;
+
+  const conditions: object[] = [];
+  if (term) {
+    conditions.push({
+      OR: [
+        { subject: { contains: term, mode: "insensitive" as const } },
+        { body: { contains: term, mode: "insensitive" as const } },
+      ],
+    });
+  }
+  if (clientTerm) {
+    const resolved = await resolveClientName(db, clientTerm);
+    const name = resolved ?? clientTerm;
+    conditions.push({
+      OR: [
+        { client: name },
+        { subject: { contains: name, mode: "insensitive" as const } },
+        { body: { contains: name, mode: "insensitive" as const } },
+      ],
+    });
+  }
+
+  const recaps = await db.meetRecap.findMany({
+    where: { ...(since ? { createdAt: { gte: since } } : {}), AND: conditions },
+    select: { id: true, subject: true, client: true, createdAt: true, body: true, source: true },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  return {
+    encontrados: recaps.length,
+    reunioes: recaps.map((r) => ({
+      assunto: r.subject,
+      data: fmtMoment(r.createdAt),
+      cliente: r.client,
+      origem: r.source,
+      trecho: excerptAround(r.body, term || clientTerm),
+    })),
+    observacao:
+      recaps.length > 0 ? "Os trechos são recortes da transcrição, não a ata inteira. A completa está em /recaps." : undefined,
+  };
+}
+
+// Carga do squad — quem está com o quê. Conta tarefa em conjunto separando o que a
+// pessoa é dona do que ela só participa (a cobrança é do dono, ver task-assignees.ts).
+async function getTeamWorkload(squadId: string) {
+  const db = forSquad(squadId);
+  const { today } = brtNow();
+  const semanaAtras = new Date(today.getTime() - 7 * 86400000);
+
+  const [users, tasks] = await Promise.all([
+    db.user.findMany({ select: { id: true, name: true, email: true, cargo: true }, orderBy: { name: "asc" } }),
+    db.task.findMany({
+      select: {
+        id: true, status: true, dueDate: true, priority: true, assigneeId: true, updatedAt: true,
+        assignees: { select: { userId: true, role: true, done: true } },
+      },
+    }),
+  ]);
+
+  const porPessoa = users.map((u) => {
+    const comoDono = tasks.filter((t) => t.assigneeId === u.id);
+    const soParticipante = tasks.filter((t) => t.assigneeId !== u.id && t.assignees.some((a) => a.userId === u.id));
+    const abertas = comoDono.filter((t) => t.status !== "done");
+    return {
+      pessoa: u.name || u.email,
+      cargo: u.cargo,
+      abertas: abertas.length,
+      atrasadas: abertas.filter((t) => isTaskOverdue(t.dueDate, t.status)).length,
+      altaPrioridade: abertas.filter((t) => t.priority === "high").length,
+      concluidasUltimos7Dias: comoDono.filter((t) => t.status === "done" && t.updatedAt >= semanaAtras).length,
+      participaSemSerDona: soParticipante.filter((t) => t.status !== "done").length,
+      partesPendentesDela: soParticipante.filter(
+        (t) => t.status !== "done" && t.assignees.some((a) => a.userId === u.id && !a.done)
+      ).length,
+    };
+  });
+
+  const semDono = tasks.filter((t) => t.status !== "done" && !t.assigneeId);
+  return {
+    porPessoa: porPessoa.sort((a, b) => b.abertas - a.abertas),
+    tarefasSemResponsavelHumano: semDono.length,
+    observacao:
+      "'abertas' e 'atrasadas' contam só as tarefas em que a pessoa é a DONA. 'participaSemSerDona' são tarefas em conjunto de outra pessoa em que ela entra como participante.",
+  };
+}
+
+// Detalhe de uma tarefa: histórico, comentários, checklist e partes. Aceita busca por
+// título porque o assistente nunca tem o id na mão.
+async function getTaskDetail(squadId: string, args: { title?: string; taskId?: string }) {
+  const db = forSquad(squadId);
+  const term = (args.title || "").trim();
+  const found = args.taskId
+    ? await db.task.findUnique({ where: { id: args.taskId }, select: { id: true } })
+    : term
+    ? await db.task.findFirst({
+        where: { title: { contains: term, mode: "insensitive" } },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      })
+    : null;
+  if (!found) return { erro: "Não achei tarefa com esse título." };
+
+  const full = await db.task.findUnique({
+    where: { id: found.id },
+    select: {
+      id: true, title: true, description: true, status: true, priority: true, client: true,
+      dueDate: true, dueTime: true, deliverTo: true, source: true, meetingTitle: true,
+      recurrence: true, createdAt: true,
+      assignee: { select: { name: true } },
+      createdBy: { select: { name: true } },
+      assignees: {
+        select: { isClient: true, role: true, part: true, done: true, user: { select: { name: true } } },
+        orderBy: { sortOrder: "asc" },
+      },
+      subtasks: { select: { title: true, done: true }, orderBy: { sortOrder: "asc" } },
+      links: { select: { url: true, label: true } },
+      comments: {
+        select: { content: true, createdAt: true, user: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      },
+      activities: {
+        select: { type: true, detail: true, userName: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 15,
+      },
+    },
+  });
+  if (!full) return { erro: "Não achei tarefa com esse título." };
+
+  return {
+    titulo: full.title,
+    descricao: full.description,
+    status: full.status,
+    prioridade: full.priority,
+    cliente: full.client,
+    prazo: fmtDay(full.dueDate),
+    horario: full.dueTime,
+    atrasada: isTaskOverdue(full.dueDate, full.status),
+    quemEntrega: full.deliverTo,
+    origem: full.source,
+    reuniaoDeOrigem: full.meetingTitle,
+    recorrencia: full.recurrence,
+    criadaPor: full.createdBy?.name ?? null,
+    criadaEm: fmtMoment(full.createdAt),
+    dono: full.assignee?.name ?? null,
+    emConjunto:
+      full.assignees.length > 0
+        ? full.assignees.map((a) => ({
+            quem: a.isClient ? full.client || "Cliente" : a.user?.name ?? null,
+            dono: a.role === "principal",
+            parte: a.part,
+            concluiu: a.done,
+          }))
+        : undefined,
+    checklist: full.subtasks.map((sb) => ({ item: sb.title, feito: sb.done })),
+    links: full.links.map((l) => ({ url: l.url, rotulo: l.label })),
+    comentarios: full.comments.map((c) => ({
+      quem: c.user?.name ?? null,
+      quando: fmtMoment(c.createdAt),
+      texto: c.content,
+    })),
+    historico: full.activities.map((a) => ({
+      quando: fmtMoment(a.createdAt),
+      quem: a.userName,
+      oQue: a.detail || a.type,
+    })),
+  };
+}
+
+// Reuniões JÁ REALIZADAS. get_upcoming_meetings só olha pra frente, então "quando foi a
+// última reunião com o cliente X" não tinha resposta em lugar nenhum.
+async function getMeetingsHistory(
+  squadId: string,
+  args: { days?: number | string; client?: string; limit?: number | string }
+) {
+  const db = forSquad(squadId);
+  const days = Math.min(Math.max(Number(args.days) || 30, 1), 365);
+  const limit = Math.min(Math.max(Number(args.limit) || 15, 1), 40);
+  const since = new Date(Date.now() - days * 86400000);
+  const resolvedClient = args.client ? await resolveClientName(db, args.client) : null;
+
+  const events = await db.calendarEvent.findMany({
+    where: {
+      startAt: { gte: since, lt: new Date() },
+      ...(resolvedClient
+        ? { client: resolvedClient }
+        : args.client
+        ? { client: { contains: args.client, mode: "insensitive" } }
+        : {}),
+    },
+    select: { title: true, client: true, startAt: true, meetingType: true },
+    orderBy: { startAt: "desc" },
+    take: limit,
+  });
+
+  const porCliente: Record<string, number> = {};
+  for (const e of events) if (e.client) porCliente[e.client] = (porCliente[e.client] || 0) + 1;
+
+  return {
+    periodo: `últimos ${days} dias`,
+    total: events.length,
+    porCliente,
+    reunioes: events.map((e) => ({ titulo: e.title, cliente: e.client, data: fmtMoment(e.startAt), tipo: e.meetingType })),
+  };
+}
+
+// Números do período — o "como estamos indo" que hoje exige abrir o Dashboard e contar.
+async function getSquadStats(squadId: string, args: { days?: number | string }) {
+  const db = forSquad(squadId);
+  const days = Math.min(Math.max(Number(args.days) || 7, 1), 90);
+  const { today } = brtNow();
+  const since = new Date(today.getTime() - days * 86400000);
+  const anterior = new Date(since.getTime() - days * 86400000);
+
+  const [criadas, concluidas, criadasAnterior, concluidasAnterior, abertas] = await Promise.all([
+    db.task.count({ where: { createdAt: { gte: since } } }),
+    db.task.count({ where: { status: "done", updatedAt: { gte: since } } }),
+    db.task.count({ where: { createdAt: { gte: anterior, lt: since } } }),
+    db.task.count({ where: { status: "done", updatedAt: { gte: anterior, lt: since } } }),
+    db.task.findMany({
+      where: { status: { not: "done" } },
+      select: { status: true, dueDate: true, client: true, priority: true },
+    }),
+  ]);
+
+  const porStatus: Record<string, number> = {};
+  const porCliente: Record<string, number> = {};
+  for (const t of abertas) {
+    porStatus[t.status] = (porStatus[t.status] || 0) + 1;
+    if (t.client) porCliente[t.client] = (porCliente[t.client] || 0) + 1;
+  }
+  const topClientes = Object.entries(porCliente)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([cliente, abertas]) => ({ cliente, abertas }));
+
+  return {
+    periodo: `últimos ${days} dias`,
+    criadas,
+    concluidas,
+    periodoAnterior: { criadas: criadasAnterior, concluidas: concluidasAnterior },
+    abertasAgora: abertas.length,
+    atrasadasAgora: abertas.filter((t) => isTaskOverdue(t.dueDate, "todo")).length,
+    altaPrioridadeAberta: abertas.filter((t) => t.priority === "high").length,
+    abertasPorStatus: porStatus,
+    clientesComMaisTarefasAbertas: topClientes,
+  };
+}
+
+// A ÚNICA ferramenta que escreve — e mesmo assim NÃO cria tarefa: cria uma SUGESTÃO
+// pendente em /sugestoes-ia, do mesmo jeito que as do n8n e dos Meet Recaps. A regra da
+// plataforma continua de pé: a IA nunca age sozinha; quem transforma em tarefa é uma
+// pessoa clicando "Adicionar". Passa pela mesma detecção de duplicidade do webhook n8n.
+async function proporTarefa(
+  squadId: string,
+  args: { title?: string; description?: string; client?: string; priority?: string; dueDate?: string },
+  ctx: ToolContext
+) {
+  const db = forSquad(squadId);
+  const title = (args.title || "").trim();
+  if (!title) return { erro: "Preciso de um título pra propor a tarefa." };
+
+  const resolvedClient = args.client ? (await resolveClientName(db, args.client)) ?? args.client.trim() : null;
+  const dueDate = args.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(args.dueDate) ? new Date(args.dueDate) : null;
+  const priority = ["high", "medium", "low"].includes(args.priority || "") ? args.priority! : null;
+
+  const duplicateNote = await findDuplicateNote(squadId, title, resolvedClient, dueDate);
+
+  const suggestion = await db.externalSuggestion.create({
+    data: {
+      squadId,
+      source: "assistente",
+      sourceRef: `Assistente de IA · a pedido de ${ctx.userName ?? "alguém do squad"}`,
+      title,
+      description: args.description?.trim() || null,
+      client: resolvedClient,
+      priority,
+      dueDate,
+      status: duplicateNote ? "duplicate" : "pending",
+      duplicateNote,
+    },
+  });
+
+  await log("ai-assistant", `Sugestão de tarefa proposta pelo assistente: "${title}"`, {
+    detail: `pedido por ${ctx.userName ?? ctx.userId}`,
+  });
+
+  return {
+    criada: true,
+    aviso: duplicateNote
+      ? `Propus, mas entrou na aba Duplicadas: ${duplicateNote}`
+      : "Propus como SUGESTÃO pendente. Ela NÃO virou tarefa — precisa ser aceita em /sugestoes-ia.",
+    sugestao: {
+      titulo: suggestion.title,
+      cliente: suggestion.client,
+      prioridade: suggestion.priority,
+      prazo: fmtDay(suggestion.dueDate),
+    },
+    onde: "/sugestoes-ia (aba Pendentes)",
+  };
+}
+
 export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   {
     type: "function",
@@ -482,9 +829,101 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_meet_recaps",
+      description:
+        "Busca no CONTEÚDO das atas/transcrições das reuniões (Meet Recaps) já sincronizadas. Use pra perguntas sobre o que foi dito, combinado ou decidido em reunião — ex: 'o que ficamos de fazer com a Babyland?', 'já falamos de rebalanceamento com a Allebras?'. Devolve trechos da ata, não o texto inteiro.",
+      parameters: {
+        type: "object",
+        properties: {
+          textSearch: { type: "string", description: "O assunto procurado dentro da ata (ex: 'rebalanceamento', 'contrato', 'Oxy')" },
+          client: { type: "string", description: "Nome do cliente. A maioria das atas não tem o cliente marcado, então o nome também é procurado dentro do texto." },
+          days: { type: ["number", "string"], description: "Olhar só as reuniões dos últimos N dias (padrão: todas)" },
+          limit: { type: ["number", "string"], description: "Máximo de reuniões (padrão 5, máximo 10)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_team_workload",
+      description:
+        "Carga de trabalho de cada pessoa do squad: tarefas abertas, atrasadas, de alta prioridade, concluídas nos últimos 7 dias e em quantas tarefas em conjunto ela entra só como participante. Use pra 'quem está sobrecarregado', 'como está a carga do time', 'quantas tarefas o Fulano tem'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_task_detail",
+      description:
+        "Abre UMA tarefa específica com histórico de mudanças, comentários, checklist, links e as partes de cada responsável (quando é tarefa em conjunto). Use quando a pessoa perguntar sobre uma tarefa nominalmente — 'por que a tarefa X travou', 'o que já andou na tarefa Y', 'quem mexeu nela'.",
+      parameters: {
+        type: "object",
+        properties: { title: { type: "string", description: "Título ou parte do título da tarefa" } },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_meetings_history",
+      description:
+        "Reuniões JÁ REALIZADAS (passadas), opcionalmente de um cliente. Use pra 'quando foi a última reunião com X', 'quantas reuniões tivemos esse mês', 'com quem falamos essa semana'. Para reuniões futuras use get_upcoming_meetings.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: { type: ["number", "string"], description: "Quantos dias pra trás olhar (padrão 30, máximo 365)" },
+          client: { type: "string", description: "Filtrar por cliente" },
+          limit: { type: ["number", "string"], description: "Máximo de reuniões (padrão 15, máximo 40)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_squad_stats",
+      description:
+        "Números do squad no período: tarefas criadas e concluídas, comparação com o período anterior, abertas por status, atrasadas e clientes com mais tarefas abertas. Use pra 'como estamos indo', 'quantas fechamos essa semana', 'estamos melhorando'.",
+      parameters: {
+        type: "object",
+        properties: { days: { type: ["number", "string"], description: "Tamanho do período em dias (padrão 7, máximo 90)" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "propor_tarefa",
+      description:
+        "Propõe uma tarefa como SUGESTÃO pendente em /sugestoes-ia — NÃO cria a tarefa. Alguém do squad precisa aceitar na tela pra virar tarefa de verdade. Use SOMENTE quando a pessoa pedir explicitamente pra criar/propor/anotar uma tarefa. Nunca use por iniciativa própria, nem depois de só relatar um problema. Ao responder, deixe claro que ficou como sugestão esperando aprovação.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título da tarefa, curto e no imperativo (ex: 'Revisar balancete de agosto')" },
+          description: { type: "string", description: "Detalhe do que precisa ser feito" },
+          client: { type: "string", description: "Cliente relacionado, se houver" },
+          priority: { type: "string", enum: ["high", "medium", "low"] },
+          dueDate: { type: "string", description: "Prazo no formato YYYY-MM-DD. Use a data de hoje informada no início da conversa como referência." },
+        },
+        required: ["title"],
+      },
+    },
+  },
 ];
 
-export async function runTool(squadId: string, name: string, args: Record<string, unknown>): Promise<unknown> {
+
+export async function runTool(
+  squadId: string,
+  name: string,
+  args: Record<string, unknown>,
+  ctx: ToolContext
+): Promise<unknown> {
   switch (name) {
     case "get_urgent_items":
       return getUrgentItems(squadId);
@@ -500,6 +939,18 @@ export async function runTool(squadId: string, name: string, args: Record<string
       return getPendingAiSuggestions(squadId);
     case "get_tratativas":
       return getTratativas(squadId, args);
+    case "search_meet_recaps":
+      return searchMeetRecaps(squadId, args);
+    case "get_team_workload":
+      return getTeamWorkload(squadId);
+    case "get_task_detail":
+      return getTaskDetail(squadId, args as { title?: string; taskId?: string });
+    case "get_meetings_history":
+      return getMeetingsHistory(squadId, args);
+    case "get_squad_stats":
+      return getSquadStats(squadId, args);
+    case "propor_tarefa":
+      return proporTarefa(squadId, args, ctx);
     default:
       return { error: `Ferramenta desconhecida: ${name}` };
   }

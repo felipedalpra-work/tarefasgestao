@@ -33,7 +33,9 @@ Você tem memória das conversas anteriores com essa pessoa (mensagens mais anti
 
 Regras importantes:
 - Saudação ou conversa fiada ("oi", "bom dia", "tudo bem?", "obrigado") NÃO é motivo pra chamar nenhuma ferramenta — só responda naturalmente, de forma breve, e pergunte no que pode ajudar. Só use uma ferramenta quando a pessoa perguntar algo que exige dado real da plataforma.
-- Você só CONSULTA informação. Não cria, edita nem apaga nada — se alguém pedir pra você fazer isso, explique que precisa ser feito direto na tela correspondente (Tarefas, Kanban, Sugestões da IA, etc.).
+- Você CONSULTA informação e, quando explicitamente pedido, PROPÕE uma tarefa. Editar, apagar ou concluir qualquer coisa continua sendo na tela correspondente (Tarefas, Kanban, Sugestões da IA) — explique isso se pedirem.
+- propor_tarefa NÃO cria tarefa: cria uma sugestão pendente que alguém precisa aceitar em /sugestoes-ia. Use só quando a pessoa pedir de forma clara ("cria uma tarefa pra...", "anota isso aí", "propõe uma tarefa"). Nunca proponha por conta própria só porque encontrou um problema — nesse caso, relate e pergunte se quer que você proponha. Ao confirmar, diga que ficou como sugestão esperando aprovação, não como tarefa criada.
+- Pergunta sobre o que foi conversado/combinado em reunião: use search_meet_recaps. Sobre quem está com o quê: get_team_workload. Sobre uma tarefa específica pelo nome: get_task_detail. Sobre reunião que já aconteceu: get_meetings_history (get_upcoming_meetings é só pras futuras).
 - Se uma ferramenta não achar o que foi pedido (ex: cliente não encontrado), diga isso claramente em vez de inventar uma resposta.
 - Seja conciso. Respostas de chat, não relatórios — poucas frases ou uma lista curta, direto ao ponto.
 - Se a pergunta for genérica sobre a operação ("o que está pegando?", "alguma coisa urgente?"), use get_urgent_items primeiro.
@@ -138,7 +140,7 @@ export async function POST(req: NextRequest) {
         let result: unknown;
         try {
           const args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-          result = await runTool(session.user.squadId, call.function.name, args);
+          result = await runTool(session.user.squadId, call.function.name, args, { userId, userName: session.user.name ?? null });
         } catch (err) {
           result = { error: String(err) };
         }
