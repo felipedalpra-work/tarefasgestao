@@ -7,9 +7,11 @@ import { notifyTaskCompleted } from "@/lib/slack";
 import { isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
 import { spawnNextOccurrence } from "@/lib/task-recurrence";
 import { brtNow } from "@/lib/utils";
+import { normalizeAssignees, syncTaskAssignees } from "@/lib/task-assignees";
 
 const TASK_INCLUDE = {
   assignee: { select: { id: true, name: true, image: true } },
+  assignees: { include: { user: { select: { id: true, name: true, image: true } } }, orderBy: { sortOrder: "asc" } },
   subtasks: { select: { id: true, done: true } },
   _count: { select: { links: true, comments: true } },
 } as const;
@@ -35,9 +37,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const before = await db.task.findUnique({
     where: { id },
-    include: { assignee: { select: { id: true, name: true } } },
+    include: { assignee: { select: { id: true, name: true } }, assignees: true },
   });
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const squadUserIds = new Set((await db.user.findMany({ select: { id: true } })).map((u) => u.id));
+  const assignees = normalizeAssignees(body.assignees, squadUserIds);
+  if (!assignees.ok) return NextResponse.json({ error: assignees.error }, { status: 400 });
 
   // "" (Nenhuma) vira null; valor desconhecido é rejeitado em vez de virar null
   // silenciosamente, senão um typo mataria a série sem ninguém perceber
@@ -80,11 +86,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(body.title && { title: body.title }),
       ...(body.description !== undefined && { description: body.description }),
       ...(body.priority && { priority: body.priority }),
-      ...(body.assigneeId !== undefined && { assigneeId: body.assigneeId }),
+      // com `assignees` na mão, quem manda no dono é o primeiro da lista
+      ...(body.assignees !== undefined
+        ? { assigneeId: assignees.ok ? assignees.principalUserId : null }
+        : body.assigneeId !== undefined
+        ? { assigneeId: body.assigneeId }
+        : {}),
       ...(body.dueDate !== undefined && { dueDate: body.dueDate ? new Date(body.dueDate) : null }),
       ...(body.dueTime !== undefined && { dueTime: body.dueTime || null }),
       ...(body.client !== undefined && { client: body.client }),
-      ...(deliverTo !== undefined && { deliverTo }),
+      // cliente como ÚNICO responsável continua sendo gravado do jeito antigo
+      // (assigneeId null + deliverTo "o2") — ver task-assignees.ts
+      ...(assignees.ok && !assignees.joint && assignees.clientOnly
+        ? { deliverTo: "o2" }
+        : deliverTo !== undefined
+        ? { deliverTo }
+        : {}),
       ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
       ...(recurrence !== undefined && { recurrence }),
       ...(recurrenceWeekdays !== undefined && { recurrenceWeekdays }),
@@ -92,32 +109,56 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: TASK_INCLUDE,
   });
 
+  if (body.assignees !== undefined && assignees.ok) {
+    await syncTaskAssignees(db, id, assignees);
+  }
+
+  // Status e partes andam juntos numa tarefa em conjunto: concluir a tarefa direto
+  // (arrastar no Kanban, por exemplo) marca a parte de todo mundo, e reabrir desmarca.
+  // Sem isso dava pra ter tarefa "concluída" com parte pendente e vice-versa.
+  const jointNow = await db.taskAssignee.count({ where: { taskId: id } });
+  if (jointNow > 0 && body.status !== undefined && body.status !== before.status) {
+    if (body.status === "done") {
+      await db.taskAssignee.updateMany({
+        where: { taskId: id, done: false },
+        data: { done: true, doneAt: new Date(), doneById: session.user.id },
+      });
+    } else if (before.status === "done") {
+      await db.taskAssignee.updateMany({
+        where: { taskId: id },
+        data: { done: false, doneAt: null, doneById: null },
+      });
+    }
+  }
+
   // histórico de mudanças
+  const effectiveAssigneeId = body.assignees !== undefined ? assignees.principalUserId ?? null : body.assigneeId;
   let newAssigneeName: string | null = before.assignee?.name ?? null;
-  if (body.assigneeId !== undefined && body.assigneeId !== before.assigneeId) {
-    newAssigneeName = body.assigneeId
-      ? (await db.user.findUnique({ where: { id: body.assigneeId }, select: { name: true } }))?.name ?? null
+  if (effectiveAssigneeId !== undefined && effectiveAssigneeId !== before.assigneeId) {
+    newAssigneeName = effectiveAssigneeId
+      ? (await db.user.findUnique({ where: { id: effectiveAssigneeId }, select: { name: true } }))?.name ?? null
       : null;
   }
   await recordTaskChanges(
     id,
     before,
-    body,
+    { ...body, ...(effectiveAssigneeId !== undefined ? { assigneeId: effectiveAssigneeId } : {}) },
     session.user?.name ?? null,
     { before: before.assignee?.name ?? null, after: newAssigneeName }
   ).catch((e) => console.error("[activity]", e));
 
-  // notifica novo responsável (se não foi ele mesmo que mudou)
+  // notifica o novo dono (se não foi ele mesmo que mudou) — participantes não recebem
+  // aviso de propósito: a tarefa aparece no Kanban/lista deles, e a cobrança é do dono
   if (
-    body.assigneeId !== undefined &&
-    body.assigneeId &&
-    body.assigneeId !== before.assigneeId &&
-    body.assigneeId !== session.user?.id
+    effectiveAssigneeId !== undefined &&
+    effectiveAssigneeId &&
+    effectiveAssigneeId !== before.assigneeId &&
+    effectiveAssigneeId !== session.user?.id
   ) {
     await db.notification.create({
       data: {
         squadId: session.user.squadId,
-        userId: body.assigneeId,
+        userId: effectiveAssigneeId,
         type: "assigned",
         message: `${session.user?.name?.split(" ")[0] ?? "Alguém"} atribuiu a você: ${task.title}`,
         link: `/tasks?task=${task.id}`,
@@ -147,7 +188,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   revalidateTag("tasks", "max");
-  return NextResponse.json(task);
+  // relê depois de sincronizar responsáveis/partes — o `task` de cima foi montado antes
+  // disso e devolveria a lista velha pra tela
+  const fresh = await db.task.findUnique({ where: { id }, include: TASK_INCLUDE });
+  return NextResponse.json(fresh ?? task);
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isResponsible } from "@/lib/task-assignees";
 import { getAllTasks } from "@/lib/queries";
 import { format, isToday, isTomorrow, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -32,7 +33,8 @@ export default async function WeekPage() {
   if (!session) redirect("/login");
   const userId = session.user.id;
   const allTasks = await getAllTasks(session.user.squadId);
-  const mine = allTasks.filter((t) => t.assigneeId === userId && t.status !== "done");
+  // dono OU participante — tarefa em conjunto entra na semana de todos os responsáveis
+  const mine = allTasks.filter((t) => isResponsible(t, userId) && t.status !== "done");
 
   const now = new Date();
   const today = new Date(now);

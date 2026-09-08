@@ -10,10 +10,11 @@ import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { useSession } from "next-auth/react";
 import { cn, dueDateOnly } from "@/lib/utils";
 import type { TaskListItem, UserOption } from "@/types/task";
+import { isResponsible, isClientResponsible, CLIENT_CHOICE } from "@/lib/task-assignees";
 
-// sentinela no filtro de responsável — representa tarefas sem responsável humano,
-// onde quem entrega é o próprio cliente (deliverTo "o2"), ao lado das pessoas do squad
-const CLIENT_FILTER_ID = "__client__";
+// sentinela no filtro de responsável — representa o cliente como responsável, ao lado
+// das pessoas do squad
+const CLIENT_FILTER_ID = CLIENT_CHOICE;
 
 const COLUMNS = [
   { id: "todo", label: "A fazer", color: "border-ink-faint" },
@@ -130,11 +131,14 @@ function KanbanPageInner() {
     }
   }
 
-  // "Cliente" no filtro = tarefa sem responsável humano, que o próprio cliente entrega
+  // Tarefa em conjunto entra no Kanban de todos os responsáveis — filtrar pelo Felipe
+  // e pela Tainara não pode fazer a mesma tarefa aparecer duas vezes, por isso é `some`
+  // sobre os selecionados, e não um match por responsável.
   function matchesAssignee(t: TaskListItem): boolean {
     if (selectedAssignees.length === 0) return true;
-    if (t.assignee) return selectedAssignees.includes(t.assignee.id);
-    return selectedAssignees.includes(CLIENT_FILTER_ID) && t.deliverTo === "o2";
+    return selectedAssignees.some((id) =>
+      id === CLIENT_FILTER_ID ? isClientResponsible(t) : isResponsible(t, id)
+    );
   }
 
   function colTasksOf(colId: string) {

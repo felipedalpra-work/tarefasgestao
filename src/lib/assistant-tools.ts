@@ -126,7 +126,16 @@ async function searchTasks(squadId: string, args: {
         : args.client
         ? { client: { contains: args.client, mode: "insensitive" } }
         : {}),
-      ...(args.assigneeName ? { assignee: { name: { contains: args.assigneeName, mode: "insensitive" } } } : {}),
+      // procurar por "tarefas da Tainara" tem que achar também aquelas em que ela é
+      // participante de uma tarefa em conjunto, não só as em que ela é a dona
+      ...(args.assigneeName
+        ? {
+            OR: [
+              { assignee: { name: { contains: args.assigneeName, mode: "insensitive" as const } } },
+              { assignees: { some: { user: { name: { contains: args.assigneeName, mode: "insensitive" as const } } } } },
+            ],
+          }
+        : {}),
       ...(args.dueBefore || args.dueAfter
         ? { dueDate: { ...(args.dueBefore ? { lte: new Date(args.dueBefore) } : {}), ...(args.dueAfter ? { gte: new Date(args.dueAfter) } : {}) } }
         : {}),
@@ -134,7 +143,11 @@ async function searchTasks(squadId: string, args: {
         ? { OR: [{ title: { contains: args.textSearch, mode: "insensitive" } }, { description: { contains: args.textSearch, mode: "insensitive" } }] }
         : {}),
     },
-    select: { title: true, status: true, priority: true, client: true, dueDate: true, deliverTo: true, assignee: { select: { name: true } } },
+    select: {
+      title: true, status: true, priority: true, client: true, dueDate: true, deliverTo: true,
+      assignee: { select: { name: true } },
+      assignees: { select: { isClient: true, done: true, part: true, role: true, user: { select: { name: true } } }, orderBy: { sortOrder: "asc" } },
+    },
     orderBy: { updatedAt: "desc" },
     take: limit,
   });
@@ -147,6 +160,14 @@ async function searchTasks(squadId: string, args: {
     dueDate: fmtDate(t.dueDate),
     quemEntrega: t.deliverTo,
     assignee: t.assignee?.name ?? null,
+    ...(t.assignees.length > 0 && {
+      emConjunto: t.assignees.map((a) => ({
+        quem: a.isClient ? t.client || "Cliente" : a.user?.name ?? null,
+        dono: a.role === "principal",
+        parte: a.part,
+        concluiu: a.done,
+      })),
+    }),
   }));
 }
 
@@ -321,7 +342,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
         properties: {
           status: { type: "string", enum: ["todo", "in_progress", "blocked", "done"], description: "Status da tarefa" },
           client: { type: "string", description: "Nome do cliente (busca parcial)" },
-          assigneeName: { type: "string", description: "Nome do responsável (busca parcial)" },
+          assigneeName: { type: "string", description: "Nome do responsável (busca parcial) — acha tanto quem é dono quanto quem participa de tarefa em conjunto" },
           dueBefore: { type: "string", description: "Prazo até essa data, formato YYYY-MM-DD" },
           dueAfter: { type: "string", description: "Prazo a partir dessa data, formato YYYY-MM-DD" },
           textSearch: { type: "string", description: "Texto livre pra buscar no título/descrição" },

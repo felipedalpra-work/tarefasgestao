@@ -21,30 +21,32 @@ model Squad {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  squadId       String
-  role          String    @default("member") // "admin" (CFO — convida/remove gente, configura integrações do squad) | "member"
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  cargo         String?
+  id                    String               @id @default(cuid())
+  squadId               String
+  role                  String               @default("member") // "admin" (CFO — convida/remove gente, configura integrações do squad) | "member"
+  name                  String?
+  email                 String               @unique
+  emailVerified         DateTime?
+  image                 String?
+  password              String?
+  cargo                 String?
   onboardingCompletedAt DateTime? // null = ainda não viu/concluiu o onboarding animado no 1o login
-  squad         Squad     @relation(fields: [squadId], references: [id])
-  accounts      Account[]
-  sessions      Session[]
-  tasks         Task[]         @relation("AssignedTasks")
-  createdTasks  Task[]         @relation("CreatedTasks")
-  comments      TaskComment[]
-  passwordResetTokens PasswordResetToken[]
-  tratativas         Tratativa[] @relation("TratativaResponsavel")
-  createdTratativas  Tratativa[] @relation("TratativaCreatedBy")
-  uploadedRecaps     MeetRecap[] @relation("UploadedRecaps")
-  assistantMessages  AssistantMessage[]
-  platformOwner      PlatformOwner?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  squad                 Squad                @relation(fields: [squadId], references: [id])
+  accounts              Account[]
+  sessions              Session[]
+  tasks                 Task[]               @relation("AssignedTasks")
+  createdTasks          Task[]               @relation("CreatedTasks")
+  taskParts             TaskAssignee[]       @relation("TaskParts")
+  completedParts        TaskAssignee[]       @relation("TaskPartsCompletedBy")
+  comments              TaskComment[]
+  passwordResetTokens   PasswordResetToken[]
+  tratativas            Tratativa[]          @relation("TratativaResponsavel")
+  createdTratativas     Tratativa[]          @relation("TratativaCreatedBy")
+  uploadedRecaps        MeetRecap[]          @relation("UploadedRecaps")
+  assistantMessages     AssistantMessage[]
+  platformOwner         PlatformOwner?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
   @@index([squadId])
 }
@@ -119,43 +121,77 @@ model Session {
 }
 
 model Task {
-  id          String    @id @default(cuid())
-  squadId     String
-  title       String
-  description String?
-  status      String    @default("todo")
-  priority    String    @default("medium")
-  dueDate     DateTime?
-  assigneeId  String?
-  createdById String
-  source      String    @default("manual")
-  sourceRef   String?
-  client      String?
-  deliverTo   String?
-  meetingTitle String? // assunto da reunião de origem (Meet Recap ou n8n), quando houver
-  meetingDate  DateTime? // data da reunião de origem
+  id                   String              @id @default(cuid())
+  squadId              String
+  title                String
+  description          String?
+  status               String              @default("todo")
+  priority             String              @default("medium")
+  dueDate              DateTime?
+  assigneeId           String?
+  createdById          String
+  source               String              @default("manual")
+  sourceRef            String?
+  client               String?
+  deliverTo            String?
+  meetingTitle         String? // assunto da reunião de origem (Meet Recap ou n8n), quando houver
+  meetingDate          DateTime? // data da reunião de origem
   clientDraftCreatedAt DateTime? // quando o rascunho de cobrança pro cliente foi criado (evita duplicar)
-  sortOrder   Float     @default(0)
-  dueTime     String? // "HH:MM" no horário de Brasília — dueDate é só o dia (meia-noite UTC, ver dueDateOnly em src/lib/utils.ts), então a hora fica separada em vez de mudar a semântica de dueDate em todo o app
-  recurrence  String?   // "weekly" | "biweekly" | "monthly" | "weekdays"
-  recurrenceWeekdays Int[] @default([]) // 0=domingo..6=sábado — só usado quando recurrence = "weekdays" (ex: [2,5] = toda terça e sexta)
-  recurrenceSpawned  Boolean @default(false) // a próxima ocorrência desta já foi criada (por conclusão ou pelo cron), pra não duplicar a série
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  assignee    User?          @relation("AssignedTasks", fields: [assigneeId], references: [id])
-  createdBy   User           @relation("CreatedTasks", fields: [createdById], references: [id])
-  comments    TaskComment[]
-  subtasks    Subtask[]
-  activities  TaskActivity[]
-  links       TaskLink[]
-  recapSuggestion RecapSuggestion?
-  externalSuggestion ExternalSuggestion?
+  sortOrder            Float               @default(0)
+  dueTime              String? // "HH:MM" no horário de Brasília — dueDate é só o dia (meia-noite UTC, ver dueDateOnly em src/lib/utils.ts), então a hora fica separada em vez de mudar a semântica de dueDate em todo o app
+  recurrence           String? // "weekly" | "biweekly" | "monthly" | "weekdays"
+  recurrenceWeekdays   Int[]               @default([]) // 0=domingo..6=sábado — só usado quando recurrence = "weekdays" (ex: [2,5] = toda terça e sexta)
+  recurrenceSpawned    Boolean             @default(false) // a próxima ocorrência desta já foi criada (por conclusão ou pelo cron), pra não duplicar a série
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  assignee             User?               @relation("AssignedTasks", fields: [assigneeId], references: [id])
+  createdBy            User                @relation("CreatedTasks", fields: [createdById], references: [id])
+  comments             TaskComment[]
+  subtasks             Subtask[]
+  activities           TaskActivity[]
+  links                TaskLink[]
+  recapSuggestion      RecapSuggestion?
+  externalSuggestion   ExternalSuggestion?
+  assignees            TaskAssignee[]
 
   @@index([assigneeId])
   @@index([status])
   @@index([client])
   @@index([updatedAt])
   @@index([squadId])
+}
+
+// Tarefa em conjunto: uma linha por responsável, com a "parte" que cabe a cada um.
+// SÓ existe quando a tarefa é em conjunto — tarefa de uma pessoa só continua sendo
+// apenas Task.assigneeId, sem nenhuma linha aqui (`assignees.length > 0` é o que
+// significa "em conjunto"). Isso mantém intactos os ~160 pontos do app que leem
+// assigneeId, em vez de migrar tudo de uma vez.
+//
+// Task.assigneeId continua sendo o DONO (cobrança, e-mail de prazo, Slack, carga no
+// dashboard) e é espelhado a partir da linha role="principal" — a sincronia mora em
+// um lugar só, src/lib/task-assignees.ts, e é por onde as duas rotas de escrita passam.
+model TaskAssignee {
+  id        String    @id @default(cuid())
+  taskId    String
+  userId    String? // null = a parte é do cliente (isClient), que não tem conta no app
+  isClient  Boolean   @default(false)
+  role      String    @default("participant") // "principal" (dono) | "participant"
+  part      String? // o que cabe a essa pessoa; vazio = só o nome, sem descrição
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  doneById  String? // quem marcou — na parte do cliente é alguém do squad marcando por ele
+  sortOrder Float     @default(0)
+  createdAt DateTime  @default(now())
+
+  task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user   User? @relation("TaskParts", fields: [userId], references: [id], onDelete: Cascade)
+  doneBy User? @relation("TaskPartsCompletedBy", fields: [doneById], references: [id])
+
+  // uma linha por pessoa na mesma tarefa; a linha do cliente (userId null) é única
+  // por aplicação (Postgres deixa vários null passarem no unique), ver task-assignees.ts
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
 }
 
 model Subtask {
@@ -174,7 +210,7 @@ model TaskActivity {
   id        String   @id @default(cuid())
   taskId    String
   userName  String?
-  type      String // "created" | "status" | "assignee" | "due_date" | "priority" | "title" | "recurrence"
+  type      String // "created" | "status" | "assignee" | "due_date" | "priority" | "title" | "recurrence" | "deliver_to" | "part"
   detail    String?
   createdAt DateTime @default(now())
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -209,38 +245,38 @@ model Notification {
 }
 
 model ClientNote {
-  id                String    @id @default(cuid())
-  squadId           String
-  client            String
-  notes             String?
-  contacts          String?
-  status            String    @default("ativo") // "ativo" | "pausado" | "encerrado"
-  oxyStage          String    @default("nao_iniciado") // "nao_iniciado" | "em_validacao" | "em_implantacao" | "implantacao_interrompida" | "ativo"
-  importType        String? // "manual" | "automatica" | "automatica_manual"
-  lastDataUpdate    DateTime?
-  oxyPendencies     String? // "o que" da pendência
-  pendencyWho       String? // "quem" é responsável pela pendência
-  erp               String? // nome do ERP usado pelo cliente
-  accessMode        String? // modo de acesso ao ERP/Oxy
-  updateFrequency   String? // frequência de atualização dos dados (ex: "toda quarta")
-  updateResponsible String? // responsável por manter os dados atualizados
-  routineWhat       String? // rotina recorrente com o cliente: o que é feito
-  routineWho        String? // rotina recorrente: quem faz
-  routineWhen       String? // rotina recorrente: quando
-  healthStatus      String    @default("verde") // "verde" | "amarelo" | "vermelho" — semáforo de saúde da conta
-  onboardingStartAt DateTime? // D+0: data do 1º pagamento, âncora dos marcos de onboarding
-  cfoAllocatedAt    DateTime? // marco D+2
-  kickoffScheduledAt DateTime? // marco D+3
-  kickoffDoneAt     DateTime? // marco D+7
-  setupDoneAt       DateTime? // marco D+30 (Setup + Comitê de Estruturação)
-  diagnosticDoneAt  DateTime? // marco D+60 (Diagnóstico + Comitê de Diagnóstico) — mesma data da Etapa 4 (Apresentação final)
-  oxyIntegratedAt   DateTime? // marco D+90 (Oxy + início do Comitê Estratégico Mensal)
-  diagnosticoHandoffAt   DateTime? // Diagnóstico Etapa 0: handoff do Setup
-  diagnosticoIntakeAt    DateTime? // Diagnóstico Etapa 1: intake complementar (assíncrono)
+  id                        String    @id @default(cuid())
+  squadId                   String
+  client                    String
+  notes                     String?
+  contacts                  String?
+  status                    String    @default("ativo") // "ativo" | "pausado" | "encerrado"
+  oxyStage                  String    @default("nao_iniciado") // "nao_iniciado" | "em_validacao" | "em_implantacao" | "implantacao_interrompida" | "ativo"
+  importType                String? // "manual" | "automatica" | "automatica_manual"
+  lastDataUpdate            DateTime?
+  oxyPendencies             String? // "o que" da pendência
+  pendencyWho               String? // "quem" é responsável pela pendência
+  erp                       String? // nome do ERP usado pelo cliente
+  accessMode                String? // modo de acesso ao ERP/Oxy
+  updateFrequency           String? // frequência de atualização dos dados (ex: "toda quarta")
+  updateResponsible         String? // responsável por manter os dados atualizados
+  routineWhat               String? // rotina recorrente com o cliente: o que é feito
+  routineWho                String? // rotina recorrente: quem faz
+  routineWhen               String? // rotina recorrente: quando
+  healthStatus              String    @default("verde") // "verde" | "amarelo" | "vermelho" — semáforo de saúde da conta
+  onboardingStartAt         DateTime? // D+0: data do 1º pagamento, âncora dos marcos de onboarding
+  cfoAllocatedAt            DateTime? // marco D+2
+  kickoffScheduledAt        DateTime? // marco D+3
+  kickoffDoneAt             DateTime? // marco D+7
+  setupDoneAt               DateTime? // marco D+30 (Setup + Comitê de Estruturação)
+  diagnosticDoneAt          DateTime? // marco D+60 (Diagnóstico + Comitê de Diagnóstico) — mesma data da Etapa 4 (Apresentação final)
+  oxyIntegratedAt           DateTime? // marco D+90 (Oxy + início do Comitê Estratégico Mensal)
+  diagnosticoHandoffAt      DateTime? // Diagnóstico Etapa 0: handoff do Setup
+  diagnosticoIntakeAt       DateTime? // Diagnóstico Etapa 1: intake complementar (assíncrono)
   diagnosticoIntakePendente String? // o que ainda falta pedir (Balanço, DFC, endividamento, Serasa, protestos, contrato social, dado de mercado...)
-  diagnosticoAnaliseAt   DateTime? // Diagnóstico Etapa 2: análise e montagem (DRE, DFC, NCG/CDG/Tesouraria)
-  diagnosticoValidacaoAt DateTime? // Diagnóstico Etapa 3: validação com o cliente (na semanal)
-  updatedAt         DateTime  @updatedAt
+  diagnosticoAnaliseAt      DateTime? // Diagnóstico Etapa 2: análise e montagem (DRE, DFC, NCG/CDG/Tesouraria)
+  diagnosticoValidacaoAt    DateTime? // Diagnóstico Etapa 3: validação com o cliente (na semanal)
+  updatedAt                 DateTime  @updatedAt
 
   @@unique([squadId, client])
   @@index([status])
@@ -312,19 +348,19 @@ model Tratativa {
 }
 
 model MeetRecap {
-  id             String    @id @default(cuid())
+  id             String            @id @default(cuid())
   squadId        String
   subject        String
   body           String
   gmailId        String? // null quando source = "manual" (não veio de um e-mail)
-  source         String    @default("gmail") // "gmail" | "manual" (upload de transcrição em /recaps)
+  source         String            @default("gmail") // "gmail" | "manual" (upload de transcrição em /recaps)
   uploadedById   String? // quem fez o upload manual; null pros recaps sincronizados do Gmail
-  uploadedBy     User?     @relation("UploadedRecaps", fields: [uploadedById], references: [id])
+  uploadedBy     User?             @relation("UploadedRecaps", fields: [uploadedById], references: [id])
   client         String?
   processedAt    DateTime?
   suggestedTasks String?
   suggestions    RecapSuggestion[]
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime          @default(now())
 
   @@unique([squadId, gmailId])
   @@index([processedAt])
@@ -332,19 +368,19 @@ model MeetRecap {
 }
 
 model RecapSuggestion {
-  id          String    @id @default(cuid())
-  recapId     String
-  index       Int // ordem de exibição dentro da leva de sugestões
-  title       String // como a IA sugeriu originalmente (referência pra medir edição)
-  description String?
-  assignee    String?
-  priority    String?
-  dueDate     DateTime?
-  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "superseded" | "duplicate"
+  id            String    @id @default(cuid())
+  recapId       String
+  index         Int // ordem de exibição dentro da leva de sugestões
+  title         String // como a IA sugeriu originalmente (referência pra medir edição)
+  description   String?
+  assignee      String?
+  priority      String?
+  dueDate       DateTime?
+  status        String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "superseded" | "duplicate"
   duplicateNote String? // preenchido quando status = "duplicate": explica com o que bateu
-  taskId      String?   @unique
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  taskId        String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   recap MeetRecap @relation(fields: [recapId], references: [id], onDelete: Cascade)
   task  Task?     @relation(fields: [taskId], references: [id])
@@ -357,22 +393,22 @@ model RecapSuggestion {
 // Igual à RecapSuggestion no espírito (fica pendente até alguém aceitar/descartar
 // em /sugestoes-ia), mas sem depender de um MeetRecap.
 model ExternalSuggestion {
-  id          String    @id @default(cuid())
-  squadId     String
-  source      String // "n8n" (aberto pra outras origens no futuro)
-  sourceRef   String?
-  title       String
-  description String?
-  client      String?
-  priority    String?
-  dueDate     DateTime?
-  status      String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "duplicate"
+  id            String    @id @default(cuid())
+  squadId       String
+  source        String // "n8n" (aberto pra outras origens no futuro)
+  sourceRef     String?
+  title         String
+  description   String?
+  client        String?
+  priority      String?
+  dueDate       DateTime?
+  status        String    @default("pending") // "pending" | "accepted" | "edited" | "rejected" | "duplicate"
   duplicateNote String? // preenchido quando status = "duplicate": explica com o que bateu
-  meetingTitle String? // assunto da reunião de origem, se o workflow mandar
-  meetingDate  DateTime? // data da reunião de origem, se o workflow mandar
-  taskId      String?   @unique
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  meetingTitle  String? // assunto da reunião de origem, se o workflow mandar
+  meetingDate   DateTime? // data da reunião de origem, se o workflow mandar
+  taskId        String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   task Task? @relation(fields: [taskId], references: [id])
 
@@ -432,22 +468,22 @@ model PlatformLog {
 }
 
 model CalendarEvent {
-  id           String   @id @default(cuid())
-  squadId      String
-  googleId     String
-  title        String
-  client       String
-  startAt      DateTime
-  endAt        DateTime
-  briefingSent Boolean  @default(false)
-  meetingType  String? // "semanal" | "comite" | "kickoff" | "setup" | "interno" — extraído do título "| <Tipo>"
-  temperature  String? // "otimo" | "bom" | "atencao" | "critico" — clima da reunião, preenchido depois
-  nextSteps    String? // próximos passos validados pós-reunião
-  attendanceConfirmed Boolean @default(false) // presença confirmada/corrigida
-  registroConferido   Boolean @default(false) // registro (gravação/transcrição) conferido
+  id                  String   @id @default(cuid())
+  squadId             String
+  googleId            String
+  title               String
+  client              String
+  startAt             DateTime
+  endAt               DateTime
+  briefingSent        Boolean  @default(false)
+  meetingType         String? // "semanal" | "comite" | "kickoff" | "setup" | "interno" — extraído do título "| <Tipo>"
+  temperature         String? // "otimo" | "bom" | "atencao" | "critico" — clima da reunião, preenchido depois
+  nextSteps           String? // próximos passos validados pós-reunião
+  attendanceConfirmed Boolean  @default(false) // presença confirmada/corrigida
+  registroConferido   Boolean  @default(false) // registro (gravação/transcrição) conferido
   attendeeUserIds     String[] @default([]) // User.id de quem do squad participa (e-mail do convidado casado com User.email), pro filtro por pessoa em /calendar
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@unique([squadId, googleId])
   @@index([startAt])
@@ -456,19 +492,19 @@ model CalendarEvent {
 }
 
 model FechamentoMensal {
-  id                    String   @id @default(cuid())
-  squadId               String
-  client                String
-  year                  Int
-  month                 Int // 1-12
-  comiteRealizado       Boolean  @default(false)
-  rebalanceamentoFeito  Boolean  @default(false)
-  conciliacaoOk         Boolean  @default(false)
-  cpCrFechados          Boolean  @default(false)
-  pendenciasAnotadas    String?
-  maturidade            String? // avaliação livre da maturidade do fechamento
-  healthReviewedAt      DateTime?
-  updatedAt             DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  squadId              String
+  client               String
+  year                 Int
+  month                Int // 1-12
+  comiteRealizado      Boolean   @default(false)
+  rebalanceamentoFeito Boolean   @default(false)
+  conciliacaoOk        Boolean   @default(false)
+  cpCrFechados         Boolean   @default(false)
+  pendenciasAnotadas   String?
+  maturidade           String? // avaliação livre da maturidade do fechamento
+  healthReviewedAt     DateTime?
+  updatedAt            DateTime  @updatedAt
 
   @@unique([squadId, client, year, month])
   @@index([client])

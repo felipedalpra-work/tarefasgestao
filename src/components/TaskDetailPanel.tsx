@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   X, Send, MessageSquare, Calendar, User, Tag, Building2, Clock, CheckCircle2,
-  Circle, AlertCircle, Trash2, Pencil, Check, ListChecks, Link2, Plus, History, Repeat, Video, Bell,
+  Circle, AlertCircle, Trash2, Pencil, Check, ListChecks, Link2, Plus, History, Repeat, Video, Bell, Users,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -13,6 +13,8 @@ import { describeRecurrence } from "@/lib/recurrence";
 import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { WeekdayPicker } from "./WeekdayPicker";
+import { AssigneePicker } from "./AssigneePicker";
+import { CLIENT_CHOICE, taskResponsibles, isJointTask, describeResponsibles, type AssigneeInput } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 type Comment = {
@@ -49,10 +51,6 @@ const STATUS_COLORS: Record<string, string> = {
 };
 const ALL_STATUSES = ["todo", "in_progress", "blocked", "done"];
 
-// Mesmo sentinel do NewTaskModal e da edição de sugestões da IA — "responsável" é o
-// cliente, não alguém do squad. No banco isso é assigneeId null + deliverTo "o2".
-const CLIENT_CHOICE = "__client__";
-
 export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUpdated, users = [] }: Props) {
   const { data: session } = useSession();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -73,6 +71,8 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   const [statusMenu, setStatusMenu] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", description: "", priority: "", dueDate: "", dueTime: "", assigneeId: "", client: "", deliverTo: "", recurrence: "" });
   const [editWeekdays, setEditWeekdays] = useState<number[]>([]);
+  const [editAssignees, setEditAssignees] = useState<AssigneeInput[]>([]);
+  const [togglingPart, setTogglingPart] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -103,6 +103,8 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       recurrence: task.recurrence ?? "",
     });
     setEditWeekdays(task.recurrenceWeekdays ?? []);
+    setEditAssignees(taskResponsibles(task).map((r) => ({ id: r.id, part: r.part })));
+    setTogglingPart(null);
     fetch(`/api/tasks/${task.id}/comments`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setComments(data); });
@@ -138,25 +140,8 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   // NewTaskModal — sem isso dava pra salvar tarefa com responsável do squad E marcada como
   // entregue pelo cliente (2 tarefas já ficaram assim no banco).
   function updateEditClient(value: string) {
-    setEditForm((f) => ({
-      ...f,
-      client: value,
-      assigneeId: f.assigneeId === CLIENT_CHOICE && !value.trim() ? "" : f.assigneeId,
-    }));
-  }
-  function updateEditDeliverTo(value: string) {
-    setEditForm((f) => ({
-      ...f,
-      deliverTo: value,
-      assigneeId: f.assigneeId === CLIENT_CHOICE && value !== "o2" ? "" : f.assigneeId,
-    }));
-  }
-  function updateEditAssignee(value: string) {
-    setEditForm((f) => ({
-      ...f,
-      assigneeId: value,
-      deliverTo: value === CLIENT_CHOICE && f.deliverTo !== "o2" ? "o2" : f.deliverTo,
-    }));
+    setEditForm((f) => ({ ...f, client: value }));
+    if (!value.trim()) setEditAssignees((prev) => prev.filter((a) => a.id !== CLIENT_CHOICE));
   }
 
   async function saveEdit() {
@@ -165,8 +150,11 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       toast("Escolha pelo menos um dia da semana", "error");
       return;
     }
+    if (editAssignees.length > 1 && editAssignees[0].id === CLIENT_CHOICE) {
+      toast("O dono precisa ser alguém do squad — tire o cliente do topo da lista", "error");
+      return;
+    }
     setSaving(true);
-    const isClientChoice = editForm.assigneeId === CLIENT_CHOICE;
     const res = await fetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -176,7 +164,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
         priority: editForm.priority,
         dueDate: editForm.dueDate || null,
         dueTime: editForm.dueTime || null,
-        assigneeId: isClientChoice ? null : editForm.assigneeId || null,
+        assignees: editAssignees,
         client: editForm.client.trim() || null,
         deliverTo: editForm.deliverTo || null,
         recurrence: editForm.recurrence || null,
@@ -193,6 +181,33 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       toast("Erro ao salvar a tarefa", "error");
     }
     setSaving(false);
+  }
+
+  // Marca/desmarca a parte de um responsável. A API é quem decide o status da tarefa
+  // (só fecha com todas as partes marcadas), então a resposta traz a tarefa já atualizada.
+  async function togglePart(rowId: string, done: boolean) {
+    if (!task || togglingPart) return;
+    setTogglingPart(rowId);
+    const res = await fetch(`/api/tasks/${task.id}/assignees/${rowId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done }),
+    });
+    setTogglingPart(null);
+    if (res.ok) {
+      const updated = await res.json();
+      onUpdated?.({ ...task, ...updated });
+      if (updated.status === "done" && task.status !== "done") {
+        onStatusChange?.(task.id, "done");
+        toast("Todas as partes concluídas — tarefa fechada", "success");
+      } else if (updated.status !== "done" && task.status === "done") {
+        onStatusChange?.(task.id, updated.status);
+        toast("Parte reaberta — a tarefa voltou pra Fazendo", "success");
+      }
+      setActivity(null);
+    } else {
+      toast("Erro ao marcar a parte", "error");
+    }
   }
 
   async function sendReminder() {
@@ -303,6 +318,11 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   }
 
   if (!task) return null;
+
+  // fonte única de "quem é responsável" — resolve tarefa de uma pessoa só e em conjunto
+  const responsibles = taskResponsibles(task);
+  const joint = isJointTask(task);
+  const donePartsCount = responsibles.filter((r) => r.done).length;
 
   const StatusIcon = STATUS_ICONS[task.status] ?? Circle;
   const isOverdue = isTaskOverdue(task.dueDate, task.status);
@@ -466,7 +486,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
             {editForm.client.trim() && (
               <div>
                 <label className="text-xs text-ink-dim block mb-1">Entrega</label>
-                <select value={editForm.deliverTo} onChange={e => updateEditDeliverTo(e.target.value)}
+                <select value={editForm.deliverTo} onChange={e => setEditForm(f => ({ ...f, deliverTo: e.target.value }))}
                   className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50">
                   <option value="">Interna (não aparece no calendário)</option>
                   <option value="client">O2 entrega para o cliente</option>
@@ -474,20 +494,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                 </select>
               </div>
             )}
-            <div>
-              <label className="text-xs text-ink-dim block mb-1">Responsável</label>
-              <select value={editForm.assigneeId} onChange={e => updateEditAssignee(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50">
-                <option value="">Sem responsável</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-                {editForm.client.trim() && (
-                  <option value={CLIENT_CHOICE}>Cliente ({editForm.client.trim()})</option>
-                )}
-              </select>
-              {!editForm.client.trim() && (
-                <p className="text-xs text-ink-faint mt-1">Preencha o Cliente acima pra poder atribuir a tarefa a ele.</p>
-              )}
-            </div>
+            <AssigneePicker users={users} client={editForm.client} value={editAssignees} onChange={setEditAssignees} />
           </div>
         ) : (
           <>
@@ -519,24 +526,22 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                   </span>
                 </MetaRow>
               )}
-              {task.assignee ? (
-                <MetaRow icon={User} label="Responsável">
-                  <span className="text-xs text-ink-soft">{task.assignee.name}</span>
-                  <button
-                    onClick={sendReminder}
-                    disabled={sendingReminder}
-                    className="ml-auto flex items-center gap-1 text-xs text-ink-faint hover:text-o2-green transition-colors disabled:opacity-50"
-                    title="Enviar lembrete no Slack pra essa pessoa"
-                  >
-                    <Bell size={12} />
-                    {sendingReminder ? "Enviando…" : "Lembrar"}
-                  </button>
+              {responsibles.length > 0 && (
+                <MetaRow icon={joint ? Users : User} label={joint ? "Responsáveis" : "Responsável"}>
+                  <span className="text-xs text-ink-soft truncate">{describeResponsibles(responsibles)}</span>
+                  {task.assignee && (
+                    <button
+                      onClick={sendReminder}
+                      disabled={sendingReminder}
+                      className="ml-auto flex items-center gap-1 text-xs text-ink-faint hover:text-o2-green transition-colors disabled:opacity-50 shrink-0"
+                      title={joint ? "Enviar lembrete no Slack pro dono da tarefa" : "Enviar lembrete no Slack pra essa pessoa"}
+                    >
+                      <Bell size={12} />
+                      {sendingReminder ? "Enviando…" : "Lembrar"}
+                    </button>
+                  )}
                 </MetaRow>
-              ) : task.deliverTo === "o2" ? (
-                <MetaRow icon={User} label="Responsável">
-                  <span className="text-xs text-ink-soft">Cliente</span>
-                </MetaRow>
-              ) : null}
+              )}
               {task.client && (
                 <MetaRow icon={Building2} label="Cliente">
                   <span className="text-xs text-ink-soft">{task.client}</span>
@@ -557,6 +562,60 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
               </div>
             )}
           </>
+        )}
+
+        {/* Partes da tarefa em conjunto — cada responsável marca a sua */}
+        {joint && !editing && (
+          <div className="px-5 py-4 border-b border-surface-3">
+            <div className="flex items-center gap-2 mb-2.5">
+              <Users size={14} className="text-o2-green" />
+              <span className="text-xs font-medium text-ink-dim uppercase tracking-wide">
+                Partes ({donePartsCount}/{responsibles.length})
+              </span>
+            </div>
+            <div className="mb-1 h-1 bg-surface-3 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-o2-green rounded-full transition-all"
+                style={{ width: `${Math.round((donePartsCount / responsibles.length) * 100)}%` }}
+              />
+            </div>
+            <div className="space-y-1.5 mt-2.5">
+              {responsibles.map((r) => (
+                <div key={r.assigneeRowId ?? r.id} className="flex items-start gap-2.5">
+                  <button
+                    onClick={() => r.assigneeRowId && togglePart(r.assigneeRowId, !r.done)}
+                    disabled={togglingPart === r.assigneeRowId}
+                    className="shrink-0 mt-0.5 disabled:opacity-50"
+                    title={r.isClient ? "Marcar a parte do cliente (você marca por ele)" : "Marcar esta parte como concluída"}
+                  >
+                    {r.done
+                      ? <CheckCircle2 size={15} className="text-o2-green" />
+                      : <Circle size={15} className="text-ink-faint hover:text-ink-mid transition-colors" />}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={cn("text-xs font-medium", r.done ? "line-through text-ink-faint" : "text-ink-soft")}>
+                        {r.name || "Cliente"}
+                      </span>
+                      {r.isPrincipal && (
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-o2-green bg-o2-green/10 px-1 py-0.5 rounded">
+                          Dono
+                        </span>
+                      )}
+                      {r.isClient && (
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-faint bg-surface-3 px-1 py-0.5 rounded">
+                          Cliente
+                        </span>
+                      )}
+                    </div>
+                    {r.part && (
+                      <p className={cn("text-[11px] mt-0.5", r.done ? "text-ink-ghost line-through" : "text-ink-mid")}>{r.part}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Subtasks */}
@@ -759,6 +818,7 @@ function activityVerb(type: string): string {
     title: "renomeou a tarefa",
     recurrence: "mudou a recorrência",
     deliver_to: "mudou a entrega",
+    part: "marcou uma parte",
   };
   return map[type] ?? "atualizou a tarefa";
 }

@@ -2,6 +2,13 @@ import { unstable_cache } from "next/cache";
 import { forSquad } from "./tenant-prisma";
 import { getIgnoredClients, matchesIgnoredClient } from "./settings";
 
+// Responsáveis da tarefa em conjunto — precisa vir junto em toda leitura, senão a UI
+// não tem como saber que a tarefa é em conjunto nem mostrá-la pros participantes.
+const ASSIGNEES_INCLUDE = {
+  include: { user: { select: { id: true, name: true, image: true } } },
+  orderBy: { sortOrder: "asc" },
+} as const;
+
 // Cached: lista de usuários (muda raramente) — squadId entra como argumento da função
 // cacheada, então o Next já diferencia o cache por squad automaticamente (não precisa
 // duplicar squadId dentro do array de keyParts).
@@ -19,7 +26,7 @@ export const getUsers = unstable_cache(
 export const getAllTasks = unstable_cache(
   async (squadId: string) =>
     forSquad(squadId).task.findMany({
-      include: { assignee: { select: { id: true, name: true, image: true } } },
+      include: { assignee: { select: { id: true, name: true, image: true } }, assignees: ASSIGNEES_INCLUDE },
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
     }),
   ["tasks-all"],
@@ -30,8 +37,9 @@ export const getAllTasks = unstable_cache(
 export const getTasksByUser = unstable_cache(
   async (squadId: string, userId: string) =>
     forSquad(squadId).task.findMany({
-      where: { assigneeId: userId },
-      include: { assignee: { select: { id: true, name: true, image: true } } },
+      // dono OU participante — a tarefa em conjunto aparece pra todos os responsáveis
+      where: { OR: [{ assigneeId: userId }, { assignees: { some: { userId } } }] },
+      include: { assignee: { select: { id: true, name: true, image: true } }, assignees: ASSIGNEES_INCLUDE },
       orderBy: { updatedAt: "desc" },
     }),
   ["tasks-user"],
@@ -177,7 +185,7 @@ export const getClientDetail = unstable_cache(
       }),
       db.task.findMany({
         where: { client },
-        include: { assignee: { select: { id: true, name: true, image: true } } },
+        include: { assignee: { select: { id: true, name: true, image: true } }, assignees: ASSIGNEES_INCLUDE },
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
       }),
       db.clientNote.findUnique({ where: { squadId_client: { squadId, client } } }),

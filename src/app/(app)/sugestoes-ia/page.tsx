@@ -8,6 +8,8 @@ import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
+import { AssigneePicker } from "@/components/AssigneePicker";
+import { CLIENT_CHOICE, type AssigneeInput } from "@/lib/task-assignees";
 
 type SuggestionStatus = "pending" | "accepted" | "edited" | "rejected" | "duplicate";
 
@@ -54,9 +56,6 @@ type Row =
 
 type Tab = "pending" | "duplicate" | "rejected";
 
-// valor sentinela pro select de responsável — indica "atribuir ao cliente" em vez de uma pessoa do squad
-const CLIENT_CHOICE = "__client__";
-
 // campos da sugestão que dá pra editar antes de mandar pro Kanban (mesmo conjunto do lapizinho de TaskDetailPanel)
 type EditableFields = {
   title: string;
@@ -64,7 +63,7 @@ type EditableFields = {
   priority: string;
   dueDate: string; // yyyy-mm-dd ou ""
   client: string;
-  assigneeId: string; // "" = padrão (quem clicar em Adicionar), ou id de usuário, ou CLIENT_CHOICE
+  assignees: AssigneeInput[]; // vazio = padrão (quem clicar em Adicionar); 2+ = tarefa em conjunto
 };
 
 export default function SugestoesIaPage() {
@@ -143,7 +142,7 @@ export default function SugestoesIaPage() {
         priority: s.priority || "medium",
         dueDate: s.dueDate ? s.dueDate.slice(0, 10) : "",
         client: row.recap.client ?? "",
-        assigneeId: matchAssigneeId(s.assignee) ?? "",
+        assignees: matchAssigneeId(s.assignee) ? [{ id: matchAssigneeId(s.assignee)!, part: null }] : [],
       };
     }
     const s = row.suggestion;
@@ -153,7 +152,7 @@ export default function SugestoesIaPage() {
       priority: s.priority || "medium",
       dueDate: s.dueDate ? s.dueDate.slice(0, 10) : "",
       client: s.client ?? "",
-      assigneeId: "",
+      assignees: [],
     };
   }
 
@@ -163,10 +162,14 @@ export default function SugestoesIaPage() {
   }
 
   function assigneeLabel(editable: EditableFields, row: Row): string | null {
-    if (editable.assigneeId === CLIENT_CHOICE) return "Cliente";
-    if (editable.assigneeId) {
-      const u = users.find((x) => x.id === editable.assigneeId);
-      return u?.name || u?.email || null;
+    if (editable.assignees.length > 0) {
+      return editable.assignees
+        .map((a) => {
+          if (a.id === CLIENT_CHOICE) return "Cliente";
+          const u = users.find((x) => x.id === a.id);
+          return u?.name || u?.email || "—";
+        })
+        .join(", ");
     }
     if (row.kind === "recap" && row.suggestion.assignee) return row.suggestion.assignee;
     return null;
@@ -211,17 +214,14 @@ export default function SugestoesIaPage() {
       current.description !== original.description ||
       current.priority !== original.priority ||
       current.client !== original.client ||
-      current.assigneeId !== original.assigneeId ||
+      JSON.stringify(current.assignees) !== JSON.stringify(original.assignees) ||
       dueDate !== (original.dueDate || null);
 
-    const isClientChoice = current.assigneeId === CLIENT_CHOICE;
     const commonFields = {
       title: current.title,
       description: current.description || null,
       priority: current.priority || "medium",
-      assigneeId: current.assigneeId && !isClientChoice ? current.assigneeId : null,
-      noAssignee: isClientChoice,
-      deliverTo: isClientChoice ? "o2" : null,
+      assignees: current.assignees,
       dueDate,
       client: current.client || null,
       suggestionEdited: edited,
@@ -430,31 +430,31 @@ export default function SugestoesIaPage() {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="text-xs text-ink-dim block mb-1">Cliente</label>
-                        <input
-                          value={draft.client}
-                          onChange={(e) => setDraft((d) => d && { ...d, client: e.target.value })}
-                          placeholder="Nome do cliente"
-                          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-ink-dim block mb-1">Responsável</label>
-                        <select
-                          value={draft.assigneeId}
-                          onChange={(e) => setDraft((d) => d && { ...d, assigneeId: e.target.value })}
-                          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
-                        >
-                          <option value="">Padrão (quem adicionar)</option>
-                          {users.map((u) => (
-                            <option key={u.id} value={u.id}>{u.name || u.email}</option>
-                          ))}
-                          {draft.client && <option value={CLIENT_CHOICE}>Cliente ({draft.client})</option>}
-                        </select>
-                      </div>
+                    <div>
+                      <label className="text-xs text-ink-dim block mb-1">Cliente</label>
+                      <input
+                        value={draft.client}
+                        onChange={(e) =>
+                          setDraft((d) =>
+                            d && {
+                              ...d,
+                              client: e.target.value,
+                              // sem nome de cliente não dá pra ter "o cliente" como responsável
+                              assignees: e.target.value.trim() ? d.assignees : d.assignees.filter((a) => a.id !== CLIENT_CHOICE),
+                            }
+                          )
+                        }
+                        placeholder="Nome do cliente"
+                        className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                      />
                     </div>
+                    <AssigneePicker
+                      users={users}
+                      client={draft.client}
+                      value={draft.assignees}
+                      onChange={(next) => setDraft((d) => d && { ...d, assignees: next })}
+                      compact
+                    />
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button onClick={cancelEdit} className="text-xs px-3 py-1.5 text-ink-dim hover:text-ink transition-colors">
                         Cancelar

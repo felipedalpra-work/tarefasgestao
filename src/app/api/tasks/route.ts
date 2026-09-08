@@ -6,6 +6,15 @@ import { sendNewTaskEmail } from "@/lib/email";
 import { notifyTaskAssigned } from "@/lib/slack";
 import { firstOccurrence, isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
 import { brtNow } from "@/lib/utils";
+import { normalizeAssignees, syncTaskAssignees } from "@/lib/task-assignees";
+
+// include padrão de tarefa — assignees junto, senão a UI não sabe que é em conjunto
+const TASK_INCLUDE = {
+  assignee: { select: { id: true, name: true, image: true } },
+  assignees: { include: { user: { select: { id: true, name: true, image: true } } }, orderBy: { sortOrder: "asc" } },
+  subtasks: { select: { id: true, done: true } },
+  _count: { select: { links: true, comments: true } },
+} as const;
 
 export async function GET() {
   const session = await auth();
@@ -13,11 +22,7 @@ export async function GET() {
   const db = forSquad(session.user.squadId);
 
   const tasks = await db.task.findMany({
-    include: {
-      assignee: { select: { id: true, name: true, image: true } },
-      subtasks: { select: { id: true, done: true } },
-      _count: { select: { links: true, comments: true } },
-    },
+    include: TASK_INCLUDE,
     orderBy: [{ status: "asc" }, { sortOrder: "asc" }, { updatedAt: "desc" }],
   });
 
@@ -42,6 +47,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Horário inválido (use HH:MM)" }, { status: 400 });
   }
 
+  // Responsáveis: `assignees` (lista, o primeiro é o dono) é o caminho novo; sem ele,
+  // segue valendo assigneeId/noAssignee de sempre.
+  const squadUserIds = new Set((await db.user.findMany({ select: { id: true } })).map((u) => u.id));
+  const assignees = normalizeAssignees(body.assignees, squadUserIds);
+  if (!assignees.ok) return NextResponse.json({ error: assignees.error }, { status: 400 });
+
   // Série com recorrência mas sem prazo nunca geraria a próxima ocorrência nem
   // dispararia lembrete — ancora na primeira data válida a partir de hoje.
   const explicitDue = body.dueDate ? new Date(body.dueDate) : null;
@@ -55,14 +66,22 @@ export async function POST(req: NextRequest) {
       priority: body.priority || "medium",
       // noAssignee: true = intencionalmente sem responsável (ex: tarefa atribuída ao cliente,
       // via deliverTo), não cai no padrão de "quem clicou criou/aceitou"
-      assigneeId: body.noAssignee ? null : body.assigneeId || session.user.id,
+      assigneeId: assignees.joint
+        ? assignees.principalUserId
+        : body.assignees !== undefined
+        ? assignees.principalUserId
+        : body.noAssignee
+        ? null
+        : body.assigneeId || session.user.id,
       createdById: session.user.id,
       dueDate,
       dueTime: body.dueTime || null,
       source: body.source || "manual",
       sourceRef: body.sourceRef || null,
       client: body.client || null,
-      deliverTo: body.deliverTo || null,
+      // cliente como ÚNICO responsável continua sendo gravado do jeito antigo
+      // (assigneeId null + deliverTo "o2") — ver task-assignees.ts
+      deliverTo: assignees.ok && !assignees.joint && assignees.clientOnly ? "o2" : body.deliverTo || null,
       meetingTitle: body.meetingTitle || null,
       meetingDate: body.meetingDate ? new Date(body.meetingDate) : null,
       recurrence,
@@ -73,6 +92,10 @@ export async function POST(req: NextRequest) {
       createdBy: { select: { name: true } },
     },
   });
+
+  if (assignees.ok && assignees.joint) {
+    await syncTaskAssignees(db, task.id, assignees);
+  }
 
   await db.taskActivity.create({
     data: {
@@ -143,5 +166,6 @@ export async function POST(req: NextRequest) {
     }).catch((e) => console.error("[slack] erro ao notificar:", e));
   }
 
-  return NextResponse.json(task, { status: 201 });
+  const created = await db.task.findUnique({ where: { id: task.id }, include: TASK_INCLUDE });
+  return NextResponse.json(created ?? task, { status: 201 });
 }

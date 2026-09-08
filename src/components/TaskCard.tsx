@@ -2,9 +2,10 @@
 
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar, AlertCircle, Circle, CheckCircle2, Clock, ListChecks, Link2, MessageSquare, Repeat } from "lucide-react";
+import { Calendar, AlertCircle, Circle, CheckCircle2, Clock, ListChecks, Link2, MessageSquare, Repeat, Users } from "lucide-react";
 import { cn, priorityLabel, dueDateOnly, isTaskOverdue } from "@/lib/utils";
 import { UserAvatar } from "./UserAvatar";
+import { taskResponsibles, isJointTask } from "@/lib/task-assignees";
 import type { TaskListItem } from "@/types/task";
 
 const PRIORITY_BADGE: Record<string, string> = {
@@ -29,6 +30,9 @@ export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem
   const subdone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const linkCount = task._count?.links ?? 0;
   const commentCount = task._count?.comments ?? 0;
+  const responsibles = taskResponsibles(task);
+  const joint = isJointTask(task);
+  const donePartsCount = responsibles.filter((r) => r.done).length;
 
   return (
     <div
@@ -111,6 +115,15 @@ export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem
             {priorityLabel(task.priority)}
           </span>
           {task.recurrence && <Repeat size={11} className="text-ink-faint shrink-0" />}
+          {joint && (
+            <span
+              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-o2-green bg-o2-green/10 px-1.5 py-0.5 rounded-full shrink-0"
+              title={`Tarefa em conjunto — ${responsibles.map((r) => r.name || "Cliente").join(", ")}`}
+            >
+              <Users size={9} />
+              {donePartsCount}/{responsibles.length}
+            </span>
+          )}
           {task.client && (
             <span className="text-[10px] text-ink-faint truncate">{task.client}</span>
           )}
@@ -137,11 +150,38 @@ export function TaskCard({ task, onStatusChange, onClick }: { task: TaskListItem
               {task.dueTime && ` ${task.dueTime}`}
             </div>
           )}
-          {task.assignee ? (
-            <UserAvatar name={task.assignee.name} image={task.assignee.image} size="sm" />
-          ) : task.deliverTo === "o2" ? (
-            <span className="text-[10px] text-ink-faint uppercase tracking-wide shrink-0">Cliente</span>
-          ) : null}
+          {/* pilha de avatares — todos os responsáveis, o dono primeiro */}
+          {responsibles.length > 0 && (
+            <div className="flex items-center -space-x-1.5 shrink-0">
+              {responsibles.slice(0, 3).map((r, i) =>
+                r.isClient ? (
+                  <span
+                    key={r.assigneeRowId ?? r.id}
+                    title={r.name || "Cliente"}
+                    className={cn(
+                      "w-7 h-7 rounded-full bg-surface-3 text-ink-mid flex items-center justify-center text-[9px] font-bold ring-2 ring-surface",
+                      r.done && "opacity-50"
+                    )}
+                  >
+                    CLI
+                  </span>
+                ) : (
+                  <span
+                    key={r.assigneeRowId ?? r.id}
+                    title={r.name || ""}
+                    className={cn("rounded-full ring-2 ring-surface", r.done && "opacity-50")}
+                  >
+                    <UserAvatar name={r.name} image={r.image} size="sm" index={i} />
+                  </span>
+                )
+              )}
+              {responsibles.length > 3 && (
+                <span className="w-7 h-7 rounded-full bg-surface-3 text-ink-mid flex items-center justify-center text-[9px] font-bold ring-2 ring-surface">
+                  +{responsibles.length - 3}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

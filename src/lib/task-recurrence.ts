@@ -6,6 +6,9 @@ import { nextOccurrence } from "./recurrence";
 // Campos que a próxima ocorrência herda da anterior. `status`, `sortOrder`,
 // comentários e subtarefas ficam de fora de propósito: cada ocorrência começa
 // do zero (é uma rodada nova da rotina, não uma cópia do histórico).
+//
+// Os responsáveis da tarefa em conjunto SÃO herdados (a rotina é a mesma gente toda
+// semana), mas as partes voltam a nascer desmarcadas — é uma rodada nova.
 type Occurrence = {
   id: string;
   squadId: string;
@@ -39,6 +42,12 @@ export async function spawnNextOccurrence(task: Occurrence, today: Date): Promis
   if (!due) return null;
 
   const db = forSquad(task.squadId);
+  const parts = await db.taskAssignee.findMany({
+    where: { taskId: task.id },
+    select: { userId: true, isClient: true, role: true, part: true, sortOrder: true },
+    orderBy: { sortOrder: "asc" },
+  });
+
   await db.$transaction([
     db.task.create({
       data: {
@@ -55,6 +64,7 @@ export async function spawnNextOccurrence(task: Occurrence, today: Date): Promis
         deliverTo: task.deliverTo,
         recurrence: task.recurrence,
         recurrenceWeekdays: task.recurrenceWeekdays,
+        ...(parts.length > 0 && { assignees: { create: parts } }),
       },
     }),
     db.task.update({ where: { id: task.id }, data: { recurrenceSpawned: true } }),

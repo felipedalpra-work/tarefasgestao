@@ -10,12 +10,13 @@ import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { useSession } from "next-auth/react";
 import { dueDateOnly } from "@/lib/utils";
 import type { TaskListItem, UserOption } from "@/types/task";
+import { isResponsible, isClientResponsible, CLIENT_CHOICE } from "@/lib/task-assignees";
 
 const PAGE_SIZE = 50;
 
-// sentinela no filtro de responsável — representa tarefas sem responsável humano,
-// onde quem entrega é o próprio cliente (deliverTo "o2"), ao lado das pessoas do squad
-const CLIENT_FILTER_ID = "__client__";
+// sentinela no filtro de responsável — representa o cliente como responsável, ao lado
+// das pessoas do squad
+const CLIENT_FILTER_ID = CLIENT_CHOICE;
 
 type DueFilter = "all" | "overdue" | "today" | "week" | "none" | "custom";
 
@@ -127,10 +128,11 @@ function TasksPageInner() {
     }
   }
 
+  // tarefa em conjunto aparece pra TODOS os responsáveis, não só pro dono
   function matchesPerson(t: TaskListItem): boolean {
     if (!personFilter || personFilter === "all") return true;
-    if (personFilter === CLIENT_FILTER_ID) return !t.assignee && t.deliverTo === "o2";
-    return t.assignee?.id === personFilter;
+    if (personFilter === CLIENT_FILTER_ID) return isClientResponsible(t);
+    return isResponsible(t, personFilter);
   }
 
   const filtered = tasks.filter((t) => {

@@ -15,9 +15,21 @@ export type TaskListItem = {
   deliverTo?: string | null;
   meetingTitle?: string | null;
   meetingDate?: string | Date | null;
+  assigneeId?: string | null;
   assignee?: { id: string; name?: string | null; image?: string | null } | null;
+  // só existe quando a tarefa é em conjunto (2+ responsáveis) — ver src/lib/task-assignees.ts
+  assignees?: {
+    id: string;
+    userId: string | null;
+    isClient: boolean;
+    role: string;
+    part: string | null;
+    done: boolean;
+    sortOrder: number;
+    user?: { id: string; name: string | null; image: string | null } | null;
+  }[] | null;
   subtasks?: { id: string; done: boolean }[];
   _count?: { links: number; comments: number };
 };
 
-export type UserOption = { id: string; name?: string | null; email: string };
+export type UserOption = { id: string; name?: string | null; email: string; image?: string | null };

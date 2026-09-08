@@ -6,12 +6,10 @@ import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { WeekdayPicker } from "./WeekdayPicker";
 import { describeRecurrence } from "@/lib/recurrence";
+import { AssigneePicker } from "./AssigneePicker";
+import { CLIENT_CHOICE, type AssigneeInput } from "@/lib/task-assignees";
 
 type User = { id: string; name?: string | null; email: string };
-
-// Mesmo sentinel já usado na edição de sugestões da IA (src/app/(app)/sugestoes-ia/page.tsx)
-// — "responsável" é o cliente, não ninguém do squad (assigneeId vai null na criação).
-const CLIENT_CHOICE = "__client__";
 
 export function NewTaskModal({
   users,
@@ -29,7 +27,8 @@ export function NewTaskModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
-  const [assigneeId, setAssigneeId] = useState(currentUserId);
+  // lista de responsáveis: o primeiro é o dono; 2+ = tarefa em conjunto
+  const [assignees, setAssignees] = useState<AssigneeInput[]>([{ id: currentUserId, part: null }]);
   const [dueDate, setDueDate] = useState("");
   const [dueTime, setDueTime] = useState("");
   const [client, setClient] = useState(defaultClient ?? "");
@@ -46,20 +45,10 @@ export function NewTaskModal({
       .catch(() => {});
   }, []);
 
-  // "Cliente" como responsável só precisa de um nome de cliente preenchido — não
-  // depende de mexer no campo Entrega primeiro. Escolher "Cliente" aqui já ajusta
-  // a Entrega pra "Cliente entrega para a O2" sozinho (mas dá pra mudar depois).
+  // Sem nome de cliente não dá pra ter "o cliente" como responsável — tira da lista.
   function updateClient(value: string) {
     setClient(value);
-    if (assigneeId === CLIENT_CHOICE && !value.trim()) setAssigneeId(currentUserId);
-  }
-  function updateDeliverTo(value: string) {
-    setDeliverTo(value);
-    if (assigneeId === CLIENT_CHOICE && value !== "o2") setAssigneeId(currentUserId);
-  }
-  function updateAssignee(value: string) {
-    setAssigneeId(value);
-    if (value === CLIENT_CHOICE && deliverTo !== "o2") setDeliverTo("o2");
+    if (!value.trim()) setAssignees((prev) => prev.filter((a) => a.id !== CLIENT_CHOICE));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -69,8 +58,15 @@ export function NewTaskModal({
       toast("Escolha pelo menos um dia da semana", "error");
       return;
     }
+    if (assignees.length === 0) {
+      toast("Escolha pelo menos um responsável", "error");
+      return;
+    }
+    if (assignees.length > 1 && assignees[0].id === CLIENT_CHOICE) {
+      toast("O dono precisa ser alguém do squad — mova o cliente pra baixo", "error");
+      return;
+    }
     setLoading(true);
-    const isClientChoice = assigneeId === CLIENT_CHOICE;
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,8 +74,7 @@ export function NewTaskModal({
         title,
         description,
         priority,
-        assigneeId: isClientChoice ? null : assigneeId,
-        noAssignee: isClientChoice,
+        assignees,
         dueDate: dueDate || null,
         dueTime: dueTime || null,
         client: client.trim() || null,
@@ -219,7 +214,7 @@ export function NewTaskModal({
               <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Entrega</label>
               <select
                 value={deliverTo}
-                onChange={(e) => updateDeliverTo(e.target.value)}
+                onChange={(e) => setDeliverTo(e.target.value)}
                 className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
               >
                 <option value="">Interna (não aparece no calendário)</option>
@@ -229,26 +224,7 @@ export function NewTaskModal({
             </div>
           )}
 
-          <div>
-            <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Responsável</label>
-            <select
-              value={assigneeId}
-              onChange={(e) => updateAssignee(e.target.value)}
-              className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
-            >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name || u.email}
-                </option>
-              ))}
-              {client.trim() && (
-                <option value={CLIENT_CHOICE}>Cliente ({client.trim()})</option>
-              )}
-            </select>
-            {!client.trim() && (
-              <p className="text-xs text-ink-faint mt-1">Preencha o Cliente acima pra poder atribuir a tarefa a ele.</p>
-            )}
-          </div>
+          <AssigneePicker users={users} client={client} value={assignees} onChange={setAssignees} />
 
           <div className="flex gap-3 pt-2">
             <button
