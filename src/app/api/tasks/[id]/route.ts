@@ -144,6 +144,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const db = forSquad(session.user.squadId);
 
   const { id } = await params;
+  // confirma que a tarefa é deste squad antes de mexer nas sugestões ligadas a ela
+  // (RecapSuggestion/ExternalSuggestion são achadas por taskId, sem escopo próprio)
+  const task = await db.task.findUnique({ where: { id }, select: { id: true } });
+  if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Tarefa que nasceu de uma sugestão da IA volta pra "Excluídos" em /sugestoes-ia em vez
+  // de sumir: sem isso a sugestão ficava "accepted"/"edited" com taskId zerado pelo SetNull
+  // do banco, ou seja, fora do Kanban e fora de todas as abas — some pra sempre.
+  await Promise.all([
+    db.recapSuggestion.updateMany({ where: { taskId: id }, data: { status: "rejected", taskId: null } }),
+    db.externalSuggestion.updateMany({ where: { taskId: id }, data: { status: "rejected", taskId: null } }),
+  ]);
+
   await db.taskComment.deleteMany({ where: { taskId: id } });
   await db.task.delete({ where: { id } });
   revalidateTag("tasks", "max");
