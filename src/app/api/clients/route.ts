@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
-import { forSquad, type SquadPrisma } from "@/lib/tenant-prisma";
-import { getIgnoredClients, matchesIgnoredClient, removeIgnoredClient } from "@/lib/settings";
+import { forSquad } from "@/lib/tenant-prisma";
+import { removeIgnoredClient } from "@/lib/settings";
+import { knownClientNames } from "@/lib/client-resolve";
 
-// Lista de nomes de clientes conhecidos (carteira em ClientNote + eventos, recaps e tarefas —
-// ClientNote é a fonte de verdade de quais clientes existem, ver getClientsTable em src/lib/queries.ts;
-// sem ela, cliente só cadastrado na carteira, ainda sem nenhuma atividade, não aparece aqui)
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,30 +12,6 @@ export async function GET() {
 
   const names = await knownClientNames(db, session.user.squadId);
   return NextResponse.json([...names].sort((a, b) => a.localeCompare(b)));
-}
-
-// squadId é o mesmo do `db`, mas a lista de ignorados vive numa Setting (fora do escopo
-// do forSquad), então precisa vir explícito
-async function knownClientNames(db: SquadPrisma, squadId: string): Promise<Set<string>> {
-  const [ignored, notes, events, recaps, tasks] = await Promise.all([
-    getIgnoredClients(squadId),
-    db.clientNote.findMany({ select: { client: true } }),
-    db.calendarEvent.findMany({ select: { client: true }, where: { client: { not: "" } }, distinct: ["client"] }),
-    db.meetRecap.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
-    db.task.findMany({ select: { client: true }, where: { client: { not: null } }, distinct: ["client"] }),
-  ]);
-
-  const names = new Set<string>();
-  const add = (client: string | null) => {
-    // nome ignorado não é da carteira: fica fora mesmo se ainda sobrou registro apontando
-    // pra ele (evento de agenda que o sync ainda não limpou, tarefa antiga solta...)
-    if (client && !matchesIgnoredClient(ignored, client)) names.add(client);
-  };
-  notes.forEach((n) => add(n.client));
-  events.forEach((e) => add(e.client));
-  recaps.forEach((r) => add(r.client));
-  tasks.forEach((t) => add(t.client));
-  return names;
 }
 
 // Cadastra um cliente novo (ainda sem nenhuma tarefa/reunião/recap) direto na carteira,

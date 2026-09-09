@@ -6,7 +6,14 @@ import { log } from "./logger";
 import { revalidateTag } from "next/cache";
 import { prisma } from "./prisma";
 import { normalizeAssignees, syncTaskAssignees, CLIENT_CHOICE } from "./task-assignees";
-import { resolveTarget, buildChanges } from "./assistant-actions";
+import {
+  resolveTarget, buildChanges, createPendingAction,
+  resolveTratativa, buildTratativaChanges, buildTratativaCreate,
+  resolveClientTarget, buildClientChanges,
+} from "./assistant-actions";
+import { resolveClientName, knownClientNames } from "./client-resolve";
+import { removeIgnoredClient } from "./settings";
+import { notifyTaskReminder } from "./slack";
 
 const PRIORITIES_OK = ["high", "medium", "low"];
 
@@ -80,20 +87,6 @@ export function resolveDueWindow(term: DueRelative): { gte?: Date; lte?: Date; i
     case "proximos_7_dias": return { gte: today, lte: day(7) };
     case "sem_prazo": return { isNull: true };
   }
-}
-
-// Resolve o nome "oficial" do cliente (como está gravado no banco) a partir do texto
-// livre que a pessoa digitou no chat — tolera acento/caixa diferente (Postgres
-// `contains` sozinho não ignora acento, então "cafe" não bate com "Café" de outro jeito),
-// comparando contra a carteira em ClientNote. Retorna null se não achar nenhum parecido.
-async function resolveClientName(db: SquadPrisma, input: string): Promise<string | null> {
-  const target = normalizeText(input);
-  if (!target) return null;
-  const notes = await db.clientNote.findMany({ select: { client: true } });
-  const exact = notes.find((c) => normalizeText(c.client) === target);
-  if (exact) return exact.client;
-  const partial = notes.find((c) => normalizeText(c.client).includes(target) || target.includes(normalizeText(c.client)));
-  return partial?.client ?? null;
 }
 
 async function getUrgentItems(squadId: string) {
@@ -877,10 +870,7 @@ async function alterarTarefa(
   if (!built.ok) return { erro: built.erro };
 
   const summary = `${alvo.task.title}${alvo.task.client ? ` (${alvo.task.client})` : ""} — ${built.linhas.join("; ")}`;
-  const action = await prisma.assistantAction.create({
-    data: { squadId, userId: ctx.userId, taskId: alvo.task.id, changes: JSON.stringify(built.changes), summary },
-  });
-  ctx.pendingActionId = action.id;
+  ctx.pendingActionId = await createPendingAction(squadId, ctx.userId, "task", alvo.task.id, built.changes, summary);
 
   return {
     aguardandoConfirmacao: true,
@@ -888,6 +878,161 @@ async function alterarTarefa(
     vaiMudar: built.linhas,
     instrucao:
       "NÃO diga que já mudou — nada foi alterado ainda. Diga em uma frase qual tarefa você encontrou e o que vai mudar; a pessoa tem um botão Confirmar no chat.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Link, checklist e lembrete — executam direto, mesmo critério de comentar_tarefa e
+// adicionar_item_checklist (errar aqui é barato).
+
+async function anexarLinkTarefa(squadId: string, args: { title?: string; url?: string; label?: string }) {
+  const url = (args.url || "").trim();
+  if (!url) return { erro: "Preciso da URL do link." };
+
+  const alvo = await resolveTarget(squadId, args.title || "");
+  if (!alvo.ok) return alvo;
+
+  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  const link = await prisma.taskLink.create({ data: { taskId: alvo.task.id, url: normalized, label: args.label?.trim() || null } });
+  revalidateTag("tasks", "max");
+  return { anexado: true, tarefa: alvo.task.title, url: link.url };
+}
+
+// Marca/desmarca um item do checklist já existente — resolvido por texto, igual à
+// tarefa. Não confunde com adicionar_item_checklist, que CRIA um item novo.
+async function marcarItemChecklist(squadId: string, args: { title?: string; item?: string; done?: boolean }) {
+  const termoItem = (args.item || "").trim();
+  if (!termoItem) return { erro: "Preciso do texto do item do checklist." };
+
+  const alvo = await resolveTarget(squadId, args.title || "");
+  if (!alvo.ok) return alvo;
+
+  const subtasks = await prisma.subtask.findMany({ where: { taskId: alvo.task.id }, select: { id: true, title: true, done: true } });
+  const hits = subtasks.filter((s) => s.title.toLowerCase().includes(termoItem.toLowerCase()));
+  if (hits.length === 0) return { erro: `Não achei item de checklist com "${termoItem}" na tarefa "${alvo.task.title}".` };
+  if (hits.length > 1) {
+    return { erro: `Achei ${hits.length} itens de checklist parecidos com "${termoItem}". Pergunte qual.`, candidatos: hits.map((h) => h.title) };
+  }
+
+  // "marcar" é o caso comum, então é o padrão quando `done` vem ausente — SEM alternar
+  // automaticamente. Um "toggle" aqui provou ser perigoso: se o modelo esquecer de mandar
+  // `done` (acontece) e o item já estiver feito, alternar desmarcaria — o oposto exato do
+  // que a pessoa pediu. Só desmarca com `done: false` explícito.
+  const done = args.done === false ? false : true;
+  await prisma.subtask.update({ where: { id: hits[0].id }, data: { done } });
+  revalidateTag("tasks", "max");
+  return { marcado: true, tarefa: alvo.task.title, item: hits[0].title, feito: done };
+}
+
+// Dispara o mesmo lembrete no Slack que o botão "Lembrar" do painel da tarefa.
+async function enviarLembrete(squadId: string, args: { title?: string }, ctx: ToolContext) {
+  const alvo = await resolveTarget(squadId, args.title || "");
+  if (!alvo.ok) return alvo;
+
+  const db = forSquad(squadId);
+  const task = await db.task.findUnique({ where: { id: alvo.task.id } });
+  if (!task) return { erro: "A tarefa não existe mais." };
+  if (!task.assigneeId) return { erro: `"${task.title}" não tem responsável — não tem pra quem lembrar.` };
+
+  const result = await notifyTaskReminder({
+    squadId,
+    assigneeDbId: task.assigneeId,
+    taskId: task.id,
+    taskTitle: task.title,
+    taskDescription: task.description,
+    priority: task.priority,
+    dueDate: task.dueDate,
+    client: task.client,
+    requestedBy: ctx.userName,
+  });
+  if (!result.ok) return { erro: result.error };
+  return { lembrete: true, tarefa: task.title };
+}
+
+// ---------------------------------------------------------------------------
+// TRATATIVA — abrir é confirmação-gated (mexe no funil que o squad usa pra reportar
+// churn/recuperação), assim como alterar uma já aberta.
+
+async function registrarTratativa(
+  squadId: string,
+  args: { client?: string; tipo?: string; motivo?: string; descricao?: string; responsavelName?: string; dataPrevistaFinalizacao?: string; problemaNaOxy?: boolean },
+  ctx: ToolContext
+) {
+  const built = await buildTratativaCreate(squadId, args);
+  if (!built.ok) return { erro: built.erro };
+
+  const summary = `Abrir tratativa — ${built.linhas.join("; ")}`;
+  ctx.pendingActionId = await createPendingAction(squadId, ctx.userId, "tratativa_new", built.input.client, built.input, summary);
+
+  return {
+    aguardandoConfirmacao: true,
+    vaiCriar: built.linhas,
+    instrucao: "NÃO diga que já abriu a tratativa — nada foi criado ainda. Resuma o que vai abrir; a pessoa confirma no chat.",
+  };
+}
+
+async function alterarTratativa(
+  squadId: string,
+  args: { client?: string; motivo?: string; status?: string; desfecho?: string; planoDeAcao?: string; dataPrevistaFinalizacao?: string; responsavelName?: string },
+  ctx: ToolContext
+) {
+  const alvo = await resolveTratativa(squadId, args.client || "", args.motivo);
+  if (!alvo.ok) return alvo;
+
+  const built = await buildTratativaChanges(squadId, alvo.tratativa, args);
+  if (!built.ok) return { erro: built.erro };
+
+  const summary = `Tratativa de ${alvo.tratativa.client} (${alvo.tratativa.motivo}) — ${built.linhas.join("; ")}`;
+  ctx.pendingActionId = await createPendingAction(squadId, ctx.userId, "tratativa", alvo.tratativa.id, built.changes, summary);
+
+  return {
+    aguardandoConfirmacao: true,
+    tratativaResolvida: { cliente: alvo.tratativa.client, motivo: alvo.tratativa.motivo, status: alvo.tratativa.status },
+    vaiMudar: built.linhas,
+    instrucao: "NÃO diga que já mudou — nada foi alterado ainda. Diga qual tratativa você encontrou e o que vai mudar; a pessoa confirma no chat.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CLIENTE — criar é direto (mesmo risco de criar_tarefa: corrigir depois é barato,
+// já existem 2 níveis de confirmação na tela pra excluir se sair errado). Editar
+// campos que alimentam o dashboard de saúde do squad pede confirmação.
+
+async function criarCliente(squadId: string, args: { client?: string }) {
+  const client = (args.client || "").trim();
+  if (!client) return { erro: "Preciso do nome do cliente." };
+
+  const db = forSquad(squadId);
+  const existing = await knownClientNames(db, squadId);
+  const lower = new Set([...existing].map((n) => n.toLowerCase()));
+  if (lower.has(client.toLowerCase())) return { erro: `Já existe um cliente chamado "${client}".` };
+
+  const note = await db.clientNote.create({ data: { squadId, client } });
+  await removeIgnoredClient(squadId, client);
+  revalidateTag("clients", "max");
+  revalidateTag("calendar", "max");
+  return { criado: true, cliente: note.client };
+}
+
+async function editarCliente(
+  squadId: string,
+  args: { client?: string; status?: string; healthStatus?: string; oxyStage?: string; oxyPendencies?: string; notes?: string },
+  ctx: ToolContext
+) {
+  const alvo = await resolveClientTarget(squadId, args.client || "");
+  if (!alvo.ok) return alvo;
+
+  const built = buildClientChanges(alvo.client, args);
+  if (!built.ok) return { erro: built.erro };
+
+  const summary = `${alvo.client.client} — ${built.linhas.join("; ")}`;
+  ctx.pendingActionId = await createPendingAction(squadId, ctx.userId, "client", alvo.client.id, built.changes, summary);
+
+  return {
+    aguardandoConfirmacao: true,
+    clienteResolvido: alvo.client.client,
+    vaiMudar: built.linhas,
+    instrucao: "NÃO diga que já mudou — nada foi alterado ainda. Diga o que vai mudar; a pessoa confirma no chat.",
   };
 }
 
@@ -910,7 +1055,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          status: { type: "string", enum: ["todo", "in_progress", "blocked", "done"], description: "Status da tarefa" },
+          status: { type: ["string", "null"], enum: ["todo", "in_progress", "blocked", "done"], description: "Status da tarefa" },
           client: { type: "string", description: "Nome do cliente (busca parcial)" },
           assigneeName: { type: "string", description: "Nome do responsável (busca parcial) — acha tanto quem é dono quanto quem participa de tarefa em conjunto" },
           dueRelative: {
@@ -947,8 +1092,8 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          status: { type: "string", enum: ["ativo", "pausado", "encerrado"] },
-          healthStatus: { type: "string", enum: ["verde", "amarelo", "vermelho"] },
+          status: { type: ["string", "null"], enum: ["ativo", "pausado", "encerrado"] },
+          healthStatus: { type: ["string", "null"], enum: ["verde", "amarelo", "vermelho"] },
         },
       },
     },
@@ -983,7 +1128,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          status: { type: "string", enum: ["triagem", "em_tratativa", "plano_de_acao", "concluida"] },
+          status: { type: ["string", "null"], enum: ["triagem", "em_tratativa", "plano_de_acao", "concluida"] },
           client: { type: "string" },
         },
       },
@@ -1068,7 +1213,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
           title: { type: "string", description: "Título da tarefa, curto e no imperativo (ex: 'Revisar balancete de agosto')" },
           description: { type: "string", description: "Detalhe do que precisa ser feito" },
           client: { type: "string", description: "Cliente relacionado, se houver" },
-          priority: { type: "string", enum: ["high", "medium", "low"] },
+          priority: { type: ["string", "null"], enum: ["high", "medium", "low"] },
           dueDate: { type: "string", description: "Prazo no formato YYYY-MM-DD. Use a data de hoje informada no início da conversa como referência." },
         },
         required: ["title"],
@@ -1087,7 +1232,7 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
           title: { type: "string", description: "Título curto, no imperativo (ex: 'Revisar balancete de agosto')" },
           description: { type: "string", description: "Detalhe do que precisa ser feito" },
           client: { type: "string", description: "Cliente relacionado, se houver" },
-          priority: { type: "string", enum: ["high", "medium", "low"] },
+          priority: { type: ["string", "null"], enum: ["high", "medium", "low"] },
           dueDate: { type: "string", description: "Prazo YYYY-MM-DD, usando a data de hoje informada no início da conversa" },
           dueTime: { type: "string", description: "Horário HH:MM (Brasília), só se a pessoa disser uma hora" },
           assigneeNames: {
@@ -1140,8 +1285,8 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
         type: "object",
         properties: {
           title: { type: "string", description: "Título ou parte do título da tarefa a alterar" },
-          status: { type: "string", enum: ["todo", "in_progress", "blocked", "done"], description: "'done' conclui, 'todo' reabre" },
-          priority: { type: "string", enum: ["high", "medium", "low"] },
+          status: { type: ["string", "null"], enum: ["todo", "in_progress", "blocked", "done"], description: "'done' conclui, 'todo' reabre" },
+          priority: { type: ["string", "null"], enum: ["high", "medium", "low"] },
           dueDate: { type: "string", description: "Novo prazo YYYY-MM-DD, ou string vazia pra tirar o prazo" },
           dueTime: { type: "string", description: "Novo horário HH:MM, ou string vazia pra tirar" },
           assigneeName: { type: "string", description: "Nome do novo responsável, ou string vazia pra deixar sem responsável" },
@@ -1151,16 +1296,146 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "anexar_link_tarefa",
+      description: "Anexa um link (URL) numa tarefa existente. Executa direto, sem confirmação.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título ou parte do título da tarefa" },
+          url: { type: "string", description: "URL do link" },
+          label: { type: "string", description: "Rótulo curto pro link (opcional)" },
+        },
+        required: ["title", "url"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "marcar_item_checklist",
+      description: "Marca ou desmarca um item que JÁ EXISTE no checklist de uma tarefa. Para criar um item novo use adicionar_item_checklist. Executa direto, sem confirmação.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título ou parte do título da tarefa" },
+          item: { type: "string", description: "Texto ou parte do texto do item do checklist" },
+          done: { type: ["boolean", "null"], description: "false = desmarcar. Omitido (ou true) = marcar como feito, que é o caso comum." },
+        },
+        required: ["title", "item"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "enviar_lembrete",
+      description: "Dispara no Slack, agora, o mesmo lembrete do botão 'Lembrar' da tarefa, pro responsável dela. Executa direto, sem confirmação.",
+      parameters: {
+        type: "object",
+        properties: { title: { type: "string", description: "Título ou parte do título da tarefa" } },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "registrar_tratativa",
+      description:
+        "Prepara a abertura de uma tratativa nova com um cliente (preventiva ou reativa) — NÃO cria na hora, fica pendente com botão Confirmar no chat, porque alimenta o funil de churn/recuperação que o squad reporta.",
+      parameters: {
+        type: "object",
+        properties: {
+          client: { type: "string", description: "Nome do cliente" },
+          tipo: { type: "string", enum: ["preventiva", "reativa"] },
+          motivo: { type: "string", description: "O que está acontecendo com o cliente" },
+          descricao: { type: "string", description: "Detalhe adicional" },
+          responsavelName: { type: "string", description: "Quem do squad vai tocar a tratativa" },
+          dataPrevistaFinalizacao: { type: "string", description: "Prazo YYYY-MM-DD" },
+          problemaNaOxy: { type: "boolean", description: "Se o problema é relacionado à Oxy" },
+        },
+        required: ["client", "tipo", "motivo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "alterar_tratativa",
+      description:
+        "Prepara uma alteração numa tratativa ABERTA de um cliente (status, desfecho, plano de ação, prazo, responsável) — NÃO altera na hora, fica pendente com botão Confirmar. Se o cliente tiver mais de uma tratativa aberta, o retorno lista os motivos de cada uma: pergunte à pessoa qual e chame de novo passando esse texto em `motivo`.",
+      parameters: {
+        type: "object",
+        properties: {
+          client: { type: "string", description: "Nome do cliente" },
+          motivo: { type: "string", description: "Trecho do motivo, só quando o cliente tem mais de uma tratativa aberta e a pessoa já disse qual" },
+          status: { type: ["string", "null"], enum: ["triagem", "em_tratativa", "plano_de_acao", "concluida"] },
+          desfecho: { type: ["string", "null"], enum: ["recuperado", "churn", "downsell", "mudanca_escopo", "desistencia"] },
+          planoDeAcao: { type: "string" },
+          dataPrevistaFinalizacao: { type: "string", description: "YYYY-MM-DD" },
+          responsavelName: { type: "string" },
+        },
+        required: ["client"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "criar_cliente",
+      description: "Cadastra um cliente novo na carteira (ainda sem tarefa/reunião). Executa direto, sem confirmação — errar é barato, dá pra excluir na tela.",
+      parameters: {
+        type: "object",
+        properties: { client: { type: "string", description: "Nome do cliente" } },
+        required: ["client"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "editar_cliente",
+      description:
+        "Prepara uma alteração num cliente que JÁ ESTÁ na carteira (status, saúde da conta, etapa Oxy, pendências, notas) — NÃO altera na hora, fica pendente com botão Confirmar, porque alimenta o dashboard de clientes que o squad inteiro usa. Para cliente novo use criar_cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          client: { type: "string", description: "Nome do cliente" },
+          status: { type: ["string", "null"], enum: ["ativo", "pausado", "encerrado"] },
+          healthStatus: { type: ["string", "null"], enum: ["verde", "amarelo", "vermelho"] },
+          oxyStage: { type: ["string", "null"], enum: ["nao_iniciado", "em_validacao", "em_implantacao", "implantacao_interrompida", "ativo"] },
+          oxyPendencies: { type: "string", description: "O que falta pro cliente na Oxy" },
+          notes: { type: "string", description: "Notas gerais sobre o cliente" },
+        },
+        required: ["client"],
+      },
+    },
+  },
 ];
+
 
 
 
 export async function runTool(
   squadId: string,
   name: string,
-  args: Record<string, unknown>,
+  rawArgs: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<unknown> {
+  // O Groq costuma preencher parâmetro opcional que não usou com `null` em vez de
+  // omitir a chave (e às vezes o próprio validador da Groq rejeita a chamada inteira
+  // por isso — os schemas abaixo aceitam null nesses campos exatamente pra evitar
+  // esse 400). As funções de cada ferramenta checam `!== undefined` pra saber "isso foi
+  // pedido", então sem esta limpeza um `status: null` seria lido como "mude pra null"
+  // em vez de "não mexi nisso".
+  const args: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rawArgs)) {
+    if (value !== null) args[key] = value;
+  }
+
   switch (name) {
     case "get_urgent_items":
       return getUrgentItems(squadId);
@@ -1196,6 +1471,20 @@ export async function runTool(
       return adicionarItemChecklist(squadId, args, ctx);
     case "alterar_tarefa":
       return alterarTarefa(squadId, args, ctx);
+    case "anexar_link_tarefa":
+      return anexarLinkTarefa(squadId, args);
+    case "marcar_item_checklist":
+      return marcarItemChecklist(squadId, args);
+    case "enviar_lembrete":
+      return enviarLembrete(squadId, args, ctx);
+    case "registrar_tratativa":
+      return registrarTratativa(squadId, args, ctx);
+    case "alterar_tratativa":
+      return alterarTratativa(squadId, args, ctx);
+    case "criar_cliente":
+      return criarCliente(squadId, args);
+    case "editar_cliente":
+      return editarCliente(squadId, args, ctx);
     default:
       return { error: `Ferramenta desconhecida: ${name}` };
   }

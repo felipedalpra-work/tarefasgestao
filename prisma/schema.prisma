@@ -452,22 +452,29 @@ model AssistantMessage {
   @@index([userId, createdAt])
 }
 
-// Ação que o assistente de IA quer executar numa tarefa que JÁ EXISTE e que está
-// esperando alguém clicar "Confirmar" no chat.
+// Ação que o assistente de IA quer executar e que está esperando alguém clicar
+// "Confirmar" no chat. Cobre dois casos:
 //
-// Existe por causa de um risco específico: o erro mais provável do assistente não é
-// fazer a coisa errada, é acertar a ação e errar o ALVO — "muda o prazo da tarefa do
-// balancete" quando há três com "balancete" no título. Guardar a intenção aqui deixa o
-// chat mostrar exatamente qual tarefa foi resolvida antes de mexer nela.
+// 1. Alterar um registro que JÁ EXISTE (tarefa, tratativa, cliente) — o erro mais
+//    provável do assistente aqui não é fazer a coisa errada, é acertar a ação e errar o
+//    ALVO ("muda o prazo da tarefa do balancete" quando há três com "balancete" no
+//    título). Guardar a intenção deixa o chat mostrar exatamente qual registro foi
+//    resolvido antes de mexer nele. `targetId` aponta pro registro (Task/Tratativa/
+//    ClientNote — os três têm `id` próprio).
+// 2. Abrir uma tratativa nova — não tem alvo prévio (o registro nasce na confirmação),
+//    então `targetId` guarda o cliente só como referência de exibição, e o corpo todo
+//    do que criar mora em `changes`.
 //
-// Criar tarefa/comentário/item de checklist NÃO passa por aqui: errar ao criar é barato
-// (nasce visível e some com um clique). Apagar não existe como ação do assistente.
+// Criar tarefa/cliente e comentário/checklist NÃO passam por aqui: errar ao criar
+// esses é barato (nascem visíveis e somem com um clique). Apagar não existe como ação
+// do assistente.
 model AssistantAction {
   id         String    @id @default(cuid())
   squadId    String
   userId     String // quem pediu — a ação roda com a permissão dessa pessoa
-  taskId     String // alvo já resolvido, pra confirmação não depender de buscar de novo
-  changes    String // JSON dos campos a alterar
+  targetType String // "task" | "tratativa" | "tratativa_new" | "client"
+  targetId   String // id do registro (ou nome do cliente, quando targetType = "tratativa_new")
+  changes    String // JSON dos campos a alterar/criar
   summary    String // texto curto do que vai acontecer, mostrado no chat
   status     String    @default("pending") // "pending" | "confirmed" | "cancelled"
   resolvedAt DateTime?
