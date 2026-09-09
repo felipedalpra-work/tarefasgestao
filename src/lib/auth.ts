@@ -35,7 +35,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.readonly",
+          // calendar.events (leitura+escrita de eventos) substitui o calendar.readonly de
+          // antes — o assistente de IA passou a poder criar/mudar reunião no Google
+          // Calendar (2026-09-08), e é a mesma permissão que já cobria a leitura do sync.
+          // Só vale pra quem RECONECTAR o Google depois desta mudança — contas já
+          // vinculadas mantêm o escopo antigo até a pessoa passar por login de novo (mesma
+          // pendência do gmail.compose, adicionado antes e ainda não coberto por ninguém).
+          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.events",
           access_type: "offline",
           prompt: "consent",
         },

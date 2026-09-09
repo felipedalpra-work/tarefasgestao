@@ -10,6 +10,7 @@ import {
   resolveTarget, buildChanges, createPendingAction,
   resolveTratativa, buildTratativaChanges, buildTratativaCreate,
   resolveClientTarget, buildClientChanges,
+  buildCalendarEventCreate,
 } from "./assistant-actions";
 import { resolveClientName, knownClientNames } from "./client-resolve";
 import { removeIgnoredClient } from "./settings";
@@ -1036,6 +1037,28 @@ async function editarCliente(
   };
 }
 
+// ---------------------------------------------------------------------------
+// GOOGLE CALENDAR — a ação mais sensível do assistente (agenda real, não só espelho
+// interno). SEMPRE confirmação, sem exceção, e sem convidado nesta versão.
+async function agendarEvento(
+  squadId: string,
+  args: { title?: string; client?: string; date?: string; time?: string; durationMinutes?: number; description?: string },
+  ctx: ToolContext
+) {
+  const built = buildCalendarEventCreate(args);
+  if (!built.ok) return { erro: built.erro };
+
+  const summary = `Agendar no Google Calendar — ${built.linhas.slice(0, 2).join("; ")}`;
+  ctx.pendingActionId = await createPendingAction(squadId, ctx.userId, "calendar_new", built.input.title, built.input, summary);
+
+  return {
+    aguardandoConfirmacao: true,
+    vaiCriar: built.linhas,
+    instrucao:
+      "NÃO diga que já agendou — nada foi criado ainda, nem na agenda nem no app. Resuma dia/hora/título; a pessoa confirma no chat. Se der erro pedindo reconexão do Google, explique que é preciso reconectar em Configurações e não tente de novo sem a pessoa fazer isso.",
+  };
+}
+
 export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   {
     type: "function",
@@ -1414,6 +1437,26 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "agendar_evento",
+      description:
+        "Prepara a criação de um evento/reunião no Google Calendar de quem está pedindo — NÃO cria na hora, fica pendente com botão Confirmar, porque vira um compromisso real na agenda da pessoa (diferente de tudo mais no app, que só mexe no Kanban interno). Sem convidado — cria só na agenda de quem confirmar. Use quando a pessoa pedir claramente pra agendar/marcar/colocar algo na agenda.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título da reunião/evento" },
+          client: { type: "string", description: "Cliente relacionado, se houver" },
+          date: { type: "string", description: "Data YYYY-MM-DD, usando a data de hoje informada no início da conversa como referência" },
+          time: { type: "string", description: "Horário HH:MM em Brasília" },
+          durationMinutes: { type: ["number", "null"], description: "Duração em minutos (padrão 60, máximo 480)" },
+          description: { type: "string", description: "Detalhe adicional do evento" },
+        },
+        required: ["title", "date", "time"],
+      },
+    },
+  },
 ];
 
 
@@ -1485,6 +1528,8 @@ export async function runTool(
       return criarCliente(squadId, args);
     case "editar_cliente":
       return editarCliente(squadId, args, ctx);
+    case "agendar_evento":
+      return agendarEvento(squadId, args, ctx);
     default:
       return { error: `Ferramenta desconhecida: ${name}` };
   }

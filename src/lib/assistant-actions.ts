@@ -5,6 +5,7 @@ import { statusLabel, priorityLabel, brtNow } from "./utils";
 import { resolveClientName } from "./client-resolve";
 import { log } from "./logger";
 import { revalidateTag } from "next/cache";
+import { createCalendarEvent } from "./calendar-write";
 
 // Ações do assistente sobre um registro que JÁ EXISTE (tarefa, tratativa) ou que ainda
 // vai nascer na confirmação (tratativa nova). Ficam guardadas como AssistantAction
@@ -499,9 +500,52 @@ async function executeClientAction(
 }
 
 // ---------------------------------------------------------------------------
-// Ciclo de vida comum das três (executar, cancelar, sobreviver a F5)
+// EVENTO NO GOOGLE CALENDAR — a ação mais sensível do assistente: acontece na agenda
+// REAL da pessoa, não só no espelho interno. Sempre confirmação, sem exceção, e sem
+// convidado nesta versão (ver calendar-write.ts pro porquê).
 
-export type PendingActionTarget = "task" | "tratativa" | "tratativa_new" | "client";
+export type CalendarEventCreateInput = {
+  title: string;
+  client: string | null;
+  date: string;
+  time: string;
+  durationMinutes: number;
+  description: string | null;
+};
+
+export function buildCalendarEventCreate(
+  raw: { title?: string; client?: string; date?: string; time?: string; durationMinutes?: number; description?: string }
+): { ok: true; input: CalendarEventCreateInput; linhas: string[] } | { ok: false; erro: string } {
+  const title = (raw.title || "").trim();
+  if (!title) return { ok: false, erro: "Preciso do título da reunião/evento." };
+  if (!raw.date || !/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) return { ok: false, erro: `Data inválida: use YYYY-MM-DD (recebi "${raw.date}")` };
+  if (!raw.time || !/^([01]\d|2[0-3]):[0-5]\d$/.test(raw.time)) return { ok: false, erro: `Horário inválido: use HH:MM (recebi "${raw.time}")` };
+
+  const durationMinutes = Number(raw.durationMinutes) > 0 ? Math.min(Number(raw.durationMinutes), 480) : 60;
+
+  const linhas = [
+    `Título: ${title}`,
+    `Quando: ${raw.date} às ${raw.time} (${durationMinutes} min)`,
+    ...(raw.client ? [`Cliente: ${raw.client}`] : []),
+    "Vai criar um evento de verdade na sua agenda do Google, sem convidado.",
+  ];
+
+  return { ok: true, input: { title, client: raw.client?.trim() || null, date: raw.date, time: raw.time, durationMinutes, description: raw.description?.trim() || null }, linhas };
+}
+
+async function executeCalendarEventCreate(
+  action: { userId: string; changes: string; summary: string }
+): Promise<{ ok: true; titulo: string; resumo: string } | { ok: false; erro: string }> {
+  const input = JSON.parse(action.changes) as CalendarEventCreateInput;
+  const result = await createCalendarEvent(action.userId, input);
+  if (!result.ok) return { ok: false, erro: result.error };
+  return { ok: true, titulo: input.title, resumo: action.summary };
+}
+
+// ---------------------------------------------------------------------------
+// Ciclo de vida comum (executar, cancelar, sobreviver a F5)
+
+export type PendingActionTarget = "task" | "tratativa" | "tratativa_new" | "client" | "calendar_new";
 
 export async function createPendingAction(
   squadId: string,
@@ -548,6 +592,9 @@ export async function executeAction(
       break;
     case "client":
       result = await executeClientAction(action);
+      break;
+    case "calendar_new":
+      result = await executeCalendarEventCreate({ userId: action.userId, changes: action.changes, summary: action.summary });
       break;
     default:
       result = { ok: false, erro: `Tipo de ação desconhecido: ${action.targetType}` };
