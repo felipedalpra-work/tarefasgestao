@@ -1,9 +1,33 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, X, Loader2, RotateCcw, Check, AlertTriangle } from "lucide-react";
+import { Send, X, Loader2, RotateCcw, Check, AlertTriangle, Mic, MicOff } from "lucide-react";
 import { LogoIcon } from "./LogoIcon";
 import { cn } from "@/lib/utils";
+
+// Ditado por voz via reconhecimento de fala do NAVEGADOR (Web Speech API) — sem custo
+// de IA e sem depender da cota da Groq, que já estourou mais de uma vez só testando o
+// assistente por texto hoje. Suporte real é Chrome/Edge (prefixo `webkit` inclusive no
+// Edge baseado em Chromium); Firefox não implementa a API e Safari é instável — por isso
+// o botão de microfone só aparece quando a API existe no navegador de quem abrir.
+type SpeechRecognitionResultLike = { transcript: string };
+type SpeechRecognitionEventLike = { results: ArrayLike<ArrayLike<SpeechRecognitionResultLike>> };
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
+
+function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -23,13 +47,20 @@ export function AiAssistant() {
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [resolvingAction, setResolvingAction] = useState(false);
+  const [listening, setListening] = useState(false);
+  // computado false no servidor e na primeira renderização do cliente (evita
+  // divergência de hidratação) — vira true depois do mount se o navegador suportar
+  const [speechSupported, setSpeechSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const dictationBaseRef = useRef(""); // texto que já estava no campo antes de começar a ditar
 
   // carrega a memória da pessoa (não some ao recarregar a página) na primeira vez que o painel abre
   useEffect(() => {
     if (!open || historyLoaded) return;
     setHistoryLoaded(true);
+    setSpeechSupported(getSpeechRecognition() !== null);
     fetch("/api/assistant/messages")
       .then((r) => r.json())
       .then((data) => {
@@ -48,9 +79,54 @@ export function AiAssistant() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
+  // fecha o painel com o microfone ligado não pode deixar o navegador escutando escondido
+  useEffect(() => {
+    if (!open) recognitionRef.current?.stop();
+  }, [open]);
+
+  useEffect(() => () => { recognitionRef.current?.stop(); }, []);
+
+  function startListening() {
+    const SpeechRecognitionCtor = getSpeechRecognition();
+    if (!SpeechRecognitionCtor || listening) return;
+    setError(null);
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "pt-BR";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    dictationBaseRef.current = input.trim();
+
+    recognition.onresult = (e) => {
+      // `results` acumula tudo desde o início da sessão de ditado (final + o trecho
+      // ainda sendo reconhecido) — reconstruir inteiro a cada evento é mais simples e
+      // seguro do que tentar rastrear só o que é novo, e nunca duplica texto
+      let spoken = "";
+      for (let i = 0; i < e.results.length; i++) spoken += e.results[i]?.[0]?.transcript ?? "";
+      setInput((dictationBaseRef.current ? dictationBaseRef.current + " " : "") + spoken);
+    };
+    recognition.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setError("Permissão de microfone negada — libere o microfone pro site e tente de novo.");
+      } else if (e.error !== "no-speech" && e.error !== "aborted") {
+        setError("Não consegui captar o áudio agora.");
+      }
+    };
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }
+
+  function stopListening() {
+    recognitionRef.current?.stop();
+    setListening(false);
+  }
+
   async function send(text?: string) {
     const content = (text ?? input).trim();
     if (!content || loading) return;
+    stopListening();
     setMessages((prev) => [...prev, { role: "user", content }]);
     setInput("");
     setError(null);
@@ -217,10 +293,23 @@ export function AiAssistant() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Pergunte alguma coisa…"
+              placeholder={listening ? "Ouvindo…" : "Pergunte alguma coisa…"}
               rows={1}
               className="flex-1 bg-surface-2 border border-surface-3 rounded-lg px-3 py-2 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none max-h-24"
             />
+            {speechSupported && (
+              <button
+                onClick={() => (listening ? stopListening() : startListening())}
+                disabled={loading}
+                title={listening ? "Parar ditado" : "Falar em vez de digitar"}
+                className={cn(
+                  "p-2 rounded-lg transition-all disabled:opacity-50 shrink-0",
+                  listening ? "bg-red-500/15 text-red-400 animate-pulse" : "bg-surface-2 text-ink-faint hover:text-ink"
+                )}
+              >
+                {listening ? <MicOff size={14} /> : <Mic size={14} />}
+              </button>
+            )}
             <button
               onClick={() => send()}
               disabled={loading || !input.trim()}

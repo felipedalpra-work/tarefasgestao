@@ -4,6 +4,15 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-09-08 (ditado por voz no chat do assistente)
+
+- Usuário pediu pra falar com o assistente em vez de digitar sempre. Duas formas possíveis: reconhecimento nativo do navegador (grátis, sem IA) ou gravar e mandar pro Whisper da Groq transcrever (funciona em qualquer navegador, mas usa a **mesma cota diária que já estourou duas vezes hoje** só testando o assistente por texto). Perguntado, o usuário escolheu o nativo — não faz sentido gastar cota escassa em transcrição quando o navegador já resolve de graça.
+- Botão de microfone novo ao lado do campo de texto, usando a Web Speech API (`SpeechRecognition`/`webkitSpeechRecognition`) em português (`pt-BR`), modo contínuo com resultado parcial ao vivo — o texto vai aparecendo no campo enquanto a pessoa fala, sem esperar terminar de falar pra ver alguma coisa. Clicar de novo (ou mandar a mensagem) para o ditado.
+- **Detecção de suporte precisa ser client-only pra não quebrar a hidratação**: `window`/`SpeechRecognition` não existem no servidor, então o estado que decide se o botão aparece nasce sempre `false` (server e primeira renderização do cliente iguais) e só vira `true` depois do mount, dentro do efeito que já carrega o histórico da conversa — reaproveitado de propósito em vez de criar um efeito novo, pra não somar mais um achado do lint (`set-state-in-effect`) num arquivo que já tinha um aceito como pré-existente.
+- **Sem suporte, o botão simplesmente não aparece** — Chrome e Edge (inclusive no Windows, que é o que o squad usa) têm a API; Firefox não implementa e Safari é instável, mas ninguém nesses navegadores vê um botão quebrado, só não vê botão nenhum.
+- Fechar o painel do assistente ou mandar a mensagem para o ditado em andamento, evitando o navegador continuar "escutando" escondido depois que a pessoa não está mais olhando pro chat.
+- Validado: typecheck limpo, lint sem achado novo (conferido antes/depois: 1 achado pré-existente nos dois), `next build` compilando. **Não dava pra testar microfone de verdade neste ambiente** (sem navegador interativo) — confirmado o que dava sem isso: a página carrega sem erro de servidor logado de verdade (contra squad/usuário sintéticos, removidos ao final), então a guarda contra `window` undefined no SSR está funcionando. A parte que só um navegador real com microfone destrava — ditar e ver o texto aparecer — fica por sua conta testar.
+
 ## 2026-09-08 (assistente agenda reunião de verdade no Google Calendar)
 
 - Usuário pediu, junto do resto, dar acesso ao Google Calendar pro assistente agendar tarefa/reunião com horário. Investigado antes de desenhar: o app só tinha permissão `calendar.readonly` (o sync em `calendar-sync.ts` só lê); criar evento precisa de escrita. Achado no caminho: **nem o Felipe reconectou ainda** pra ativar o rascunho de e-mail no Gmail pedido em agosto (`gmail.compose`) — mesma pendência ia se repetir aqui. Perguntado, o usuário escolheu implementar e pedir os dois reconectes juntos.
