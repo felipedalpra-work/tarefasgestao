@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Send, X, Loader2, RotateCcw, Check, AlertTriangle, Mic, MicOff } from "lucide-react";
 import { LogoIcon } from "./LogoIcon";
 import { cn } from "@/lib/utils";
+import { buildVoiceVocabulary, correctTranscript } from "@/lib/voice-correction";
 
 // Ditado por voz via reconhecimento de fala do NAVEGADOR (Web Speech API) — sem custo
 // de IA e sem depender da cota da Groq, que já estourou mais de uma vez só testando o
@@ -55,12 +56,29 @@ export function AiAssistant() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const dictationBaseRef = useRef(""); // texto que já estava no campo antes de começar a ditar
+  const voiceVocabularyRef = useRef<string[]>([]); // nomes de cliente/squad pra corrigir o ditado
 
   // carrega a memória da pessoa (não some ao recarregar a página) na primeira vez que o painel abre
   useEffect(() => {
     if (!open || historyLoaded) return;
     setHistoryLoaded(true);
-    setSpeechSupported(getSpeechRecognition() !== null);
+    const speechOk = getSpeechRecognition() !== null;
+    setSpeechSupported(speechOk);
+
+    // nomes de cliente/squad pra corrigir nome próprio que o ditado costuma errar — só
+    // busca se o navegador tem a API de voz, senão é rede gasta à toa. Guardado em ref
+    // (não precisa re-render nenhum) e a lista mais recente é o que vale a cada correção
+    if (speechOk) {
+      Promise.all([
+        fetch("/api/clients").then((r) => r.json()).catch(() => []),
+        fetch("/api/users").then((r) => r.json()).catch(() => []),
+      ]).then(([clients, users]) => {
+        const clientNames = Array.isArray(clients) ? clients : [];
+        const userNames = Array.isArray(users) ? users.map((u: { name?: string }) => u.name).filter((n): n is string => !!n) : [];
+        voiceVocabularyRef.current = buildVoiceVocabulary(clientNames, userNames);
+      });
+    }
+
     fetch("/api/assistant/messages")
       .then((r) => r.json())
       .then((data) => {
@@ -124,8 +142,15 @@ export function AiAssistant() {
   }
 
   async function send(text?: string) {
-    const content = (text ?? input).trim();
-    if (!content || loading) return;
+    const raw = (text ?? input).trim();
+    if (!raw || loading) return;
+    // corrige só o que veio do campo (digitado ou ditado) — as sugestões prontas (text
+    // vindo dos botões) não passam por nome de cliente/squad pra corrigir, então ficam
+    // como estão. stopListening() é assíncrono (só reage no onend), então a correção
+    // precisa acontecer aqui, não depois — senão mandaria o texto cru se a pessoa
+    // apertasse Enter no meio do ditado, sem esperar o microfone "visivelmente" parar
+    const content = text !== undefined ? raw : correctTranscript(raw, voiceVocabularyRef.current);
+    if (!content) return;
     stopListening();
     setMessages((prev) => [...prev, { role: "user", content }]);
     setInput("");
@@ -299,7 +324,17 @@ export function AiAssistant() {
             />
             {speechSupported && (
               <button
-                onClick={() => (listening ? stopListening() : startListening())}
+                onClick={() => {
+                  if (listening) {
+                    stopListening();
+                    // corrige o campo na hora que a pessoa para de ditar, pra ela ver o
+                    // texto já arrumado antes de mandar (send() corrige de novo por
+                    // segurança, então não custa nada rodar duas vezes aqui)
+                    setInput((current) => correctTranscript(current, voiceVocabularyRef.current));
+                  } else {
+                    startListening();
+                  }
+                }}
                 disabled={loading}
                 title={listening ? "Parar ditado" : "Falar em vez de digitar"}
                 className={cn(
