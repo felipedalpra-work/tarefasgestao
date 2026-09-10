@@ -24,11 +24,13 @@ export type ClientLoginData = {
 export function ClientLoginRow({
   client,
   login,
+  knownEmpresas = [],
   onChange,
   onRemove,
 }: {
   client: string;
   login: ClientLoginData;
+  knownEmpresas?: string[];
   onChange: (id: string, patch: Partial<ClientLoginData>) => void;
   onRemove: (id: string) => void;
 }) {
@@ -47,13 +49,7 @@ export function ClientLoginRow({
   return (
     <div className="bg-surface-2 border border-surface-3 rounded-xl p-3 space-y-2.5">
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
-        <input
-          type="text"
-          defaultValue={login.empresa}
-          placeholder="Empresa"
-          onBlur={(e) => e.target.value !== login.empresa && patch("empresa", e.target.value)}
-          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-        />
+        <EmpresaField value={login.empresa} knownEmpresas={knownEmpresas} onCommit={(v) => patch("empresa", v)} />
         <input
           type="text"
           defaultValue={login.erp ?? ""}
@@ -91,6 +87,57 @@ export function ClientLoginRow({
 
       <OtpField base={base} login={login} onChange={onChange} />
     </div>
+  );
+}
+
+const NOVA_EMPRESA = "__nova__";
+
+// "Empresa" (razão social) vira SELEÇÃO das empresas já cadastradas noutro acesso desse
+// mesmo cliente, em vez de digitar de novo toda vez — evita "Allebras LTDA" e "Allebras
+// Ltda" virarem duas empresas diferentes só por causa de digitação, e é mais rápido pra
+// cliente com várias CNPJs. Sem nenhuma empresa conhecida ainda (primeiro acesso do
+// cliente), não tem o que selecionar — fica texto livre como sempre foi.
+function EmpresaField({
+  value,
+  knownEmpresas,
+  onCommit,
+}: {
+  value: string;
+  knownEmpresas: string[];
+  onCommit: (value: string) => void;
+}) {
+  const [typingNew, setTypingNew] = useState(false);
+
+  if (knownEmpresas.length === 0 || typingNew) {
+    return (
+      <input
+        type="text"
+        defaultValue={value}
+        placeholder="Empresa"
+        autoFocus={typingNew}
+        onBlur={(e) => {
+          if (!e.target.value.trim() && knownEmpresas.length > 0) { setTypingNew(false); return; } // voltou vazio, volta pro select
+          if (e.target.value !== value) onCommit(e.target.value);
+        }}
+        className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+      />
+    );
+  }
+
+  const options = value && !knownEmpresas.includes(value) ? [value, ...knownEmpresas] : knownEmpresas;
+
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => (e.target.value === NOVA_EMPRESA ? setTypingNew(true) : onCommit(e.target.value))}
+      className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+    >
+      {!value && <option value="">Selecione a empresa</option>}
+      {options.map((empresa) => (
+        <option key={empresa} value={empresa}>{empresa}</option>
+      ))}
+      <option value={NOVA_EMPRESA}>+ Nova empresa…</option>
+    </select>
   );
 }
 

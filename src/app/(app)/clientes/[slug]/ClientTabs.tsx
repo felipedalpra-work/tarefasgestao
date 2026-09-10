@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck, Plus } from "lucide-react";
+import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck } from "lucide-react";
 import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
@@ -10,7 +10,7 @@ import { OnboardingTab } from "./OnboardingTab";
 import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
-import { ClientLoginRow, type ClientLoginData } from "@/components/ClientLoginRow";
+import { ClientAccessesSection } from "@/components/ClientAccessesSection";
 
 type CalendarEvent = {
   id: string;
@@ -96,9 +96,6 @@ const EMPTY_OXY: OxyFields = {
   pendencyWho: "",
 };
 
-// Acesso ao ERP/Oxy de uma empresa do cliente — lista, pra atender cliente com mais de um CNPJ
-type ClientLogin = ClientLoginData;
-
 export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
   const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "onboarding" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
@@ -111,9 +108,6 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
   const [oxy, setOxy] = useState<OxyFields>(EMPTY_OXY);
   const [oxyLoaded, setOxyLoaded] = useState(false);
   const [savingOxy, setSavingOxy] = useState(false);
-  const [logins, setLogins] = useState<ClientLogin[]>([]);
-  const [loginsLoaded, setLoginsLoaded] = useState(false);
-  const [addingLogin, setAddingLogin] = useState(false);
 
   const myTasks = tasks.filter((t) => t.assignee?.id === currentUserId);
   const shownTasks = taskFilter === "mine" ? myTasks : tasks;
@@ -146,16 +140,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
         })
         .catch(() => setOxyLoaded(true));
     }
-    if (tab === "oxy" && !loginsLoaded) {
-      fetch(`/api/clients/${encodeURIComponent(client)}/logins`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) setLogins(data);
-          setLoginsLoaded(true);
-        })
-        .catch(() => setLoginsLoaded(true));
-    }
-  }, [tab, notesLoaded, oxyLoaded, loginsLoaded, client]);
+  }, [tab, notesLoaded, oxyLoaded, client]);
 
   async function saveNotes() {
     setSavingNotes(true);
@@ -187,39 +172,6 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     setSavingOxy(false);
     if (res.ok) toast("Dados da Oxy salvos", "success");
     else toast("Erro ao salvar", "error");
-  }
-
-  async function addLogin() {
-    setAddingLogin(true);
-    const res = await fetch(`/api/clients/${encodeURIComponent(client)}/logins`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ empresa: "", erp: null, accessMode: null }),
-    });
-    setAddingLogin(false);
-    if (res.ok) {
-      const created = await res.json();
-      setLogins((prev) => [...prev, created]);
-    } else {
-      toast("Erro ao adicionar acesso", "error");
-    }
-  }
-
-  // ClientLoginRow faz o PATCH sozinho pra cada campo (inclusive senha/OTP, que exigem
-  // fluxo próprio de revelar/trocar) — isso aqui só mantém a lista local sincronizada
-  // depois que a rede já confirmou.
-  function patchLoginLocal(id: string, patch: Partial<ClientLogin>) {
-    setLogins((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  }
-
-  async function removeLogin(id: string) {
-    const prev = logins;
-    setLogins((p) => p.filter((l) => l.id !== id));
-    const res = await fetch(`/api/clients/${encodeURIComponent(client)}/logins/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      setLogins(prev);
-      toast("Erro ao remover acesso", "error");
-    }
   }
 
   async function updateEvent(eventId: string, field: keyof CalendarEvent, value: string | boolean) {
@@ -492,30 +444,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
             <p className="text-xs text-ink-faint text-center py-8">Carregando…</p>
           ) : (
             <>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Acessos (ERP / login)</label>
-                  <button
-                    onClick={addLogin}
-                    disabled={addingLogin}
-                    className="flex items-center gap-1 text-xs text-o2-green hover:text-o2-green-bright disabled:opacity-50 transition-colors"
-                  >
-                    <Plus size={12} />
-                    Adicionar
-                  </button>
-                </div>
-                {!loginsLoaded ? (
-                  <p className="text-xs text-ink-faint">Carregando…</p>
-                ) : logins.length === 0 ? (
-                  <p className="text-xs text-ink-ghost">Nenhum acesso cadastrado ainda — útil pra clientes com mais de uma empresa/CNPJ.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {logins.map((login) => (
-                      <ClientLoginRow key={login.id} client={client} login={login} onChange={patchLoginLocal} onRemove={removeLogin} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ClientAccessesSection client={client} />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

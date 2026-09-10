@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronRight, Trash2, Plus, X } from "lucide-react";
+import { Building2, ChevronRight, Trash2, Plus, X, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
+import { ClientAccessesModal } from "@/components/ClientAccessesModal";
 
 export type ClientRow = {
   name: string;
@@ -57,6 +58,7 @@ function toDateInputValue(v: string | Date | null) {
 export function ClientsTable({ clients }: { clients: ClientRow[] }) {
   const [rows, setRows] = useState(clients);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [accessesFor, setAccessesFor] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState("");
@@ -177,8 +179,8 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
             <th className="text-left px-2.5 py-3 font-medium w-[9%]">Importação</th>
             <th className="text-left px-2.5 py-3 font-medium w-[10%]">Últ. atualização</th>
             <th className="text-left px-2.5 py-3 font-medium w-[9%]">Tarefas abertas</th>
-            <th className="text-left px-2.5 py-3 font-medium w-[17%]">Pendências na Oxy</th>
-            <th className="px-2.5 py-3 font-medium w-[4%]"></th>
+            <th className="text-left px-2.5 py-3 font-medium w-[14%]">Pendências na Oxy</th>
+            <th className="px-2.5 py-3 font-medium w-[7%]"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-3">
@@ -271,13 +273,22 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                 />
               </td>
               <td className="px-2.5 py-2.5 overflow-hidden">
-                <button
-                  onClick={() => setConfirmingDelete(c.name)}
-                  className="p-1.5 text-ink-faint hover:text-red-400 transition-colors"
-                  title="Excluir cliente"
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setAccessesFor(c.name)}
+                    className="p-1.5 text-ink-faint hover:text-o2-green transition-colors"
+                    title="Ver acessos (ERP/login)"
+                  >
+                    <KeyRound size={14} />
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDelete(c.name)}
+                    className="p-1.5 text-ink-faint hover:text-red-400 transition-colors"
+                    title="Excluir cliente"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -365,6 +376,8 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
           </div>
         </div>
       )}
+
+      {accessesFor && <ClientAccessesModal client={accessesFor} onClose={() => setAccessesFor(null)} />}
     </div>
   );
 }
