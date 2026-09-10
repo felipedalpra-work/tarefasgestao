@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck, Plus, X } from "lucide-react";
+import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, StickyNote, Check, Database, Rocket, ShieldAlert, ClipboardCheck, Plus } from "lucide-react";
 import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
@@ -10,6 +10,7 @@ import { OnboardingTab } from "./OnboardingTab";
 import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
+import { ClientLoginRow, type ClientLoginData } from "@/components/ClientLoginRow";
 
 type CalendarEvent = {
   id: string;
@@ -96,12 +97,7 @@ const EMPTY_OXY: OxyFields = {
 };
 
 // Acesso ao ERP/Oxy de uma empresa do cliente — lista, pra atender cliente com mais de um CNPJ
-type ClientLogin = {
-  id: string;
-  empresa: string;
-  erp: string | null;
-  accessMode: string | null;
-};
+type ClientLogin = ClientLoginData;
 
 export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
   const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "onboarding" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
@@ -209,14 +205,11 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     }
   }
 
-  async function updateLogin(id: string, field: keyof Omit<ClientLogin, "id">, value: string) {
-    setLogins((prev) => prev.map((l) => (l.id === id ? { ...l, [field]: value || null } : l)));
-    const res = await fetch(`/api/clients/${encodeURIComponent(client)}/logins/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: value || null }),
-    });
-    if (!res.ok) toast("Erro ao salvar acesso", "error");
+  // ClientLoginRow faz o PATCH sozinho pra cada campo (inclusive senha/OTP, que exigem
+  // fluxo próprio de revelar/trocar) — isso aqui só mantém a lista local sincronizada
+  // depois que a rede já confirmou.
+  function patchLoginLocal(id: string, patch: Partial<ClientLogin>) {
+    setLogins((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   }
 
   async function removeLogin(id: string) {
@@ -518,45 +511,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                 ) : (
                   <div className="space-y-2">
                     {logins.map((login) => (
-                      <div
-                        key={login.id}
-                        className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center bg-surface-2 border border-surface-3 rounded-xl p-2.5"
-                      >
-                        <input
-                          type="text"
-                          defaultValue={login.empresa}
-                          placeholder="Empresa"
-                          onBlur={(e) => {
-                            if (e.target.value !== login.empresa) updateLogin(login.id, "empresa", e.target.value);
-                          }}
-                          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                        />
-                        <input
-                          type="text"
-                          defaultValue={login.erp ?? ""}
-                          placeholder="ERP"
-                          onBlur={(e) => {
-                            if (e.target.value !== (login.erp ?? "")) updateLogin(login.id, "erp", e.target.value);
-                          }}
-                          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                        />
-                        <input
-                          type="text"
-                          defaultValue={login.accessMode ?? ""}
-                          placeholder="Modo de acesso (login/senha, API…)"
-                          onBlur={(e) => {
-                            if (e.target.value !== (login.accessMode ?? "")) updateLogin(login.id, "accessMode", e.target.value);
-                          }}
-                          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                        />
-                        <button
-                          onClick={() => removeLogin(login.id)}
-                          className="p-2 text-ink-faint hover:text-red-400 transition-colors justify-self-end sm:justify-self-auto"
-                          title="Remover acesso"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
+                      <ClientLoginRow key={login.id} client={client} login={login} onChange={patchLoginLocal} onRemove={removeLogin} />
                     ))}
                   </div>
                 )}

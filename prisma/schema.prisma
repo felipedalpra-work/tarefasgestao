@@ -288,14 +288,20 @@ model ClientNote {
 // Acessos ao ERP/Oxy do cliente — vira lista (não campo único em ClientNote) porque
 // tem cliente com mais de uma empresa/CNPJ, cada uma com seu próprio ERP e login.
 model ClientLogin {
-  id         String   @id @default(cuid())
-  squadId    String
-  client     String // nome do cliente, mesma string usada em Task/CalendarEvent/ClientNote
-  empresa    String // razão social/nome da empresa (distingue quando o cliente tem mais de uma)
-  erp        String?
-  accessMode String? // como acessar: login/senha compartilhado, API, acesso remoto…
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  squadId            String
+  client             String // nome do cliente, mesma string usada em Task/CalendarEvent/ClientNote
+  empresa            String // razão social/nome da empresa (distingue quando o cliente tem mais de uma)
+  erp                String?
+  accessMode         String? // como acessar: login/senha compartilhado, API, acesso remoto…
+  login              String? // usuário/e-mail de acesso ao ERP — texto puro, não é segredo por si só
+  // senha e segredo TOTP NUNCA em texto puro — sempre passam por encryptSecret()
+  // (src/lib/credential-crypto.ts, AES-256-GCM) antes de chegar aqui. Ver esse arquivo
+  // pro porquê e os limites dessa proteção (não é zero-knowledge).
+  passwordEncrypted  String?
+  otpSecretEncrypted String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@index([client])
   @@index([squadId])
