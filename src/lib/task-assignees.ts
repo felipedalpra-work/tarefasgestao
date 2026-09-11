@@ -16,7 +16,10 @@ export const CLIENT_CHOICE = "__client__";
 // seguem funcionando sem tocar em nada. Quem precisa da lista completa chama
 // `taskResponsibles()` abaixo, que resolve as duas formas num formato só.
 
-export type AssigneeInput = { id: string; part?: string | null };
+// `contactName` só faz sentido quando `id` é o cliente (CLIENT_CHOICE) — nome de quem na
+// empresa é esse responsável de verdade. Puramente informativo: não é usuário do app, não
+// recebe nada, só ajuda quem olha a tarefa a saber quem selecionar/cobrar do lado do cliente.
+export type AssigneeInput = { id: string; part?: string | null; contactName?: string | null };
 
 export type ResponsibleView = {
   id: string; // userId, ou CLIENT_CHOICE pra parte do cliente
@@ -25,6 +28,7 @@ export type ResponsibleView = {
   name: string | null;
   image: string | null;
   part: string | null;
+  contactName: string | null;
   done: boolean;
   assigneeRowId: string | null; // null quando não é tarefa em conjunto (não há o que marcar)
 };
@@ -35,6 +39,7 @@ type AssigneeRow = {
   isClient: boolean;
   role: string;
   part: string | null;
+  contactName: string | null;
   done: boolean;
   sortOrder: number;
   user?: { id: string; name: string | null; image: string | null } | null;
@@ -44,6 +49,7 @@ type TaskShape = {
   assigneeId?: string | null;
   deliverTo?: string | null;
   client?: string | null;
+  clientContactName?: string | null;
   assignee?: { id: string; name?: string | null; image?: string | null } | null;
   assignees?: AssigneeRow[] | null;
 };
@@ -71,6 +77,7 @@ export function taskResponsibles(task: TaskShape): ResponsibleView[] {
         name: r.isClient ? task.client || "Cliente" : r.user?.name ?? null,
         image: r.isClient ? null : r.user?.image ?? null,
         part: r.part,
+        contactName: r.isClient ? r.contactName : null,
         done: r.done,
         assigneeRowId: r.id,
       }));
@@ -84,6 +91,7 @@ export function taskResponsibles(task: TaskShape): ResponsibleView[] {
       name: task.assignee.name ?? null,
       image: task.assignee.image ?? null,
       part: null,
+      contactName: null,
       done: false,
       assigneeRowId: null,
     }];
@@ -98,6 +106,7 @@ export function taskResponsibles(task: TaskShape): ResponsibleView[] {
       name: task.client || "Cliente",
       image: null,
       part: null,
+      contactName: task.clientContactName ?? null,
       done: false,
       assigneeRowId: null,
     }];
@@ -120,15 +129,20 @@ export function isClientResponsible(task: TaskShape): boolean {
 
 export type NormalizedAssignees =
   | { ok: false; error: string }
-  | { ok: true; joint: false; principalUserId: string | null; clientOnly: boolean }
-  | { ok: true; joint: true; principalUserId: string; rows: { userId: string | null; isClient: boolean; role: string; part: string | null; sortOrder: number }[] };
+  | { ok: true; joint: false; principalUserId: string | null; clientOnly: boolean; clientContactName: string | null }
+  | {
+      ok: true;
+      joint: true;
+      principalUserId: string;
+      rows: { userId: string | null; isClient: boolean; role: string; part: string | null; contactName: string | null; sortOrder: number }[];
+    };
 
 // Regras de quem pode ser o quê, num lugar só:
 // - o primeiro da lista é o dono (é dele a cobrança, o e-mail de prazo e o Slack)
 // - o dono precisa ser pessoa do squad: o cliente não tem conta pra receber aviso
 // - sem repetido, e o cliente entra no máximo uma vez
 export function normalizeAssignees(input: AssigneeInput[] | undefined, validUserIds: Set<string>): NormalizedAssignees {
-  if (input === undefined) return { ok: true, joint: false, principalUserId: null, clientOnly: false };
+  if (input === undefined) return { ok: true, joint: false, principalUserId: null, clientOnly: false, clientContactName: null };
 
   const seen = new Set<string>();
   const clean: AssigneeInput[] = [];
@@ -139,15 +153,17 @@ export function normalizeAssignees(input: AssigneeInput[] | undefined, validUser
       return { ok: false, error: "Responsável não encontrado no squad" };
     }
     seen.add(id);
-    clean.push({ id, part: item.part?.trim() || null });
+    clean.push({ id, part: item.part?.trim() || null, contactName: item.contactName?.trim() || null });
   }
 
-  if (clean.length === 0) return { ok: true, joint: false, principalUserId: null, clientOnly: false };
+  if (clean.length === 0) return { ok: true, joint: false, principalUserId: null, clientOnly: false, clientContactName: null };
 
   if (clean.length === 1) {
     const only = clean[0];
-    if (only.id === CLIENT_CHOICE) return { ok: true, joint: false, principalUserId: null, clientOnly: true };
-    return { ok: true, joint: false, principalUserId: only.id, clientOnly: false };
+    if (only.id === CLIENT_CHOICE) {
+      return { ok: true, joint: false, principalUserId: null, clientOnly: true, clientContactName: only.contactName ?? null };
+    }
+    return { ok: true, joint: false, principalUserId: only.id, clientOnly: false, clientContactName: null };
   }
 
   if (clean[0].id === CLIENT_CHOICE) {
@@ -163,6 +179,7 @@ export function normalizeAssignees(input: AssigneeInput[] | undefined, validUser
       isClient: item.id === CLIENT_CHOICE,
       role: i === 0 ? "principal" : "participant",
       part: item.part ?? null,
+      contactName: item.id === CLIENT_CHOICE ? item.contactName ?? null : null,
       sortOrder: i,
     })),
   };
@@ -197,11 +214,14 @@ export async function syncTaskAssignees(
     if (before) {
       await db.taskAssignee.update({
         where: { id: before.id },
-        data: { role: row.role, part: row.part, sortOrder: row.sortOrder },
+        data: { role: row.role, part: row.part, contactName: row.contactName, sortOrder: row.sortOrder },
       });
     } else {
       await db.taskAssignee.create({
-        data: { taskId, userId: row.userId, isClient: row.isClient, role: row.role, part: row.part, sortOrder: row.sortOrder },
+        data: {
+          taskId, userId: row.userId, isClient: row.isClient, role: row.role,
+          part: row.part, contactName: row.contactName, sortOrder: row.sortOrder,
+        },
       });
     }
   }
@@ -210,7 +230,10 @@ export async function syncTaskAssignees(
 // Texto curto de quem é responsável, pra histórico e notificação.
 export function describeResponsibles(list: ResponsibleView[]): string {
   if (list.length === 0) return "sem responsável";
-  const names = list.map((r) => r.name || (r.isClient ? "Cliente" : "alguém"));
+  const names = list.map((r) => {
+    const base = r.name || (r.isClient ? "Cliente" : "alguém");
+    return r.isClient && r.contactName ? `${base} (contato: ${r.contactName})` : base;
+  });
   if (names.length === 1) return names[0];
   return `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`;
 }

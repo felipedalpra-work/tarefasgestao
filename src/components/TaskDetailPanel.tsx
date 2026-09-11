@@ -103,7 +103,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       recurrence: task.recurrence ?? "",
     });
     setEditWeekdays(task.recurrenceWeekdays ?? []);
-    setEditAssignees(taskResponsibles(task).map((r) => ({ id: r.id, part: r.part })));
+    setEditAssignees(taskResponsibles(task).map((r) => ({ id: r.id, part: r.part, contactName: r.contactName })));
     setTogglingPart(null);
     fetch(`/api/tasks/${task.id}/comments`)
       .then((r) => r.json())
@@ -610,6 +610,9 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                     </div>
                     {r.part && (
                       <p className={cn("text-[11px] mt-0.5", r.done ? "text-ink-ghost line-through" : "text-ink-mid")}>{r.part}</p>
+                    )}
+                    {r.isClient && r.contactName && (
+                      <p className="text-[11px] mt-0.5 text-ink-faint">Contato: {r.contactName}</p>
                     )}
                   </div>
                 </div>

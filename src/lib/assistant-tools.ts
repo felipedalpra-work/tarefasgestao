@@ -216,9 +216,12 @@ async function searchTasks(squadId: string, args: {
       ...(anyOf.length > 0 ? { AND: anyOf } : {}),
     },
     select: {
-      title: true, status: true, priority: true, client: true, dueDate: true, deliverTo: true,
+      title: true, status: true, priority: true, client: true, dueDate: true, deliverTo: true, clientContactName: true,
       assignee: { select: { name: true } },
-      assignees: { select: { isClient: true, done: true, part: true, role: true, user: { select: { name: true } } }, orderBy: { sortOrder: "asc" } },
+      assignees: {
+        select: { isClient: true, done: true, part: true, contactName: true, role: true, user: { select: { name: true } } },
+        orderBy: { sortOrder: "asc" },
+      },
     },
     orderBy: { updatedAt: "desc" },
     take: limit,
@@ -232,11 +235,14 @@ async function searchTasks(squadId: string, args: {
     dueDate: fmtDay(t.dueDate),
     quemEntrega: t.deliverTo,
     assignee: t.assignee?.name ?? null,
+    // só existe quando o responsável (único) é o cliente — quem cobrar do lado dele
+    ...(!t.assignee && t.clientContactName && { contatoCliente: t.clientContactName }),
     ...(t.assignees.length > 0 && {
       emConjunto: t.assignees.map((a) => ({
         quem: a.isClient ? t.client || "Cliente" : a.user?.name ?? null,
         dono: a.role === "principal",
         parte: a.part,
+        ...(a.isClient && a.contactName && { contato: a.contactName }),
         concluiu: a.done,
       })),
     }),
@@ -540,12 +546,12 @@ async function getTaskDetail(squadId: string, args: { title?: string; taskId?: s
     where: { id: found.id },
     select: {
       id: true, title: true, description: true, status: true, priority: true, client: true,
-      dueDate: true, dueTime: true, deliverTo: true, source: true, meetingTitle: true,
+      dueDate: true, dueTime: true, deliverTo: true, clientContactName: true, source: true, meetingTitle: true,
       recurrence: true, createdAt: true,
       assignee: { select: { name: true } },
       createdBy: { select: { name: true } },
       assignees: {
-        select: { isClient: true, role: true, part: true, done: true, user: { select: { name: true } } },
+        select: { isClient: true, role: true, part: true, contactName: true, done: true, user: { select: { name: true } } },
         orderBy: { sortOrder: "asc" },
       },
       subtasks: { select: { title: true, done: true }, orderBy: { sortOrder: "asc" } },
@@ -580,12 +586,15 @@ async function getTaskDetail(squadId: string, args: { title?: string; taskId?: s
     criadaPor: full.createdBy?.name ?? null,
     criadaEm: fmtMoment(full.createdAt),
     dono: full.assignee?.name ?? null,
+    // só existe quando o responsável (único) é o cliente — quem cobrar do lado dele
+    ...(!full.assignee && full.clientContactName && { contatoCliente: full.clientContactName }),
     emConjunto:
       full.assignees.length > 0
         ? full.assignees.map((a) => ({
             quem: a.isClient ? full.client || "Cliente" : a.user?.name ?? null,
             dono: a.role === "principal",
             parte: a.part,
+            ...(a.isClient && a.contactName && { contato: a.contactName }),
             concluiu: a.done,
           }))
         : undefined,

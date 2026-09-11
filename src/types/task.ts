@@ -13,6 +13,9 @@ export type TaskListItem = {
   recurrence?: string | null;
   recurrenceWeekdays?: number[] | null;
   deliverTo?: string | null;
+  // só existe quando o responsável (único) é o cliente — nome de quem na empresa é esse
+  // responsável de verdade, puramente informativo (ver src/lib/task-assignees.ts)
+  clientContactName?: string | null;
   meetingTitle?: string | null;
   meetingDate?: string | Date | null;
   assigneeId?: string | null;
@@ -24,6 +27,7 @@ export type TaskListItem = {
     isClient: boolean;
     role: string;
     part: string | null;
+    contactName: string | null;
     done: boolean;
     sortOrder: number;
     user?: { id: string; name: string | null; image: string | null } | null;

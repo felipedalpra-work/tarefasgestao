@@ -42,6 +42,9 @@ export function AssigneePicker({
   function setPart(id: string, part: string) {
     onChange(value.map((v) => (v.id === id ? { ...v, part } : v)));
   }
+  function setContactName(id: string, contactName: string) {
+    onChange(value.map((v) => (v.id === id ? { ...v, contactName } : v)));
+  }
 
   const inputCls =
     "w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50";
@@ -92,6 +95,15 @@ export function AssigneePicker({
                     value={item.part ?? ""}
                     onChange={(e) => setPart(item.id, e.target.value)}
                     placeholder="O que cabe a essa pessoa (opcional)"
+                    className="mt-1.5 w-full bg-surface border border-border rounded px-2 py-1 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                  />
+                )}
+                {isClient && (
+                  <input
+                    value={item.contactName ?? ""}
+                    onChange={(e) => setContactName(item.id, e.target.value)}
+                    placeholder="Nome do contato na empresa (opcional)"
+                    title="Quem exatamente lá na empresa é essa responsável — pra saber quem selecionar/cobrar"
                     className="mt-1.5 w-full bg-surface border border-border rounded px-2 py-1 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
                   />
                 )}

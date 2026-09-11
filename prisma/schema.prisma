@@ -134,6 +134,11 @@ model Task {
   sourceRef            String?
   client               String?
   deliverTo            String?
+  clientContactName    String? // nome de quem na empresa do cliente é o responsável de verdade —
+  // só existe quando o responsável (único) é o cliente (assigneeId null + deliverTo "o2").
+  // Puramente informativo (não é um usuário do app, não recebe nada) — ajuda quem olha a
+  // tarefa a saber quem selecionar/cobrar do lado do cliente. Tarefa em conjunto usa
+  // TaskAssignee.contactName em vez disso.
   meetingTitle         String? // assunto da reunião de origem (Meet Recap ou n8n), quando houver
   meetingDate          DateTime? // data da reunião de origem
   clientDraftCreatedAt DateTime? // quando o rascunho de cobrança pro cliente foi criado (evita duplicar)
@@ -171,17 +176,19 @@ model Task {
 // dashboard) e é espelhado a partir da linha role="principal" — a sincronia mora em
 // um lugar só, src/lib/task-assignees.ts, e é por onde as duas rotas de escrita passam.
 model TaskAssignee {
-  id        String    @id @default(cuid())
-  taskId    String
-  userId    String? // null = a parte é do cliente (isClient), que não tem conta no app
-  isClient  Boolean   @default(false)
-  role      String    @default("participant") // "principal" (dono) | "participant"
-  part      String? // o que cabe a essa pessoa; vazio = só o nome, sem descrição
-  done      Boolean   @default(false)
-  doneAt    DateTime?
-  doneById  String? // quem marcou — na parte do cliente é alguém do squad marcando por ele
-  sortOrder Float     @default(0)
-  createdAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  taskId      String
+  userId      String? // null = a parte é do cliente (isClient), que não tem conta no app
+  isClient    Boolean   @default(false)
+  role        String    @default("participant") // "principal" (dono) | "participant"
+  part        String? // o que cabe a essa pessoa; vazio = só o nome, sem descrição
+  contactName String? // só quando isClient=true: nome de quem na empresa é esse responsável —
+  // puramente informativo, ajuda a saber quem cobrar do lado do cliente
+  done        Boolean   @default(false)
+  doneAt      DateTime?
+  doneById    String? // quem marcou — na parte do cliente é alguém do squad marcando por ele
+  sortOrder   Float     @default(0)
+  createdAt   DateTime  @default(now())
 
   task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user   User? @relation("TaskParts", fields: [userId], references: [id], onDelete: Cascade)

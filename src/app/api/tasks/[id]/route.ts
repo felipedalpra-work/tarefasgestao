@@ -102,6 +102,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         : deliverTo !== undefined
         ? { deliverTo }
         : {}),
+      // recalcula sempre que `assignees` faz parte do PATCH — inclusive pra LIMPAR
+      // quando o cliente deixa de ser o único responsável (senão o contato antigo
+      // ficaria "grudado" numa tarefa que agora é de outra pessoa)
+      ...(body.assignees !== undefined && assignees.ok
+        ? { clientContactName: !assignees.joint && assignees.clientOnly ? assignees.clientContactName : null }
+        : {}),
       ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
       ...(recurrence !== undefined && { recurrence }),
       ...(recurrenceWeekdays !== undefined && { recurrenceWeekdays }),

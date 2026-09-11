@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       // cliente como ÚNICO responsável continua sendo gravado do jeito antigo
       // (assigneeId null + deliverTo "o2") — ver task-assignees.ts
       deliverTo: assignees.ok && !assignees.joint && assignees.clientOnly ? "o2" : body.deliverTo || null,
+      clientContactName: assignees.ok && !assignees.joint && assignees.clientOnly ? assignees.clientContactName : null,
       meetingTitle: body.meetingTitle || null,
       meetingDate: body.meetingDate ? new Date(body.meetingDate) : null,
       recurrence,

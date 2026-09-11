@@ -21,6 +21,7 @@ type Occurrence = {
   dueTime: string | null;
   client: string | null;
   deliverTo: string | null;
+  clientContactName: string | null;
   recurrence: string | null;
   recurrenceWeekdays: number[];
 };
@@ -44,7 +45,7 @@ export async function spawnNextOccurrence(task: Occurrence, today: Date): Promis
   const db = forSquad(task.squadId);
   const parts = await db.taskAssignee.findMany({
     where: { taskId: task.id },
-    select: { userId: true, isClient: true, role: true, part: true, sortOrder: true },
+    select: { userId: true, isClient: true, role: true, part: true, contactName: true, sortOrder: true },
     orderBy: { sortOrder: "asc" },
   });
 
@@ -62,6 +63,7 @@ export async function spawnNextOccurrence(task: Occurrence, today: Date): Promis
         source: "recurrence",
         client: task.client,
         deliverTo: task.deliverTo,
+        clientContactName: task.clientContactName,
         recurrence: task.recurrence,
         recurrenceWeekdays: task.recurrenceWeekdays,
         ...(parts.length > 0 && { assignees: { create: parts } }),
@@ -88,7 +90,7 @@ export async function advanceRecurringTasksForSquad(squadId: string): Promise<nu
     select: {
       id: true, squadId: true, title: true, description: true, priority: true,
       assigneeId: true, createdById: true, dueDate: true, dueTime: true,
-      client: true, deliverTo: true, recurrence: true, recurrenceWeekdays: true,
+      client: true, deliverTo: true, clientContactName: true, recurrence: true, recurrenceWeekdays: true,
     },
   });
 

@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       task: {
         select: {
           id: true, squadId: true, status: true, title: true, client: true, description: true, priority: true,
-          assigneeId: true, createdById: true, dueDate: true, dueTime: true, deliverTo: true,
+          assigneeId: true, createdById: true, dueDate: true, dueTime: true, deliverTo: true, clientContactName: true,
           recurrence: true, recurrenceWeekdays: true, recurrenceSpawned: true,
         },
       },
