@@ -59,8 +59,11 @@ export async function GET() {
         select: { id: true, title: true, client: true, startAt: true, meetingType: true, temperature: true },
         orderBy: { startAt: "asc" },
       }),
+      // RecapSuggestion não tem squadId próprio (herda do MeetRecap pai) — sem o filtro
+      // por `recap.squadId` aqui, isso vazaria sugestão de QUALQUER squad da plataforma,
+      // já que passa direto pelo forSquad() sem ser escopado (não está em SCOPED_MODELS).
       db.recapSuggestion.findMany({
-        where: { status: "pending" },
+        where: { status: "pending", recap: { squadId: session.user.squadId } },
         select: {
           id: true, title: true, description: true, priority: true, dueDate: true, createdAt: true,
           recap: { select: { id: true, client: true, subject: true, createdAt: true } },
@@ -75,8 +78,14 @@ export async function GET() {
         },
         orderBy: { createdAt: "asc" },
       }),
+      // mesma história do RecapSuggestion acima: TaskActivity não tem squadId próprio,
+      // então precisa do filtro explícito por `task.squadId` pra não vazar conclusão de
+      // tarefa de outro squad da plataforma.
       db.taskActivity.findMany({
-        where: { type: "status", createdAt: { gte: windowStart }, detail: { contains: "onclu", mode: "insensitive" } },
+        where: {
+          type: "status", createdAt: { gte: windowStart }, detail: { contains: "onclu", mode: "insensitive" },
+          task: { squadId: session.user.squadId },
+        },
         select: { taskId: true, createdAt: true, task: { select: { id: true, title: true, client: true, updatedAt: true, status: true } } },
         orderBy: { createdAt: "desc" },
       }),
