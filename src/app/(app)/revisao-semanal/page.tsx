@@ -6,12 +6,13 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   X, ChevronLeft, ChevronRight, ListFilter, Sparkles, CalendarDays, CheckCircle2,
-  PartyPopper, Check, Trash2, Loader2,
+  PartyPopper, Check, Trash2, Loader2, Play, AlertTriangle,
 } from "lucide-react";
 import { cn, priorityLabel, priorityColor } from "@/lib/utils";
 import { WeeklyReviewTaskRow } from "@/components/WeeklyReviewTaskRow";
 import { LogoIcon } from "@/components/LogoIcon";
 import { toast } from "@/components/Toaster";
+import { taskResponsibles } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 type ReviewTask = TaskListItem & { isNew: boolean };
@@ -70,14 +71,26 @@ const TEMPERATURE_META: Record<string, { label: string; className: string }> = {
   critico: { label: "Crítico", className: "text-red-400 bg-red-400/10" },
 };
 
+const STATUS_GROUPS: { id: string; label: string; color: string }[] = [
+  { id: "todo", label: "A fazer", color: "border-ink-faint" },
+  { id: "in_progress", label: "Em andamento", color: "border-blue-400" },
+  { id: "blocked", label: "Bloqueado", color: "border-red-400" },
+];
+
 function isClientQuiet(c: ReviewClient): boolean {
   return c.meetings.length === 0 && c.suggestions.length === 0 && c.tasksCompleted.length === 0 && c.tasksOpen.length === 0;
+}
+
+// falta responsável OU prazo — é exatamente o que a reunião de sexta existe pra resolver
+function needsDecision(t: TaskListItem): boolean {
+  return taskResponsibles(t).length === 0 || !t.dueDate;
 }
 
 export default function WeeklyReviewPage() {
   const router = useRouter();
   const [data, setData] = useState<ReviewData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
   const [jumpOpen, setJumpOpen] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
@@ -90,7 +103,7 @@ export default function WeeklyReviewPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const clients = data?.clients ?? [];
+  const clients = useMemo(() => data?.clients ?? [], [data]);
   const total = clients.length;
   const current = clients[index] ?? null;
 
@@ -100,12 +113,29 @@ export default function WeeklyReviewPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") { router.push("/tasks"); return; }
+      if (!started) return;
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev, router]);
+  }, [next, prev, router, started]);
+
+  // resumo geral pra tela de confirmação — dá pra ver de cara o tamanho da reunião antes
+  // de entrar no showroom em si
+  const overallStats = useMemo(() => {
+    return clients.reduce(
+      (acc, c) => {
+        acc.suggestions += c.suggestions.length;
+        acc.needsDecision += c.tasksOpen.filter(needsDecision).length;
+        acc.meetings += c.meetings.length;
+        acc.completed += c.tasksCompleted.length;
+        if (!isClientQuiet(c)) acc.clientsWithSomething += 1;
+        return acc;
+      },
+      { suggestions: 0, needsDecision: 0, meetings: 0, completed: 0, clientsWithSomething: 0 }
+    );
+  }, [clients]);
 
   function patchClient(name: string, updater: (c: ReviewClient) => ReviewClient) {
     setData((prev) => {
@@ -207,6 +237,57 @@ export default function WeeklyReviewPage() {
 
   const quiet = current ? isClientQuiet(current) : false;
 
+  if (!started) {
+    return (
+      <div className="fixed inset-0 z-50 bg-bg-deep overflow-hidden flex flex-col items-center justify-center px-6 text-center">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-o2-green/[0.06] blur-3xl" />
+          <div className="absolute -bottom-40 -right-40 w-[32rem] h-[32rem] rounded-full bg-o2-green/[0.04] blur-3xl" />
+        </div>
+
+        <button
+          onClick={() => router.push("/tasks")}
+          className="absolute top-5 right-6 flex items-center gap-1.5 text-xs text-ink-mid hover:text-ink transition-colors z-10"
+        >
+          <X size={14} /> Sair (Esc)
+        </button>
+
+        <div className="relative z-10 flex flex-col items-center animate-fade-in">
+          <LogoIcon className="w-14 h-14 text-o2-green mb-5" />
+          <h1 className="text-4xl font-black text-ink tracking-tight">Revisão Semanal</h1>
+          <p className="text-ink-mid mt-2 max-w-md">
+            {clients.length} clientes na carteira, últimos {data.windowDays} dias corridos.
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-2.5 mt-6">
+            <span className="flex items-center gap-1.5 text-xs text-violet-300 bg-violet-400/10 border border-violet-400/20 rounded-full px-3 py-1.5">
+              <Sparkles size={12} /> {overallStats.suggestions} sugestões da IA não vistas
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded-full px-3 py-1.5">
+              <AlertTriangle size={12} /> {overallStats.needsDecision} tarefas sem responsável/prazo
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-ink-mid bg-surface-2 border border-surface-3 rounded-full px-3 py-1.5">
+              <CalendarDays size={12} /> {overallStats.meetings} reuniões essa semana
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-o2-green bg-o2-green/10 border border-o2-green/20 rounded-full px-3 py-1.5">
+              <CheckCircle2 size={12} /> {overallStats.completed} concluídas essa semana
+            </span>
+          </div>
+
+          <button
+            onClick={() => setStarted(true)}
+            className="flex items-center gap-2 mt-9 bg-o2-green text-bg-deep font-semibold rounded-full px-8 py-3.5 hover:bg-o2-green-bright transition-colors shadow-[0_0_40px_-8px_rgba(107,241,105,0.6)]"
+          >
+            <Play size={16} fill="currentColor" /> Começar showroom
+          </button>
+          <p className="text-[11px] text-ink-ghost mt-3">
+            {overallStats.clientsWithSomething} de {clients.length} clientes têm algo pra revisar · setas do teclado navegam, Esc sai
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-bg-deep overflow-hidden flex flex-col">
       {/* fundo com glow sutil, pra dar o efeito "showroom" sem pesar */}
@@ -268,7 +349,7 @@ export default function WeeklyReviewPage() {
       {current && (
         <div key={current.name} className="relative z-10 flex-1 overflow-y-auto animate-fade-in">
           <div className="max-w-4xl mx-auto px-6 py-10">
-            <div className="mb-8">
+            <div className="mb-6">
               <h1 className="text-5xl font-black text-ink tracking-tight">{current.name}</h1>
               <div className="flex flex-wrap items-center gap-3 mt-3">
                 {health && (
@@ -285,6 +366,32 @@ export default function WeeklyReviewPage() {
               </div>
             </div>
 
+            {/* resumo rápido — responde de cara "o que tem aqui" antes de descer pras listas */}
+            {!quiet && (
+              <div className="flex flex-wrap items-center gap-2 mb-8">
+                {current.suggestions.length > 0 && (
+                  <span className="flex items-center gap-1.5 text-xs text-violet-300 bg-violet-400/10 border border-violet-400/20 rounded-full px-2.5 py-1">
+                    <Sparkles size={11} /> {current.suggestions.length} da IA ainda não vistas
+                  </span>
+                )}
+                {current.tasksOpen.filter(needsDecision).length > 0 && (
+                  <span className="flex items-center gap-1.5 text-xs text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded-full px-2.5 py-1">
+                    <AlertTriangle size={11} /> {current.tasksOpen.filter(needsDecision).length} sem responsável/prazo
+                  </span>
+                )}
+                {current.meetings.length > 0 && (
+                  <span className="flex items-center gap-1.5 text-xs text-ink-mid bg-surface-2 border border-surface-3 rounded-full px-2.5 py-1">
+                    <CalendarDays size={11} /> {current.meetings.length} reunião{current.meetings.length > 1 ? "ões" : ""}
+                  </span>
+                )}
+                {current.tasksCompleted.length > 0 && (
+                  <span className="flex items-center gap-1.5 text-xs text-o2-green bg-o2-green/10 border border-o2-green/20 rounded-full px-2.5 py-1">
+                    <CheckCircle2 size={11} /> {current.tasksCompleted.length} concluída{current.tasksCompleted.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+            )}
+
             {quiet && (
               <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
                 <PartyPopper size={32} className="text-o2-green" />
@@ -292,41 +399,16 @@ export default function WeeklyReviewPage() {
               </div>
             )}
 
-            {current.meetings.length > 0 && (
-              <section className="mb-8">
-                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-faint mb-3">
-                  <CalendarDays size={13} /> Reuniões da semana
-                </h2>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {current.meetings.map((m) => {
-                    const temp = m.temperature ? TEMPERATURE_META[m.temperature] : null;
-                    return (
-                      <div key={m.id} className="bg-surface-2 border border-border rounded-lg px-3 py-2.5">
-                        <p className="text-sm text-ink font-medium truncate">{m.title}</p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-xs text-ink-faint">{format(new Date(m.startAt), "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
-                          {m.meetingType && (
-                            <span className="text-[10px] text-ink-mid bg-surface-3 rounded px-1.5 py-0.5">
-                              {MEETING_TYPE_LABELS[m.meetingType] ?? m.meetingType}
-                            </span>
-                          )}
-                          {temp && <span className={cn("text-[10px] rounded px-1.5 py-0.5", temp.className)}>{temp.label}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
+            {/* sugestões da IA/automação vêm primeiro e com cor própria — é o que
+                literalmente ninguém do squad ainda viu, prioridade #1 da reunião */}
             {current.suggestions.length > 0 && (
               <section className="mb-8">
-                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-faint mb-3">
-                  <Sparkles size={13} /> Sugestões pendentes ({current.suggestions.length})
+                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-300 mb-3">
+                  <Sparkles size={13} /> Sugestões da IA — ainda não vistas ({current.suggestions.length})
                 </h2>
                 <div className="space-y-2">
                   {current.suggestions.map((s) => (
-                    <div key={s.id} className="bg-surface-2 border border-o2-green/20 rounded-lg px-3 py-2.5">
+                    <div key={s.id} className="bg-violet-400/[0.04] border border-violet-400/25 rounded-lg px-3 py-2.5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm text-ink font-medium">{s.title}</p>
@@ -361,26 +443,59 @@ export default function WeeklyReviewPage() {
               </section>
             )}
 
-            {current.tasksOpen.length > 0 && (
+            {current.meetings.length > 0 && (
               <section className="mb-8">
                 <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-faint mb-3">
-                  <CheckCircle2 size={13} /> Tarefas em aberto ({current.tasksOpen.length})
+                  <CalendarDays size={13} /> Reuniões da semana
                 </h2>
-                <div className="space-y-2">
-                  {current.tasksOpen.map((t) => (
-                    <WeeklyReviewTaskRow
-                      key={t.id}
-                      task={t}
-                      isNew={t.isNew}
-                      client={current.name}
-                      users={data.users}
-                      onUpdated={(u) => onTaskUpdated(current.name, u)}
-                      onDeleted={(id) => onTaskDeleted(current.name, id)}
-                    />
-                  ))}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {current.meetings.map((m) => {
+                    const temp = m.temperature ? TEMPERATURE_META[m.temperature] : null;
+                    return (
+                      <div key={m.id} className="bg-surface-2 border border-border rounded-lg px-3 py-2.5">
+                        <p className="text-sm text-ink font-medium truncate">{m.title}</p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-xs text-ink-faint">{format(new Date(m.startAt), "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
+                          {m.meetingType && (
+                            <span className="text-[10px] text-ink-mid bg-surface-3 rounded px-1.5 py-0.5">
+                              {MEETING_TYPE_LABELS[m.meetingType] ?? m.meetingType}
+                            </span>
+                          )}
+                          {temp && <span className={cn("text-[10px] rounded px-1.5 py-0.5", temp.className)}>{temp.label}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}
+
+            {/* tarefas em aberto agrupadas por status (mesmas colunas do Kanban) — assim
+                "quanto tem de tarefa pendente" tem resposta direta no título de cada grupo */}
+            {STATUS_GROUPS.map((group) => {
+              const items = current.tasksOpen.filter((t) => t.status === group.id);
+              if (items.length === 0) return null;
+              return (
+                <section key={group.id} className="mb-8">
+                  <h2 className={cn("flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-faint mb-3 border-l-2 pl-2", group.color)}>
+                    {group.label} ({items.length})
+                  </h2>
+                  <div className="space-y-2">
+                    {items.map((t) => (
+                      <WeeklyReviewTaskRow
+                        key={t.id}
+                        task={t}
+                        isNew={t.isNew}
+                        client={current.name}
+                        users={data.users}
+                        onUpdated={(u) => onTaskUpdated(current.name, u)}
+                        onDeleted={(id) => onTaskDeleted(current.name, id)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
 
             {current.tasksCompleted.length > 0 && (
               <details className="mb-8">

@@ -113,14 +113,21 @@ export function WeeklyReviewTaskRow({
           value={task.dueDate ? format(dueDateOnly(task.dueDate), "yyyy-MM-dd") : ""}
           onChange={(e) => changeDueDate(e.target.value)}
           disabled={saving}
-          className="bg-surface border border-border rounded-md px-2 py-1 text-xs text-ink-mid focus:outline-none focus:border-o2-green/50"
+          title={task.dueDate ? undefined : "Ainda sem prazo definido"}
+          className={cn(
+            "bg-surface border rounded-md px-2 py-1 text-xs focus:outline-none focus:border-o2-green/50",
+            task.dueDate ? "border-border text-ink-mid" : "border-amber-500/40 text-amber-400"
+          )}
         />
 
         <button
           type="button"
           onClick={() => setAssigneeOpen((v) => !v)}
-          className="flex items-center gap-1.5 bg-surface border border-border rounded-md pl-1 pr-2 py-1 text-xs text-ink-mid hover:border-o2-green/40 transition-colors max-w-[11rem]"
-          title={describeResponsibles(responsibles)}
+          className={cn(
+            "flex items-center gap-1.5 bg-surface border rounded-md pl-1 pr-2 py-1 text-xs hover:border-o2-green/40 transition-colors max-w-[11rem]",
+            responsibles.length > 0 ? "border-border text-ink-mid" : "border-amber-500/40 text-amber-400"
+          )}
+          title={responsibles.length > 0 ? describeResponsibles(responsibles) : "Ainda sem responsável definido"}
         >
           {responsibles.length > 0 ? (
             <div className="flex -space-x-1.5 shrink-0">
