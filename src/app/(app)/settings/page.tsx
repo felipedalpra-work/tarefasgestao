@@ -2,7 +2,7 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
 
@@ -91,6 +91,7 @@ export default function SettingsPage() {
   // Clientes ignorados (empresa que aparece na agenda mas não é da carteira) state
   const [ignoredClients, setIgnoredClients] = useState<string[]>([]);
   const [unignoring, setUnignoring] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/google-status")
@@ -194,6 +195,33 @@ export default function SettingsPage() {
       const d = await res.json().catch(() => ({}));
       toast(d.error || "Erro ao liberar cliente", "error");
     }
+  }
+
+  // baixa o JSON via blob (em vez de só navegar pra URL) pra conseguir mostrar erro
+  // se a exportação falhar, em vez do navegador simplesmente abrir uma tela em branco
+  async function exportData() {
+    setExporting(true);
+    const res = await fetch("/api/export");
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast(d.error || "Erro ao gerar a exportação", "error");
+      setExporting(false);
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match?.[1] || "export.json";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setExporting(false);
+    toast("Exportação baixada", "success");
   }
 
   async function toggleMeetRecap(enabled: boolean) {
@@ -490,6 +518,33 @@ export default function SettingsPage() {
               <p className="text-xs text-ink-faint mt-2">Só admin do squad pode liberar.</p>
             )}
           </div>
+
+          {/* Exportar dados — segurança/portabilidade: o squad nunca fica refém da
+              plataforma pra ter acesso ao próprio dado. Só admin, é a ação de maior
+              alcance que existe no app. */}
+          {isAdmin && (
+            <div className="bg-surface border border-surface-3 rounded-xl p-6">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldCheck size={15} className="text-o2-green" />
+                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Exportar dados</h2>
+              </div>
+              <p className="text-xs text-ink-mid mb-4">
+                Baixa um arquivo com tudo do squad — tarefas, clientes, reuniões, Meet Recaps, tratativas, fechamentos,
+                automações e equipe. Fica de fora só o que é credencial de infraestrutura (senha/2FA de ERP dos
+                clientes, senha de login, tokens de sessão) — quem precisar de senha de ERP continua revelando uma
+                de cada vez, como já é hoje.
+              </p>
+              <button
+                type="button"
+                onClick={exportData}
+                disabled={exporting}
+                className="flex items-center gap-2 bg-surface-2 hover:bg-surface-3 border border-surface-3 text-ink font-medium py-2.5 px-4 rounded-xl transition-all text-sm disabled:opacity-50"
+              >
+                <Download size={15} className={exporting ? "animate-pulse" : ""} />
+                {exporting ? "Gerando arquivo…" : "Exportar tudo (.json)"}
+              </button>
+            </div>
+          )}
 
           {/* n8n webhook (visível só pra admin — é uma credencial) */}
           {isAdmin && (
