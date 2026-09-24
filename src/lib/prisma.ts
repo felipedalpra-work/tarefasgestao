@@ -8,7 +8,11 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrisma() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  // max baixo de propósito: a VPS nova (sem pooler tipo PgBouncer na frente) tem limite
+  // de conexões apertado pro role apps_dev, e cada invocação serverless da Vercel abre
+  // seu próprio pool — sem isso, poucas invocações concorrentes já estouram o limite
+  // ("too many connections for role apps_dev").
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL, max: 1 });
   return new PrismaClient({ adapter });
 }
 
