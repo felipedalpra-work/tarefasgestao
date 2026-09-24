@@ -19,14 +19,12 @@ function respName(usersById: Map<string, SquadExport["users"][number]>, t: Task)
     return t.assignees
       .map((a) => {
         if (a.isClient) return "Cliente" + (a.contactName ? ` (contato: ${a.contactName})` : "");
-        if (a.externalName) return `${a.externalName} (O2, fora do squad)`;
         return userName(usersById, a.userId) || "?";
       })
       .join(" + ");
   }
   if (t.assigneeId) return userName(usersById, t.assigneeId) || "?";
   if (t.deliverTo === "o2") return "Cliente" + (t.clientContactName ? ` (contato: ${t.clientContactName})` : "");
-  if (t.externalResponsibleName) return `${t.externalResponsibleName} (O2, fora do squad)`;
   return "sem responsável";
 }
 
