@@ -13,13 +13,14 @@ on:
     - cron: "0 20 * * *"   # deadlines — 17h BRT
     - cron: "0 21 * * *"   # briefing — 18h BRT
     - cron: "0 11 * * 1"   # digest — segunda 8h BRT
+    - cron: "0 6 * * *"    # backup-email — 3h BRT, fora do horário de uso
   workflow_dispatch:
     inputs:
       job:
         description: "Job pra rodar manualmente"
         required: true
         type: choice
-        options: [gmail-sync, calendar-sync, task-reminders, deadlines, briefing, digest]
+        options: [gmail-sync, calendar-sync, task-reminders, deadlines, briefing, digest, backup-email]
 
 jobs:
   run:
@@ -41,6 +42,7 @@ jobs:
               "0 20 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
               "0 21 * * *")   echo "jobs=briefing" >> "$GITHUB_OUTPUT" ;;
               "0 11 * * 1")   echo "jobs=digest" >> "$GITHUB_OUTPUT" ;;
+              "0 6 * * *")    echo "jobs=backup-email" >> "$GITHUB_OUTPUT" ;;
               *) echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
             esac
           fi
@@ -51,7 +53,7 @@ jobs:
         run: |
           failed=0
           for job in ${{ steps.pick.outputs.jobs }}; do
-            http_code=$(curl -s --max-time 60 -o response.json -w "%{http_code}" \
+            http_code=$(curl -s --max-time 90 -o response.json -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
               "$APP_URL/api/cron/$job")
             echo "[$job] HTTP status: $http_code"

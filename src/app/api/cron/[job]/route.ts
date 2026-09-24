@@ -6,9 +6,14 @@ import { checkAllReminders, checkAllTaskDueTimes } from "@/lib/reminders";
 import { advanceRecurringTasks } from "@/lib/task-recurrence";
 import { sendMeetingBriefings } from "@/lib/meeting-briefing";
 import { sendWeeklyDigest } from "@/lib/weekly-digest";
+import { sendDailyBackups } from "@/lib/backup-email";
 import { log } from "@/lib/logger";
 
 type Params = { params: Promise<{ job: string }> };
+
+// "backup-email" monta uma planilha por squad (várias idas ao banco em
+// sequência) — no plano padrão da Vercel o default de 10s não é suficiente
+export const maxDuration = 60;
 
 const JOBS: Record<string, () => Promise<void>> = {
   "gmail-sync": syncAllUsers,
@@ -30,6 +35,10 @@ const JOBS: Record<string, () => Promise<void>> = {
     await sendMeetingBriefings();
   },
   digest: sendWeeklyDigest,
+  // backup diário por e-mail (planilha .xlsx por squad, pros admins) — ver
+  // src/lib/backup-email.ts. Existe por causa do episódio de set/2026 (banco
+  // bloqueado por quota, backup mais recente disponível com 10 dias).
+  "backup-email": sendDailyBackups,
 };
 
 // Endpoint chamado por um agendador externo (GitHub Actions), já que node-cron

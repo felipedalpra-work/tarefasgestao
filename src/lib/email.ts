@@ -229,6 +229,75 @@ export async function sendDeadlineAlertEmail({
   return getResend().emails.send({ from: FROM, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
 }
 
+export async function sendDailyBackupEmail({
+  to,
+  squadName,
+  dateStr,
+  summary,
+  attachment,
+  filename,
+}: {
+  to: string[];
+  squadName: string;
+  dateStr: string;
+  summary: { label: string; value: string | number }[];
+  attachment: Buffer;
+  filename: string;
+}) {
+  const html = baseTemplate(`
+    <!-- Title -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td>
+          <div style="width:36px;height:36px;background-color:#1a2d1a;border-radius:8px;display:inline-block;text-align:center;line-height:36px;margin-bottom:16px;">
+            <span style="font-size:18px;">💾</span>
+          </div>
+          <h1 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f0f0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Backup diário — ${squadName}</h1>
+          <p style="margin:0;font-size:14px;color:#888888;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Planilha com todos os dados do squad em ${dateStr}, em anexo.</p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Divider -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td style="height:1px;background-color:#2a2a2a;"></td></tr>
+    </table>
+
+    <!-- Resumo -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#222222;border-radius:12px;margin-bottom:24px;">
+      <tr>
+        <td style="padding:20px;">
+          ${summary
+            .map(
+              (s) =>
+                `<p style="margin:0 0 8px;font-size:13px;color:#999999;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">${s.label}: <strong style="color:#e0e0e0;">${s.value}</strong></p>`
+            )
+            .join("")}
+        </td>
+      </tr>
+    </table>
+
+    <!-- Message -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background-color:#161616;border-radius:8px;padding:14px 16px;">
+          <p style="margin:0;font-size:12px;color:#666666;line-height:1.6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+            Guarde este e-mail — é a cópia de segurança independente da plataforma. Enviado automaticamente todo dia, sem precisar pedir.
+          </p>
+        </td>
+      </tr>
+    </table>
+  `);
+
+  return getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `[O2 Squad] Backup diário — ${squadName} — ${dateStr}`,
+    html,
+    attachments: [{ filename, content: attachment, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }],
+  });
+}
+
 export async function sendPasswordResetEmail({
   to,
   name,
