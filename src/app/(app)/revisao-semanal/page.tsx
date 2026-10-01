@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  X, ChevronLeft, ChevronRight, ListFilter, Sparkles, CalendarDays, CheckCircle2,
-  PartyPopper, Check, Trash2, Loader2, Play, AlertTriangle,
+  X, ChevronLeft, ChevronRight, Sparkles, CalendarDays, CheckCircle2,
+  PartyPopper, Check, Trash2, Loader2, Play, AlertTriangle, Pencil, Plus, CheckCheck,
 } from "lucide-react";
 import { cn, priorityLabel, priorityColor } from "@/lib/utils";
 import { WeeklyReviewTaskRow } from "@/components/WeeklyReviewTaskRow";
 import { LogoIcon } from "@/components/LogoIcon";
 import { toast } from "@/components/Toaster";
-import { taskResponsibles } from "@/lib/task-assignees";
+import { AssigneePicker } from "@/components/AssigneePicker";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
+import { taskResponsibles, type AssigneeInput } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
 type ReviewTask = TaskListItem & { isNew: boolean };
@@ -41,6 +43,31 @@ type ReviewClient = {
 };
 
 type ReviewData = { windowStart: string; windowDays: number; clients: ReviewClient[]; users: UserOption[] };
+
+// campos da sugestão que dá pra editar antes de virar tarefa (mesmo conjunto da
+// edição em Sugestões da IA) — client fica fixo no cliente do slide atual, só o
+// responsável (inclusive "o cliente") e os outros campos são editáveis aqui.
+type SuggestionEditable = {
+  title: string;
+  description: string;
+  priority: string;
+  dueDate: string; // yyyy-mm-dd ou ""
+  client: string;
+  assignees: AssigneeInput[];
+};
+
+function defaultSuggestionEditable(client: ReviewClient, s: ReviewSuggestion): SuggestionEditable {
+  return {
+    title: s.title,
+    description: s.description ?? "",
+    priority: s.priority || "medium",
+    dueDate: s.dueDate ? s.dueDate.slice(0, 10) : "",
+    client: client.name,
+    assignees: [],
+  };
+}
+
+const DONE_STORAGE_PREFIX = "weekly-review-done-";
 
 const HEALTH_META: Record<string, { label: string; dot: string; text: string }> = {
   verde: { label: "Saudável", dot: "bg-o2-green", text: "text-o2-green" },
@@ -92,13 +119,25 @@ export default function WeeklyReviewPage() {
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
-  const [jumpOpen, setJumpOpen] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
+  const [doneNames, setDoneNames] = useState<Set<string>>(new Set());
+  const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
+  const [suggestionDraft, setSuggestionDraft] = useState<SuggestionEditable | null>(null);
 
   useEffect(() => {
     fetch("/api/weekly-review")
       .then((r) => r.json())
-      .then((json: ReviewData) => setData(json))
+      .then((json: ReviewData) => {
+        setData(json);
+        // quais empresas já foram "riscadas" nessa revisão — guardado por semana
+        // (windowStart) pra não carregar o risco de uma semana pra outra
+        try {
+          const raw = localStorage.getItem(DONE_STORAGE_PREFIX + json.windowStart);
+          setDoneNames(new Set(raw ? JSON.parse(raw) : []));
+        } catch {
+          setDoneNames(new Set());
+        }
+      })
       .catch(() => toast("Erro ao carregar a revisão semanal", "error"))
       .finally(() => setLoading(false));
   }, []);
@@ -107,8 +146,34 @@ export default function WeeklyReviewPage() {
   const total = clients.length;
   const current = clients[index] ?? null;
 
-  const next = useCallback(() => setIndex((i) => Math.min(i + 1, total - 1)), [total]);
-  const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+  function persistDone(next: Set<string>) {
+    setDoneNames(next);
+    if (data) {
+      try { localStorage.setItem(DONE_STORAGE_PREFIX + data.windowStart, JSON.stringify([...next])); } catch {}
+    }
+  }
+
+  function toggleDone(name: string) {
+    const next = new Set(doneNames);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    persistDone(next);
+  }
+
+  // navegar embora de um cliente já risca ele como revisado — é assim que o squad
+  // enxerga o progresso na lista da esquerda enquanto passa por todo mundo
+  const goTo = useCallback(
+    (i: number) => {
+      const clamped = Math.max(0, Math.min(i, total - 1));
+      if (current && clamped !== index) persistDone(new Set(doneNames).add(current.name));
+      setIndex(clamped);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDone fecha sobre `data`, já incluso aqui
+    [current, index, total, doneNames, data]
+  );
+
+  const next = useCallback(() => goTo(index + 1), [goTo, index]);
+  const prev = useCallback(() => goTo(index - 1), [goTo, index]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -161,16 +226,30 @@ export default function WeeklyReviewPage() {
     patchClient(clientName, (c) => ({ ...c, tasksOpen: c.tasksOpen.filter((t) => t.id !== id) }));
   }
 
-  async function acceptSuggestion(client: ReviewClient, s: ReviewSuggestion) {
+  function startEditSuggestion(client: ReviewClient, s: ReviewSuggestion) {
+    setEditingSuggestionId(s.id);
+    setSuggestionDraft(defaultSuggestionEditable(client, s));
+  }
+
+  function cancelEditSuggestion() {
+    setEditingSuggestionId(null);
+    setSuggestionDraft(null);
+  }
+
+  // sem override: aceita direto como a IA sugeriu (comportamento de sempre). Com
+  // override (veio do lápis + "Salvar e adicionar"): usa responsável/prioridade/prazo
+  // editados — inclusive "Cliente" como responsável, igual Sugestões da IA.
+  async function acceptSuggestion(client: ReviewClient, s: ReviewSuggestion, override?: SuggestionEditable) {
     setActing(s.id);
+    const fields = override ?? defaultSuggestionEditable(client, s);
     const commonFields = {
-      title: s.title,
-      description: s.description || null,
-      priority: s.priority || "medium",
-      assignees: [],
-      dueDate: s.dueDate || null,
-      client: client.name,
-      suggestionEdited: false,
+      title: fields.title,
+      description: fields.description || null,
+      priority: fields.priority || "medium",
+      assignees: fields.assignees,
+      dueDate: fields.dueDate || null,
+      client: fields.client || client.name,
+      suggestionEdited: !!override,
     };
     const body =
       s.kind === "recap"
@@ -190,6 +269,7 @@ export default function WeeklyReviewPage() {
         suggestions: c.suggestions.filter((x) => x.id !== s.id),
         tasksOpen: [{ ...created, isNew: true }, ...c.tasksOpen],
       }));
+      cancelEditSuggestion();
       toast("Sugestão virou tarefa", "success");
     } else {
       toast("Erro ao aceitar a sugestão", "error");
@@ -304,38 +384,9 @@ export default function WeeklyReviewPage() {
           <span className="text-[11px] text-ink-ghost">últimos {data.windowDays} dias</span>
         </div>
 
-        <div className="relative ml-4">
-          <button
-            onClick={() => setJumpOpen((v) => !v)}
-            className="flex items-center gap-2 text-xs text-ink-mid hover:text-ink bg-surface border border-surface-3 rounded-lg px-3 py-1.5 transition-colors"
-          >
-            <ListFilter size={12} />
-            {progressLabel}
-          </button>
-          {jumpOpen && (
-            <div className="absolute top-full left-0 mt-2 w-72 max-h-96 overflow-y-auto bg-surface border border-surface-3 rounded-xl shadow-2xl p-2 animate-slide-in-up z-20">
-              {clients.map((c, i) => (
-                <button
-                  key={c.name}
-                  onClick={() => { setIndex(i); setJumpOpen(false); }}
-                  className={cn(
-                    "w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors",
-                    i === index ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:bg-surface-2 hover:text-ink"
-                  )}
-                >
-                  <span className="truncate">{c.name}</span>
-                  {isClientQuiet(c) ? (
-                    <Check size={12} className="shrink-0 text-ink-ghost" />
-                  ) : (
-                    <span className="shrink-0 text-[10px] bg-o2-green/15 text-o2-green px-1.5 py-0.5 rounded-full">
-                      {c.tasksOpen.length + c.suggestions.length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <span className="ml-4 text-xs text-ink-mid bg-surface border border-surface-3 rounded-lg px-3 py-1.5">
+          {progressLabel}
+        </span>
 
         <button
           onClick={() => router.push("/tasks")}
@@ -345,10 +396,49 @@ export default function WeeklyReviewPage() {
         </button>
       </div>
 
-      {/* slide do cliente atual */}
-      {current && (
-        <div key={current.name} className="relative z-10 flex-1 overflow-y-auto animate-fade-in">
-          <div className="max-w-4xl mx-auto px-6 py-10">
+      <div className="relative z-10 flex-1 flex overflow-hidden">
+        {/* empresas na vertical à esquerda — navega à vontade clicando em qualquer uma,
+            e quem já foi revisada aparece riscada, sem depender de ir só em sequência */}
+        <aside className="hidden sm:flex w-60 shrink-0 flex-col border-r border-surface-3/60 overflow-y-auto py-3 px-2">
+          {clients.map((c, i) => {
+            const isDone = doneNames.has(c.name);
+            return (
+              <button
+                key={c.name}
+                onClick={() => goTo(i)}
+                className={cn(
+                  "group w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors",
+                  i === index ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:bg-surface-2 hover:text-ink"
+                )}
+              >
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); toggleDone(c.name); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleDone(c.name); } }}
+                  title={isDone ? "Marcar como não revisada" : "Marcar como revisada"}
+                  className={cn(
+                    "shrink-0 w-4 h-4 rounded-full border flex items-center justify-center transition-colors",
+                    isDone ? "bg-o2-green border-o2-green text-bg-deep" : "border-ink-ghost text-transparent group-hover:border-ink-mid"
+                  )}
+                >
+                  <CheckCheck size={10} />
+                </span>
+                <span className={cn("truncate flex-1", isDone && "line-through text-ink-ghost")}>{c.name}</span>
+                {!isDone && !isClientQuiet(c) && (
+                  <span className="shrink-0 text-[10px] bg-o2-green/15 text-o2-green px-1.5 py-0.5 rounded-full">
+                    {c.tasksOpen.length + c.suggestions.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* slide do cliente atual */}
+        {current && (
+          <div key={current.name} className="flex-1 overflow-y-auto animate-fade-in">
+            <div className="max-w-4xl mx-auto px-6 py-10">
             <div className="mb-6">
               <h1 className="text-5xl font-black text-ink tracking-tight">{current.name}</h1>
               <div className="flex flex-wrap items-center gap-3 mt-3">
@@ -407,38 +497,114 @@ export default function WeeklyReviewPage() {
                   <Sparkles size={13} /> Sugestões da IA — ainda não vistas ({current.suggestions.length})
                 </h2>
                 <div className="space-y-2">
-                  {current.suggestions.map((s) => (
-                    <div key={s.id} className="bg-violet-400/[0.04] border border-violet-400/25 rounded-lg px-3 py-2.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm text-ink font-medium">{s.title}</p>
-                          {s.description && <p className="text-xs text-ink-faint mt-0.5 line-clamp-2">{s.description}</p>}
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[10px] text-ink-ghost">{s.sourceLabel}</span>
-                            {s.priority && <span className={cn("text-[10px]", priorityColor(s.priority))}>{priorityLabel(s.priority)}</span>}
+                  {current.suggestions.map((s) => {
+                    const isEditing = editingSuggestionId === s.id;
+                    return (
+                      <div key={s.id} className="bg-violet-400/[0.04] border border-violet-400/25 rounded-lg px-3 py-2.5">
+                        {isEditing && suggestionDraft ? (
+                          <div className="space-y-2.5">
+                            <div>
+                              <label className="text-xs text-ink-dim block mb-1">Título</label>
+                              <input
+                                value={suggestionDraft.title}
+                                onChange={(e) => setSuggestionDraft((d) => d && { ...d, title: e.target.value })}
+                                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-ink-dim block mb-1">Descrição</label>
+                              <AutoGrowTextarea
+                                value={suggestionDraft.description}
+                                onChange={(e) => setSuggestionDraft((d) => d && { ...d, description: e.target.value })}
+                                rows={2}
+                                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="text-xs text-ink-dim block mb-1">Prioridade</label>
+                                <select
+                                  value={suggestionDraft.priority}
+                                  onChange={(e) => setSuggestionDraft((d) => d && { ...d, priority: e.target.value })}
+                                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                                >
+                                  <option value="high">Alta</option>
+                                  <option value="medium">Média</option>
+                                  <option value="low">Baixa</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-ink-dim block mb-1">Prazo</label>
+                                <input
+                                  type="date"
+                                  value={suggestionDraft.dueDate}
+                                  onChange={(e) => setSuggestionDraft((d) => d && { ...d, dueDate: e.target.value })}
+                                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                                />
+                              </div>
+                            </div>
+                            <AssigneePicker
+                              users={data.users}
+                              client={suggestionDraft.client}
+                              value={suggestionDraft.assignees}
+                              onChange={(nextAssignees) => setSuggestionDraft((d) => d && { ...d, assignees: nextAssignees })}
+                              compact
+                            />
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <button onClick={cancelEditSuggestion} className="text-xs px-3 py-1.5 text-ink-dim hover:text-ink transition-colors">
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => acceptSuggestion(current, s, suggestionDraft)}
+                                disabled={!suggestionDraft.title.trim() || acting === s.id}
+                                className="flex items-center gap-1 text-xs px-3 py-1.5 bg-o2-green text-bg-deep font-semibold rounded-lg hover:bg-o2-green-bright disabled:opacity-50 transition-colors"
+                              >
+                                {acting === s.id ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                                Salvar e adicionar
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={() => acceptSuggestion(current, s)}
-                            disabled={acting === s.id}
-                            className="flex items-center gap-1 text-xs bg-o2-green/15 text-o2-green hover:bg-o2-green/25 rounded-md px-2.5 py-1.5 transition-colors disabled:opacity-50"
-                          >
-                            {acting === s.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                            Aceitar
-                          </button>
-                          <button
-                            onClick={() => rejectSuggestion(current, s)}
-                            disabled={acting === s.id}
-                            className="text-ink-faint hover:text-red-400 transition-colors p-1.5"
-                            title="Descartar"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
+                        ) : (
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm text-ink font-medium">{s.title}</p>
+                              {s.description && <p className="text-xs text-ink-faint mt-0.5 line-clamp-2">{s.description}</p>}
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <span className="text-[10px] text-ink-ghost">{s.sourceLabel}</span>
+                                {s.priority && <span className={cn("text-[10px]", priorityColor(s.priority))}>{priorityLabel(s.priority)}</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => acceptSuggestion(current, s)}
+                                disabled={acting === s.id}
+                                className="flex items-center gap-1 text-xs bg-o2-green/15 text-o2-green hover:bg-o2-green/25 rounded-md px-2.5 py-1.5 transition-colors disabled:opacity-50"
+                              >
+                                {acting === s.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                Aceitar
+                              </button>
+                              <button
+                                onClick={() => startEditSuggestion(current, s)}
+                                disabled={acting === s.id}
+                                className="text-ink-faint hover:text-o2-green transition-colors p-1.5"
+                                title="Editar antes de aceitar (responsável, cliente como responsável, prazo…)"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => rejectSuggestion(current, s)}
+                                disabled={acting === s.id}
+                                className="text-ink-faint hover:text-red-400 transition-colors p-1.5"
+                                title="Descartar"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -512,9 +678,10 @@ export default function WeeklyReviewPage() {
                 </ul>
               </details>
             )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* navegação */}
       <div className="relative z-10 flex items-center justify-center gap-4 px-6 py-4 border-t border-surface-3/60">
@@ -529,7 +696,7 @@ export default function WeeklyReviewPage() {
           {clients.map((c, i) => (
             <button
               key={c.name}
-              onClick={() => setIndex(i)}
+              onClick={() => goTo(i)}
               className={cn(
                 "shrink-0 h-1.5 rounded-full transition-all",
                 i === index ? "bg-o2-green w-4" : isClientQuiet(c) ? "bg-surface-3 w-1.5" : "bg-ink-ghost w-1.5"
