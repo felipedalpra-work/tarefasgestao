@@ -160,16 +160,11 @@ export default function WeeklyReviewPage() {
     persistDone(next);
   }
 
-  // navegar embora de um cliente já risca ele como revisado — é assim que o squad
-  // enxerga o progresso na lista da esquerda enquanto passa por todo mundo
+  // navegar NÃO marca nada como revisado — só o botão "Marcar como concluída"
+  // faz isso, de propósito (o squad não quer risco automático ao trocar de empresa)
   const goTo = useCallback(
-    (i: number) => {
-      const clamped = Math.max(0, Math.min(i, total - 1));
-      if (current && clamped !== index) persistDone(new Set(doneNames).add(current.name));
-      setIndex(clamped);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDone fecha sobre `data`, já incluso aqui
-    [current, index, total, doneNames, data]
+    (i: number) => setIndex(Math.max(0, Math.min(i, total - 1))),
+    [total]
   );
 
   const next = useCallback(() => goTo(index + 1), [goTo, index]);
@@ -397,8 +392,9 @@ export default function WeeklyReviewPage() {
       </div>
 
       <div className="relative z-10 flex-1 flex overflow-hidden">
-        {/* empresas na vertical à esquerda — navega à vontade clicando em qualquer uma,
-            e quem já foi revisada aparece riscada, sem depender de ir só em sequência */}
+        {/* empresas na vertical à esquerda — navega à vontade clicando em qualquer uma.
+            O risco só aparece quando a pessoa marca manualmente (aqui ou no botão do
+            slide) — nunca sozinho ao trocar de empresa */}
         <aside className="hidden sm:flex w-60 shrink-0 flex-col border-r border-surface-3/60 overflow-y-auto py-3 px-2">
           {clients.map((c, i) => {
             const isDone = doneNames.has(c.name);
@@ -439,9 +435,10 @@ export default function WeeklyReviewPage() {
         {current && (
           <div key={current.name} className="flex-1 overflow-y-auto animate-fade-in">
             <div className="max-w-4xl mx-auto px-6 py-10">
-            <div className="mb-6">
-              <h1 className="text-5xl font-black text-ink tracking-tight">{current.name}</h1>
-              <div className="flex flex-wrap items-center gap-3 mt-3">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-5xl font-black text-ink tracking-tight">{current.name}</h1>
+                <div className="flex flex-wrap items-center gap-3 mt-3">
                 {health && (
                   <span className={cn("flex items-center gap-1.5 text-xs font-medium", health.text)}>
                     <span className={cn("w-2 h-2 rounded-full", health.dot)} />
@@ -453,7 +450,23 @@ export default function WeeklyReviewPage() {
                     {OXY_STAGE_LABELS[current.oxyStage] ?? current.oxyStage}
                   </span>
                 )}
+                </div>
               </div>
+
+              {/* só marca concluída quando a pessoa clica aqui — navegar entre empresas
+                  não marca nada sozinho, de propósito */}
+              <button
+                onClick={() => toggleDone(current.name)}
+                className={cn(
+                  "shrink-0 flex items-center gap-1.5 text-xs font-medium rounded-full px-3.5 py-2 border transition-colors",
+                  doneNames.has(current.name)
+                    ? "bg-o2-green/15 text-o2-green border-o2-green/30"
+                    : "bg-surface-2 text-ink-mid border-surface-3 hover:text-ink hover:border-border"
+                )}
+              >
+                <CheckCheck size={14} />
+                {doneNames.has(current.name) ? "Revisão concluída" : "Marcar como concluída"}
+              </button>
             </div>
 
             {/* resumo rápido — responde de cara "o que tem aqui" antes de descer pras listas */}
