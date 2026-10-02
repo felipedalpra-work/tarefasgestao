@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Calendar, Building2 } from "lucide-react";
+import { Plus, Calendar, Building2, Search, X } from "lucide-react";
 import { isToday, isBefore, startOfDay, addDays, parseISO, endOfDay } from "date-fns";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskModal } from "@/components/NewTaskModal";
@@ -51,6 +51,7 @@ function KanbanPageInner() {
   const dueFilter = (searchParams.get("due") ?? "all") as DueFilter;
   const dueFrom = searchParams.get("dueFrom");
   const dueTo = searchParams.get("dueTo");
+  const search = (searchParams.get("q") ?? "").trim().toLowerCase();
 
   const selectedAssignees = useMemo(
     () => (assigneeParam && assigneeParam !== "all" ? assigneeParam.split(",").filter(Boolean) : []),
@@ -141,12 +142,18 @@ function KanbanPageInner() {
     );
   }
 
+  function matchesSearch(t: TaskListItem): boolean {
+    if (!search) return true;
+    return t.title.toLowerCase().includes(search);
+  }
+
   function colTasksOf(colId: string) {
     return tasks
       .filter((t) => t.status === colId)
       .filter(matchesAssignee)
       .filter((t) => !selectedClient || t.client === selectedClient)
       .filter(matchesDueFilter)
+      .filter(matchesSearch)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
@@ -186,6 +193,22 @@ function KanbanPageInner() {
 
       {/* Person filter — multi-seleção: dá pra combinar mais de uma pessoa (ex: Felipe + Tainara) */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Busca por nome da tarefa */}
+        <div className="flex items-center gap-2 bg-surface border border-surface-3 rounded-xl px-3 py-2 w-56">
+          <Search size={13} className="text-ink-faint shrink-0" />
+          <input
+            value={searchParams.get("q") ?? ""}
+            onChange={(e) => setParams({ q: e.target.value || null })}
+            placeholder="Buscar tarefa…"
+            className="flex-1 min-w-0 bg-transparent text-xs text-ink placeholder:text-ink-ghost focus:outline-none"
+          />
+          {search && (
+            <button onClick={() => setParams({ q: null })} className="text-ink-faint hover:text-ink shrink-0">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
         <div className="flex items-center gap-1.5 bg-surface border border-surface-3 rounded-xl p-1 self-start">
           <button
             onClick={() => setParams({ assignee: "all" })}
