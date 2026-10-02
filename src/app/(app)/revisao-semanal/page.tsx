@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn, priorityLabel, priorityColor } from "@/lib/utils";
 import { WeeklyReviewTaskRow } from "@/components/WeeklyReviewTaskRow";
+import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { LogoIcon } from "@/components/LogoIcon";
 import { toast } from "@/components/Toaster";
 import { AssigneePicker } from "@/components/AssigneePicker";
@@ -123,6 +124,7 @@ export default function WeeklyReviewPage() {
   const [doneNames, setDoneNames] = useState<Set<string>>(new Set());
   const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
   const [suggestionDraft, setSuggestionDraft] = useState<SuggestionEditable | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskListItem | null>(null);
 
   useEffect(() => {
     fetch("/api/weekly-review")
@@ -219,6 +221,31 @@ export default function WeeklyReviewPage() {
 
   function onTaskDeleted(clientName: string, id: string) {
     patchClient(clientName, (c) => ({ ...c, tasksOpen: c.tasksOpen.filter((t) => t.id !== id) }));
+  }
+
+  // painel de detalhe completo (mesmo do Kanban), aberto ao clicar no título de uma
+  // tarefa — client vem gravado na própria tarefa, não precisa do `current` do slide
+  function handlePanelUpdated(updated: TaskListItem) {
+    const clientName = updated.client ?? selectedTask?.client;
+    if (clientName) onTaskUpdated(clientName, updated);
+    setSelectedTask(updated);
+  }
+
+  function handlePanelDeleted(id: string) {
+    if (selectedTask?.client) onTaskDeleted(selectedTask.client, id);
+    setSelectedTask(null);
+  }
+
+  function handlePanelStatusChange(id: string, status: string) {
+    if (!selectedTask) return;
+    const updated = { ...selectedTask, status };
+    setSelectedTask(updated);
+    if (selectedTask.client) onTaskUpdated(selectedTask.client, updated);
+    fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    }).catch(() => {});
   }
 
   function startEditSuggestion(client: ReviewClient, s: ReviewSuggestion) {
@@ -669,6 +696,7 @@ export default function WeeklyReviewPage() {
                         users={data.users}
                         onUpdated={(u) => onTaskUpdated(current.name, u)}
                         onDeleted={(id) => onTaskDeleted(current.name, id)}
+                        onOpen={setSelectedTask}
                       />
                     ))}
                   </div>
@@ -726,6 +754,15 @@ export default function WeeklyReviewPage() {
           Próximo <ChevronRight size={16} />
         </button>
       </div>
+
+      <TaskDetailPanel
+        task={selectedTask}
+        onClose={() => setSelectedTask(null)}
+        onStatusChange={handlePanelStatusChange}
+        onDeleted={handlePanelDeleted}
+        onUpdated={handlePanelUpdated}
+        users={data.users}
+      />
     </div>
   );
 }

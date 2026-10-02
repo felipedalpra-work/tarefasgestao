@@ -22,6 +22,7 @@ export function WeeklyReviewTaskRow({
   users,
   onUpdated,
   onDeleted,
+  onOpen,
 }: {
   task: TaskListItem;
   isNew: boolean;
@@ -29,6 +30,7 @@ export function WeeklyReviewTaskRow({
   users: UserOption[];
   onUpdated: (task: TaskListItem) => void;
   onDeleted: (id: string) => void;
+  onOpen: (task: TaskListItem) => void;
 }) {
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -93,9 +95,14 @@ export function WeeklyReviewTaskRow({
           </span>
         )}
 
-        <span className="text-sm text-ink font-medium flex-1 min-w-[10rem]" title={task.description || undefined}>
+        <button
+          type="button"
+          onClick={() => onOpen(task)}
+          className="text-sm text-ink font-medium flex-1 min-w-[10rem] text-left hover:text-o2-green hover:underline transition-colors"
+          title="Abrir detalhes completos da tarefa"
+        >
           {task.title}
-        </span>
+        </button>
 
         <select
           value={task.status}
