@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { format, getISOWeek, getISOWeekYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   X, ChevronLeft, ChevronRight, Sparkles, CalendarDays, CheckCircle2,
@@ -70,6 +70,14 @@ function defaultSuggestionEditable(client: ReviewClient, s: ReviewSuggestion): S
 
 const DONE_STORAGE_PREFIX = "weekly-review-done-";
 
+// chave estável pra semana atual (ano-ISO + semana-ISO) — windowStart da API é um
+// recorte rolante (now - N dias) e muda a cada milissegundo, então nunca serviria de
+// chave de localStorage sem perder a marcação a cada reload
+function weekStorageKey(): string {
+  const now = new Date();
+  return `${getISOWeekYear(now)}-W${getISOWeek(now)}`;
+}
+
 const HEALTH_META: Record<string, { label: string; dot: string; text: string }> = {
   verde: { label: "Saudável", dot: "bg-o2-green", text: "text-o2-green" },
   amarelo: { label: "Atenção", dot: "bg-yellow-400", text: "text-yellow-400" },
@@ -131,10 +139,10 @@ export default function WeeklyReviewPage() {
       .then((r) => r.json())
       .then((json: ReviewData) => {
         setData(json);
-        // quais empresas já foram "riscadas" nessa revisão — guardado por semana
-        // (windowStart) pra não carregar o risco de uma semana pra outra
+        // quais empresas já foram "riscadas" nessa revisão — guardado pela semana-ISO
+        // atual, pra sobreviver a reload e só zerar na semana seguinte
         try {
-          const raw = localStorage.getItem(DONE_STORAGE_PREFIX + json.windowStart);
+          const raw = localStorage.getItem(DONE_STORAGE_PREFIX + weekStorageKey());
           setDoneNames(new Set(raw ? JSON.parse(raw) : []));
         } catch {
           setDoneNames(new Set());
@@ -150,9 +158,7 @@ export default function WeeklyReviewPage() {
 
   function persistDone(next: Set<string>) {
     setDoneNames(next);
-    if (data) {
-      try { localStorage.setItem(DONE_STORAGE_PREFIX + data.windowStart, JSON.stringify([...next])); } catch {}
-    }
+    try { localStorage.setItem(DONE_STORAGE_PREFIX + weekStorageKey(), JSON.stringify([...next])); } catch {}
   }
 
   function toggleDone(name: string) {

@@ -4,6 +4,10 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-10-07 (revisão semanal: "riscado" não sobrevivia a recarregar a página)
+
+- Bug: marcar uma empresa como já revisada na Revisão Semanal sumia ao dar F5/recarregar. Causa: a chave de persistência no `localStorage` usava `windowStart` (recorte rolante da API, muda a cada carregamento), então nunca batia com a chave salva antes. Trocado por uma chave estável de ano+semana ISO (`weekStorageKey()`, via `getISOWeek`/`getISOWeekYear` do `date-fns`) — o "riscado" agora persiste a semana inteira e só reseta na semana seguinte.
+
 ## 2026-09-14 (exportar todos os dados do squad)
 
 - Usuário pediu, por questão de segurança, um botão pra cada squad conseguir exportar todos os dados da plataforma — tarefas, clientes, tudo. Antes de escrever qualquer linha, perguntado: (1) se as credenciais de ERP de cliente (login/senha/TOTP) entram no arquivo; (2) quem pode exportar; (3) formato do arquivo. Decidido: **credenciais de ERP ficam de fora** (um arquivo baixado com senha em texto puro é um risco diferente de revelar uma por vez com log, que é como já funciona hoje), **só admin do squad** (mesmo nível de "excluir cliente"/"remover membro" — é a ação de maior alcance que existe no app), **um JSON único** com tudo.
