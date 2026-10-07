@@ -138,7 +138,7 @@ export function CalendarGrid({
   return (
     <div className="flex flex-1 gap-0 min-h-0">
       {/* Calendar side */}
-      <div className={cn("flex flex-col flex-1 min-w-0 transition-all", selected ? "lg:mr-80" : "")}>
+      <div className={cn("flex flex-col flex-1 min-w-0 min-h-0 transition-all", selected ? "lg:mr-80" : "")}>
         {/* Navigation */}
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-1">
@@ -275,7 +275,7 @@ export function CalendarGrid({
             </div>
 
             {/* Days */}
-            <div className="flex-1 grid grid-cols-7 gap-px bg-skeleton border border-skeleton rounded-xl overflow-hidden">
+            <div className="flex-1 grid grid-cols-7 gap-px bg-skeleton border border-skeleton rounded-xl overflow-y-auto overflow-x-hidden">
               {days.map((day, i) => {
                 const isCurrentMonth = day.getMonth() === month - 1;
                 const isToday = sameDay(day, today);
