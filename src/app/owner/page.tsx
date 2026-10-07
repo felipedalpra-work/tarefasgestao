@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Building2, Users, CheckSquare, TrendingUp, ArrowLeft, Crown } from "lucide-react";
+import { Building2, Users, CheckSquare, TrendingUp, ArrowLeft, Crown, Database, Mail, CalendarClock, Save, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
 type SquadMetrics = {
   id: string;
@@ -25,15 +25,43 @@ type Metrics = {
   squads: SquadMetrics[];
 };
 
+type HealthEvent = { at: string; ok: boolean; message: string } | null;
+
+type SquadHealth = {
+  id: string;
+  name: string;
+  google: { connected: boolean; email: string | null };
+  lastGmailSync: HealthEvent;
+  lastCalendarSync: HealthEvent;
+  lastBackup: HealthEvent;
+};
+
+type Health = {
+  db: {
+    role: string;
+    connections: { total: number; active: number; idle: number };
+    roleLimit: number | null;
+    maxConnections: number | null;
+  };
+  squads: SquadHealth[];
+};
+
 export default function OwnerPage() {
   const [data, setData] = useState<Metrics | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/owner/metrics")
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then(setData)
       .catch(() => setError("Erro ao carregar métricas."));
+
+    fetch("/api/owner/health")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then(setHealth)
+      .catch(() => setHealthError("Erro ao carregar saúde da plataforma."));
   }, []);
 
   return (
@@ -51,6 +79,92 @@ export default function OwnerPage() {
           <h1 className="text-2xl font-bold text-ink">Painel da plataforma</h1>
           <p className="text-ink-mid text-sm mt-0.5">Métricas agregadas de todos os squads — só números, não o dado de negócio de cada um</p>
         </div>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-ink-dim uppercase tracking-wide mb-3">Saúde da plataforma</h2>
+
+        {healthError && <p className="text-sm text-red-400 bg-red-400/10 px-4 py-3 rounded-xl mb-4">{healthError}</p>}
+
+        {!health && !healthError && <div className="h-32 bg-surface-2 rounded-xl animate-pulse mb-4" />}
+
+        {health && (
+          <>
+            <div className="bg-surface border border-surface-3 rounded-xl px-5 py-4 mb-4 flex items-center gap-3">
+              <Database size={16} className="text-ink-mid shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-ink">
+                  <strong>{health.db.connections.total}</strong> conexão(ões) abertas no banco (role <code className="text-xs bg-surface-2 px-1.5 py-0.5 rounded">{health.db.role}</code>)
+                  {health.db.roleLimit !== null && <> de um limite de <strong>{health.db.roleLimit}</strong></>}
+                </p>
+                <p className="text-xs text-ink-faint mt-0.5">
+                  {health.db.connections.active} ativa(s) · {health.db.connections.idle} ociosa(s)
+                  {health.db.maxConnections !== null && <> · max_connections do servidor: {health.db.maxConnections}</>}
+                </p>
+              </div>
+              {health.db.roleLimit !== null && (
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
+                    health.db.connections.total / health.db.roleLimit >= 0.9
+                      ? "bg-red-400/10 text-red-400"
+                      : health.db.connections.total / health.db.roleLimit >= 0.7
+                      ? "bg-yellow-400/10 text-yellow-400"
+                      : "bg-o2-green/10 text-o2-green"
+                  }`}
+                >
+                  {Math.round((health.db.connections.total / health.db.roleLimit) * 100)}% do limite
+                </span>
+              )}
+            </div>
+
+            <div className="bg-surface border border-surface-3 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-2 text-ink-dim text-xs uppercase tracking-wide">
+                    <tr>
+                      <th className="text-left px-4 py-3">Squad</th>
+                      <th className="text-left px-4 py-3">Google</th>
+                      <th className="text-left px-4 py-3">Gmail (Meet Recap)</th>
+                      <th className="text-left px-4 py-3">Calendar</th>
+                      <th className="text-left px-4 py-3">Backup diário</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-3">
+                    {health.squads.map((s) => (
+                      <tr key={s.id} className="hover:bg-surface-2/50 transition-colors">
+                        <td className="px-4 py-3 text-ink font-medium">{s.name}</td>
+                        <td className="px-4 py-3">
+                          {s.google.connected ? (
+                            <span className="inline-flex items-center gap-1.5 text-o2-green text-xs">
+                              <CheckCircle2 size={13} /> conectado
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-red-400 text-xs">
+                              <XCircle size={13} /> não conectado
+                            </span>
+                          )}
+                          {s.google.email && <p className="text-xs text-ink-faint mt-0.5">{s.google.email}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <EventStatus icon={Mail} event={s.lastGmailSync} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <EventStatus icon={CalendarClock} event={s.lastCalendarSync} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <EventStatus icon={Save} event={s.lastBackup} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-ink-faint px-4 py-3 border-t border-surface-3">
+                Gmail/Calendar mostram o último evento <strong>registrado</strong> (sucesso com algo novo, ou erro) — squad quieto há dias com Google conectado é normal, não indica problema por si só.
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-400 bg-red-400/10 px-4 py-3 rounded-xl">{error}</p>}
@@ -154,6 +268,32 @@ function Stat({ icon: Icon, value, label }: { icon: React.ElementType; value: nu
       <Icon size={15} className="text-ink-mid" />
       <span className="text-xl font-bold text-ink">{value}</span>
       <span className="text-xs text-ink-mid">{label}</span>
+    </div>
+  );
+}
+
+function EventStatus({
+  icon: Icon,
+  event,
+}: {
+  icon: React.ElementType;
+  event: { at: string; ok: boolean; message: string } | null;
+}) {
+  if (!event) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-ink-faint text-xs">
+        <AlertTriangle size={13} />
+        nunca registrado
+      </span>
+    );
+  }
+  return (
+    <div>
+      <span className={`inline-flex items-center gap-1.5 text-xs ${event.ok ? "text-ink" : "text-red-400"}`}>
+        <Icon size={13} className={event.ok ? "text-ink-mid" : "text-red-400"} />
+        {formatDistanceToNow(new Date(event.at), { addSuffix: true, locale: ptBR })}
+      </span>
+      <p className={`text-xs mt-0.5 ${event.ok ? "text-ink-faint" : "text-red-400/80"}`}>{event.message}</p>
     </div>
   );
 }

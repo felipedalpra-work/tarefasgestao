@@ -55,7 +55,7 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
     if (toRemove.length > 0) {
       const { count } = await db.calendarEvent.deleteMany({ where: { client: { in: toRemove } } });
       if (count > 0) {
-        await log("calendar-sync", `${count} evento(s) removido(s) de cliente ignorado: ${toRemove.join(", ")}`);
+        await log("calendar-sync", `${count} evento(s) removido(s) de cliente ignorado: ${toRemove.join(", ")}`, { squadId: user.squadId });
       }
     }
   }
@@ -121,13 +121,14 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
     }
 
     if (synced > 0) {
-      await log("calendar-sync", `${synced} evento(s) sincronizado(s) do Google Calendar`);
+      await log("calendar-sync", `${synced} evento(s) sincronizado(s) do Google Calendar`, { squadId: user.squadId });
     }
     return synced;
   } catch (err) {
     await log("calendar-sync", "Erro ao sincronizar Google Calendar", {
       level: "error",
       detail: String(err),
+      squadId: user.squadId,
     });
     console.error(`[calendar-sync] erro userId=${userId}:`, err);
     return 0;

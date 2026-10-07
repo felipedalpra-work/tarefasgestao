@@ -298,6 +298,58 @@ export async function sendDailyBackupEmail({
   });
 }
 
+// Alerta pros owners da plataforma (cross-squad) quando um job crítico falha de
+// verdade — hoje só o backup diário usa isso (src/lib/backup-email.ts). Vai por
+// e-mail (não Slack) de propósito: Slack é configurado por squad (bot token
+// próprio), e esse alerta precisa alcançar os owners não importa qual squad falhou.
+export async function sendJobFailureAlertEmail({
+  to,
+  jobName,
+  squadName,
+  errorDetail,
+}: {
+  to: string[];
+  jobName: string;
+  squadName: string;
+  errorDetail: string;
+}) {
+  const html = baseTemplate(`
+    <!-- Title -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td>
+          <div style="width:36px;height:36px;background-color:#2d1a1a;border-radius:8px;display:inline-block;text-align:center;line-height:36px;margin-bottom:16px;">
+            <span style="font-size:18px;">🚨</span>
+          </div>
+          <h1 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f0f0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Job "${jobName}" falhou</h1>
+          <p style="margin:0;font-size:14px;color:#888888;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Squad afetado: <strong style="color:#cccccc;">${squadName}</strong></p>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Divider -->
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td style="height:1px;background-color:#2a2a2a;"></td></tr>
+    </table>
+
+    <!-- Erro -->
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background-color:#161616;border-radius:8px;padding:14px 16px;">
+          <p style="margin:0;font-size:12px;color:#888888;font-family:monospace;word-break:break-all;line-height:1.6;">${errorDetail.slice(0, 1500)}</p>
+        </td>
+      </tr>
+    </table>
+  `);
+
+  return getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `[O2 Squad] ⚠️ Job "${jobName}" falhou — ${squadName}`,
+    html,
+  });
+}
+
 export async function sendPasswordResetEmail({
   to,
   name,

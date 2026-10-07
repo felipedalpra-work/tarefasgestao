@@ -82,7 +82,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
 
     const labelId = await findMeetRecapLabelId(gmail);
     if (!labelId) {
-      await log("gmail-sync", "Rótulo \"Meet Recap\" não encontrado nessa conta Gmail", { level: "error" });
+      await log("gmail-sync", "Rótulo \"Meet Recap\" não encontrado nessa conta Gmail", { level: "error", squadId: user.squadId });
       return { synced: 0, suggestionsExtracted: 0 };
     }
 
@@ -140,6 +140,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
     if (synced > 0) {
       await log("gmail-sync", `${synced} novo(s) Meet Recap sincronizado(s)`, {
         detail: `${suggestionsExtracted} sugestão(ões) de tarefa identificada(s) via IA`,
+        squadId: user.squadId,
       });
     }
     return { synced, suggestionsExtracted };
@@ -147,6 +148,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
     await log("gmail-sync", "Erro ao sincronizar Gmail", {
       level: "error",
       detail: String(err),
+      squadId: user.squadId,
     });
     console.error(`[gmail-sync] erro userId=${userId}:`, err);
     return { synced: 0, suggestionsExtracted: 0 };

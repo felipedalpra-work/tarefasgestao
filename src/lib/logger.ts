@@ -5,12 +5,12 @@ type Level = "info" | "warn" | "error";
 export async function log(
   category: string,
   message: string,
-  options: { level?: Level; detail?: string } = {}
+  options: { level?: Level; detail?: string; squadId?: string } = {}
 ) {
-  const { level = "info", detail } = options;
+  const { level = "info", detail, squadId } = options;
   try {
     await prisma.platformLog.create({
-      data: { level, category, message, detail: detail ?? null },
+      data: { level, category, message, detail: detail ?? null, squadId: squadId ?? null },
     });
   } catch {
     // never throw from logger

@@ -1,8 +1,20 @@
 import { prisma } from "@/lib/prisma";
 import { buildSquadExport } from "@/lib/squad-export";
 import { buildExportWorkbookBuffer } from "@/lib/export-to-excel";
-import { sendDailyBackupEmail } from "@/lib/email";
+import { sendDailyBackupEmail, sendJobFailureAlertEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
+
+async function alertOwnersOfBackupFailure(squadName: string, errorDetail: string) {
+  try {
+    const owners = await prisma.platformOwner.findMany({ select: { user: { select: { email: true } } } });
+    const to = owners.map((o) => o.user.email).filter(Boolean);
+    if (to.length === 0) return;
+    await sendJobFailureAlertEmail({ to, jobName: "backup-email", squadName, errorDetail });
+  } catch (alertErr) {
+    // se até o alerta falhar, não tem mais pra onde escalar — só loga
+    console.error("[backup-email] falha ao alertar owners:", alertErr);
+  }
+}
 
 // Backup diário por e-mail — nasceu do episódio de set/2026 (banco bloqueado
 // por quota, backup mais recente com 10 dias). Cada squad recebe só os
@@ -36,9 +48,13 @@ export async function sendDailyBackups() {
         attachment: buffer,
         filename: `backup-${squad.name.replace(/[^a-zA-Z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.xlsx`,
       });
+
+      await log("backup-email", `Backup enviado — ${to.length} destinatário(s)`, { squadId: squad.id });
     } catch (err) {
       // um squad falhando não pode travar o backup dos outros
-      await log("cron", `Erro no backup diário do squad ${squad.name}`, { level: "error", detail: String(err) });
+      const detail = String(err);
+      await log("backup-email", `Erro no backup diário do squad ${squad.name}`, { level: "error", detail, squadId: squad.id });
+      await alertOwnersOfBackupFailure(squad.name, detail);
     }
   }
 }
