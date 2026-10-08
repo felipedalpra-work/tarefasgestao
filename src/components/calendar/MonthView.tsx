@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sameDay, formatTime } from "./types";
@@ -40,6 +39,7 @@ export function MonthView({
   tasksForDay,
   selectedEventId,
   onSelectEvent,
+  onSelectTask,
 }: {
   year: number;
   month: number;
@@ -47,6 +47,7 @@ export function MonthView({
   tasksForDay: (day: Date) => Task[];
   selectedEventId: string | null;
   onSelectEvent: (event: CalendarEvent) => void;
+  onSelectTask: (taskId: string) => void;
 }) {
   const [popover, setPopover] = useState<{ day: Date; items: DayItem[]; top: number; left: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -134,7 +135,7 @@ export function MonthView({
                     onClick={() => onSelectEvent(item.event)}
                   />
                 ) : (
-                  <TaskChip key={item.task.id} task={item.task} isPast={isPast} />
+                  <TaskChip key={item.task.id} task={item.task} isPast={isPast} onClick={() => onSelectTask(item.task.id)} />
                 )
               )}
 
@@ -174,7 +175,15 @@ export function MonthView({
                   }}
                 />
               ) : (
-                <TaskChip key={item.task.id} task={item.task} isPast={false} />
+                <TaskChip
+                  key={item.task.id}
+                  task={item.task}
+                  isPast={false}
+                  onClick={() => {
+                    onSelectTask(item.task.id);
+                    setPopover(null);
+                  }}
+                />
               )
             )}
           </div>
@@ -214,20 +223,20 @@ function EventChip({
   );
 }
 
-function TaskChip({ task, isPast }: { task: Task; isPast: boolean }) {
+function TaskChip({ task, isPast, onClick }: { task: Task; isPast: boolean; onClick: () => void }) {
   const isDone = task.status === "done";
   const isOverdue = !isDone && isPast;
   return (
-    <Link
-      href={`/tasks?task=${task.id}`}
+    <button
+      onClick={onClick}
       className={cn(
-        "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] truncate transition-colors",
+        "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] truncate transition-colors w-full text-left",
         isDone ? "text-ink-ghost line-through" : isOverdue ? "text-red-400 bg-red-400/8 hover:bg-red-400/15" : "text-blue-400 bg-blue-400/8 hover:bg-blue-400/15"
       )}
     >
       <CheckSquare size={9} className="shrink-0" />
       <span className="truncate">{task.title}</span>
-    </Link>
+    </button>
   );
 }
 

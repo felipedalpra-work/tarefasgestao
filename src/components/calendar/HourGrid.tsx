@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 import { CheckSquare } from "lucide-react";
 import { cn, brtNow } from "@/lib/utils";
 import { sameDay, formatTime } from "./types";
@@ -50,12 +49,14 @@ export function HourGrid({
   tasksForDay,
   selectedEventId,
   onSelectEvent,
+  onSelectTask,
 }: {
   days: Date[];
   eventsForDay: (day: Date) => CalendarEvent[];
   tasksForDay: (day: Date) => Task[];
   selectedEventId: string | null;
   onSelectEvent: (event: CalendarEvent) => void;
+  onSelectTask: (taskId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const today = new Date();
@@ -98,7 +99,7 @@ export function HourGrid({
           return (
             <div key={day.toISOString()} className="flex-1 min-w-0 border-l border-surface-3 p-1 space-y-0.5">
               {allDayTasks.map((task) => (
-                <TaskChip key={task.id} task={task} isPast={day < today} />
+                <TaskChip key={task.id} task={task} isPast={day < today} onClick={() => onSelectTask(task.id)} />
               ))}
             </div>
           );
@@ -173,11 +174,11 @@ export function HourGrid({
                   const isDone = task.status === "done";
                   const isOverdue = !isDone && day < today;
                   return (
-                    <Link
+                    <button
                       key={task.id}
-                      href={`/tasks?task=${task.id}`}
+                      onClick={() => onSelectTask(task.id)}
                       className={cn(
-                        "absolute left-0.5 right-0.5 flex items-center gap-1 rounded px-1 text-[9px] truncate border-l-2",
+                        "absolute left-0.5 right-0.5 flex items-center gap-1 rounded px-1 text-[9px] truncate border-l-2 text-left",
                         isDone
                           ? "text-ink-ghost line-through border-surface-3 bg-surface-2/50"
                           : isOverdue
@@ -188,7 +189,7 @@ export function HourGrid({
                     >
                       <CheckSquare size={8} className="shrink-0" />
                       <span className="truncate">{task.title}</span>
-                    </Link>
+                    </button>
                   );
                 })}
               </div>
@@ -200,19 +201,19 @@ export function HourGrid({
   );
 }
 
-function TaskChip({ task, isPast }: { task: Task; isPast: boolean }) {
+function TaskChip({ task, isPast, onClick }: { task: Task; isPast: boolean; onClick: () => void }) {
   const isDone = task.status === "done";
   const isOverdue = !isDone && isPast;
   return (
-    <Link
-      href={`/tasks?task=${task.id}`}
+    <button
+      onClick={onClick}
       className={cn(
-        "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] truncate transition-colors",
+        "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] truncate transition-colors w-full text-left",
         isDone ? "text-ink-ghost line-through" : isOverdue ? "text-red-400 bg-red-400/8 hover:bg-red-400/15" : "text-blue-400 bg-blue-400/8 hover:bg-blue-400/15"
       )}
     >
       <CheckSquare size={9} className="shrink-0" />
       <span className="truncate">{task.title}</span>
-    </Link>
+    </button>
   );
 }

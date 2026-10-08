@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Users } from "lucide-react";
 import { cn, dueDateOnly } from "@/lib/utils";
@@ -8,6 +8,8 @@ import { CalendarToolbar } from "./calendar/CalendarToolbar";
 import { MonthView } from "./calendar/MonthView";
 import { HourGrid } from "./calendar/HourGrid";
 import { ScheduleView } from "./calendar/ScheduleView";
+import { TaskDetailPanel } from "./TaskDetailPanel";
+import type { TaskListItem } from "@/types/task";
 import {
   sameDay,
   formatTime,
@@ -52,10 +54,46 @@ export function CalendarGrid({
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskListItem | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [contentFilter, setContentFilter] = useState<"all" | "events" | "tasks">("all");
 
   const anchor = parseDateParam(anchorDate);
+
+  // abre o painel de detalhe da tarefa (TaskDetailPanel) ali mesmo no calendário —
+  // antes navegava pra /tasks?task=id; busca o registro completo porque o calendário
+  // só tem campos mínimos (id/título/status/prazo), o painel precisa de tudo
+  // (descrição, prioridade, partes, subtarefas, comentários etc.)
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    let cancelled = false;
+    fetch(`/api/tasks/${selectedTaskId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((t) => {
+        if (!cancelled && t?.id) setSelectedTask(t);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTaskId]);
+
+  function closeTask() {
+    setSelectedTaskId(null);
+    setSelectedTask(null);
+  }
+
+  // o grid vem do server component (page.tsx) com os dados já carregados — refresh
+  // busca de novo do servidor pra refletir a mudança sem precisar recarregar a página
+  function handleTaskUpdated(task: TaskListItem) {
+    setSelectedTask(task);
+    router.refresh();
+  }
+
+  function handleTaskDeleted() {
+    closeTask();
+    router.refresh();
+  }
 
   function toggleUser(userId: string) {
     setSelectedUserIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
@@ -143,6 +181,7 @@ export function CalendarGrid({
             tasksForDay={tasksForDay}
             selectedEventId={selected?.id ?? null}
             onSelectEvent={setSelected}
+            onSelectTask={setSelectedTaskId}
           />
         )}
 
@@ -153,6 +192,7 @@ export function CalendarGrid({
             tasksForDay={tasksForDay}
             selectedEventId={selected?.id ?? null}
             onSelectEvent={setSelected}
+            onSelectTask={setSelectedTaskId}
           />
         )}
 
@@ -163,6 +203,7 @@ export function CalendarGrid({
             tasksForDay={tasksForDay}
             selectedEventId={selected?.id ?? null}
             onSelectEvent={setSelected}
+            onSelectTask={setSelectedTaskId}
           />
         )}
       </div>
@@ -245,6 +286,8 @@ export function CalendarGrid({
           </div>
         </>
       )}
+
+      <TaskDetailPanel task={selectedTask} onClose={closeTask} onDeleted={handleTaskDeleted} onUpdated={handleTaskUpdated} users={users} />
     </div>
   );
 }

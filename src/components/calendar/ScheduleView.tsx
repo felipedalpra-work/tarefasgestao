@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Calendar, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sameDay, formatTime } from "./types";
@@ -12,12 +11,14 @@ export function ScheduleView({
   tasksForDay,
   selectedEventId,
   onSelectEvent,
+  onSelectTask,
 }: {
   days: Date[];
   eventsForDay: (day: Date) => CalendarEvent[];
   tasksForDay: (day: Date) => Task[];
   selectedEventId: string | null;
   onSelectEvent: (event: CalendarEvent) => void;
+  onSelectTask: (taskId: string) => void;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -88,10 +89,10 @@ export function ScheduleView({
                   const isDone = task.status === "done";
                   const isOverdue = !isDone && isPast;
                   return (
-                    <Link
+                    <button
                       key={task.id}
-                      href={`/tasks?task=${task.id}`}
-                      className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-surface-2 transition-colors"
+                      onClick={() => onSelectTask(task.id)}
+                      className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 hover:bg-surface-2 transition-colors text-left"
                     >
                       <CheckSquare size={13} className={cn("shrink-0", isDone ? "text-ink-ghost" : isOverdue ? "text-red-400" : "text-blue-400")} />
                       <span className={cn("text-xs truncate flex-1", isDone ? "text-ink-ghost line-through" : isOverdue ? "text-red-400" : "text-ink-soft")}>
@@ -99,7 +100,7 @@ export function ScheduleView({
                       </span>
                       {task.client && <span className="text-[10px] text-ink-faint shrink-0 truncate max-w-[100px]">{task.client}</span>}
                       {task.assignee?.name && <span className="text-[10px] text-ink-faint shrink-0">{task.assignee.name}</span>}
-                    </Link>
+                    </button>
                   );
                 })}
               </div>
