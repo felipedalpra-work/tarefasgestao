@@ -65,15 +65,16 @@ export const getRecaps = unstable_cache(
 );
 
 // Cached: eventos de calendário por mês
+// start/end definem o intervalo visível de QUALQUER visão do calendário (dia, semana,
+// grade do mês inteiro — incluindo os dias esmaecidos de mês vizinho que preenchem a
+// grade, ou a visão Programação) — quem decide o intervalo é src/components/CalendarGrid.tsx,
+// aqui só busca.
 export const getCalendarEvents = unstable_cache(
-  async (squadId: string, year: number, month: number) => {
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0, 23, 59, 59);
-    return forSquad(squadId).calendarEvent.findMany({
+  async (squadId: string, start: Date, end: Date) =>
+    forSquad(squadId).calendarEvent.findMany({
       where: { startAt: { gte: start, lte: end } },
       orderBy: { startAt: "asc" },
-    });
-  },
+    }),
   ["calendar-events"],
   { tags: ["calendar"], revalidate: 120 }
 );
