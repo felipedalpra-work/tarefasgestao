@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles, ChevronDown, Zap, Users, Crown, Presentation, BarChart2 } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Kanban, FileText, Settings, LogOut, CalendarDays, Building2, Search, ScrollText, CalendarRange, Menu, X, ShieldAlert, Sparkles, ChevronDown, Zap, Users, Crown, Presentation, BarChart2, Activity } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
@@ -36,6 +36,7 @@ const navGroups: NavGroup[] = [
     label: "Clientes",
     items: [
       { href: "/clientes", label: "Clientes", icon: Building2 },
+      { href: "/saude-carteira", label: "Saúde da Carteira", icon: Activity },
       { href: "/tratativas", label: "Tratativas", icon: ShieldAlert },
     ],
   },

@@ -5,6 +5,7 @@ import { Building2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClientTabs } from "./ClientTabs";
+import { PipefyClientBlock } from "@/components/PipefyClientBlock";
 import { DeleteClientButton } from "./DeleteClientButton";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -62,6 +63,8 @@ export default async function ClientePage({ params }: Props) {
           />
         )}
       </div>
+
+      <PipefyClientBlock client={client} />
 
       <ClientTabs
         events={events.map((e) => ({ ...e, startAt: new Date(e.startAt).toISOString(), endAt: new Date(e.endAt).toISOString() }))}
