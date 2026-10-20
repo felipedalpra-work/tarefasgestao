@@ -38,10 +38,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // calendar.events (leitura+escrita de eventos) substitui o calendar.readonly de
           // antes — o assistente de IA passou a poder criar/mudar reunião no Google
           // Calendar (2026-09-08), e é a mesma permissão que já cobria a leitura do sync.
+          // drive.readonly (2026-10) é pro Meet Recap conseguir ler o Google Doc completo
+          // de "Anotações do Gemini" linkado no e-mail (src/lib/gmail-sync.ts), em vez de só
+          // o resumo curto que já vem no corpo do e-mail.
           // Só vale pra quem RECONECTAR o Google depois desta mudança — contas já
           // vinculadas mantêm o escopo antigo até a pessoa passar por login de novo (mesma
           // pendência do gmail.compose, adicionado antes e ainda não coberto por ninguém).
-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.events",
+          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.readonly",
           access_type: "offline",
           prompt: "consent",
         },

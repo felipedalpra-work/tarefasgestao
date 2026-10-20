@@ -19,6 +19,47 @@ async function findMeetRecapLabelId(gmail: ReturnType<typeof google.gmail>): Pro
   return match?.id ?? null;
 }
 
+// E-mail de "Anotações do Gemini" do Google Meet traz um link pro Google Doc
+// completo (mesma lista de próximas etapas do resumo do e-mail, só que com
+// mais contexto por tópico e a transcrição da reunião) — é esse documento
+// que queremos extrair, não o resumo truncado que já vem pronto no corpo.
+// Só dá pra achar esse link na parte HTML (o text/plain só menciona "Documento
+// Anotações do Gemini" sem a URL), então procura ANTES de extractTextFromParts
+// tirar as tags.
+function findMeetingNotesDocId(parts: any[]): string | null {
+  for (const part of parts) {
+    if (part.mimeType === "text/html" && part.body?.data) {
+      const html = Buffer.from(part.body.data, "base64").toString("utf-8");
+      const match = html.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/);
+      if (match) return match[1];
+    }
+    if (part.parts) {
+      const found = findMeetingNotesDocId(part.parts);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// null = não conseguiu (sem permissão ainda — precisa reconectar o Google —,
+// documento apagado, etc.) — quem chama cai de volta pro resumo do e-mail,
+// nunca quebra a sincronização por causa disso.
+async function fetchGoogleDocText(
+  oauth2: InstanceType<typeof google.auth.OAuth2>,
+  documentId: string
+): Promise<{ text: string | null; insufficientScope: boolean }> {
+  try {
+    const drive = google.drive({ version: "v3", auth: oauth2 });
+    const res = await drive.files.export({ fileId: documentId, mimeType: "text/plain" });
+    const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
+    return { text: text.trim() || null, insufficientScope: false };
+  } catch (err) {
+    const insufficientScope =
+      err instanceof Error && /insufficient.*scope|insufficient permission/i.test(err.message);
+    return { text: null, insufficientScope };
+  }
+}
+
 function extractTextFromParts(parts: any[]): string {
   let text = "";
   for (const part of parts) {
@@ -113,6 +154,26 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
         body = payload.mimeType === "text/html"
           ? raw.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim()
           : raw;
+      }
+
+      // se o e-mail linkar o Google Doc completo de "Anotações do Gemini", usa ele
+      // no lugar do resumo curto acima — é um superconjunto (mesma lista de próximas
+      // etapas + mais contexto + transcrição). Falha (escopo ainda não concedido,
+      // doc apagado) cai de volta pro resumo, sem quebrar a sincronização.
+      if (payload?.parts) {
+        const docId = findMeetingNotesDocId(payload.parts);
+        if (docId) {
+          const { text, insufficientScope } = await fetchGoogleDocText(oauth2, docId);
+          if (text) {
+            body = text.slice(0, 20000);
+          } else if (insufficientScope) {
+            await log("gmail-sync", "Sem permissão pra ler o Google Doc da ata completa — usando só o resumo do e-mail", {
+              level: "error",
+              detail: "Precisa reconectar o Google (Configurações → Perfil) pra conceder o novo escopo de leitura do Drive",
+              squadId: user.squadId,
+            });
+          }
+        }
       }
 
       await db.meetRecap.create({
