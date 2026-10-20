@@ -4,7 +4,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // trocar — já aprendemos com o incidente de 2026-08-20 (Groq removeu
 // llama-3.3-70b-versatile do catálogo e derrubou tudo de uma vez porque o
 // nome estava duplicado em dois arquivos).
-export const GEMINI_MODEL = "gemini-2.0-flash";
+// gemini-2.0-flash foi aposentado pela Google pouco depois desta integração
+// entrar no ar (erro 404 "no longer available", recomendando gemini-3.8-flash
+// no lugar) — exatamente o tipo de coisa que este comentário já previa.
+export const GEMINI_MODEL = "gemini-3.8-flash";
 
 function buildModel(apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
