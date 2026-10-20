@@ -373,6 +373,12 @@ model MeetRecap {
   processedAt    DateTime?
   suggestedTasks String?
   suggestions    RecapSuggestion[]
+  // resultado (somente leitura, não vira RecapSuggestion) do OUTRO modelo de IA disponível
+  // pro squad, pra comparar qual extrai tarefas mais fiéis — ex.: squad usa Groq como
+  // principal, mas tem Gemini conectado: altProvider = "gemini". Null quando só há um
+  // provedor disponível (sem o quê comparar).
+  altProvider        String?
+  altSuggestedTasks  String?
   createdAt      DateTime          @default(now())
 
   @@unique([squadId, gmailId])

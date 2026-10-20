@@ -43,3 +43,26 @@ export async function getRecapAiConfig(squadId: string): Promise<RecapAiConfig> 
     return { provider: "groq" };
   }
 }
+
+// O "outro" modelo, só pra comparação lado a lado (Meet Recap) — não participa da
+// extração que vira RecapSuggestion de verdade. Groq é sempre a opção "outra" quando o
+// principal é Gemini (chave global do squad, sempre existe). Quando o principal é Groq,
+// só existe "outro" se o designado tiver uma chave Gemini conectada (não importa a
+// preferência dele — preferência só decide o principal).
+export async function getAltRecapAiConfig(squadId: string, primary: RecapAiConfig): Promise<RecapAiConfig | null> {
+  if (primary.provider === "gemini") return { provider: "groq" };
+
+  const userId = await getMeetRecapGmailUserId(squadId);
+  if (!userId) return null;
+
+  const keyRow = await prisma.setting.findUnique({
+    where: { squadId_key: { squadId, key: geminiKeySettingKey(userId) } },
+  });
+  if (!keyRow) return null;
+
+  try {
+    return { provider: "gemini", apiKey: decryptSecret(keyRow.value) };
+  } catch {
+    return null;
+  }
+}

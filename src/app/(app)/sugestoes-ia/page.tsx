@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle, Pencil, Check, Trash2, RotateCcw } from "lucide-react";
+import { Sparkles, Plus, XCircle, ExternalLink, Workflow, AlertTriangle, Pencil, Check, Trash2, RotateCcw, GitCompare } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "@/components/Toaster";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AssigneePicker } from "@/components/AssigneePicker";
-import { CLIENT_CHOICE, type AssigneeInput } from "@/lib/task-assignees";
+import { CLIENT_CHOICE, isExternalChoice, externalNameFromId, type AssigneeInput } from "@/lib/task-assignees";
 
 type SuggestionStatus = "pending" | "accepted" | "edited" | "rejected" | "duplicate";
 
@@ -24,13 +24,25 @@ type Suggestion = {
   duplicateNote?: string | null;
 };
 
+type AltTask = {
+  title?: string;
+  description?: string;
+  assignee?: string;
+  priority?: string;
+  dueDate?: string | null;
+};
+
 type Recap = {
   id: string;
   subject: string;
   createdAt: string;
   client?: string | null;
   suggestions: Suggestion[];
+  altProvider?: string | null;
+  altSuggestedTasks?: string | null;
 };
+
+const PROVIDER_LABEL: Record<string, string> = { groq: "Groq", gemini: "Gemini" };
 
 type ExternalSuggestion = {
   id: string;
@@ -76,6 +88,17 @@ export default function SugestoesIaPage() {
   const [overrides, setOverrides] = useState<Record<string, EditableFields>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditableFields | null>(null);
+  const [compareOpenRecapId, setCompareOpenRecapId] = useState<string | null>(null);
+
+  function parseAltTasks(recap: Recap): AltTask[] {
+    if (!recap.altSuggestedTasks) return [];
+    try {
+      const parsed = JSON.parse(recap.altSuggestedTasks);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
 
   async function load() {
     const [recapsRes, usersRes, externalRes] = await Promise.all([
@@ -166,6 +189,7 @@ export default function SugestoesIaPage() {
       return editable.assignees
         .map((a) => {
           if (a.id === CLIENT_CHOICE) return "Cliente";
+          if (isExternalChoice(a.id)) return externalNameFromId(a.id);
           const u = users.find((x) => x.id === a.id);
           return u?.name || u?.email || "—";
         })
@@ -369,15 +393,29 @@ export default function SugestoesIaPage() {
               <div key={suggestion.id} className="bg-surface border border-surface-3 rounded-xl p-4">
                 <div className="flex items-center justify-between gap-3 mb-2.5">
                   {row.kind === "recap" ? (
-                    <Link
-                      href={`/recaps?recap=${row.recap.id}`}
-                      className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-o2-green transition-colors truncate"
-                    >
-                      <ExternalLink size={11} className="shrink-0" />
-                      <span className="truncate">{row.recap.subject}</span>
-                      <span className="shrink-0">· {format(new Date(row.recap.createdAt), "dd 'de' MMM", { locale: ptBR })}</span>
-                      {row.recap.client && <span className="shrink-0">· {row.recap.client}</span>}
-                    </Link>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link
+                        href={`/recaps?recap=${row.recap.id}`}
+                        className="flex items-center gap-1.5 text-xs text-ink-faint hover:text-o2-green transition-colors truncate"
+                      >
+                        <ExternalLink size={11} className="shrink-0" />
+                        <span className="truncate">{row.recap.subject}</span>
+                        <span className="shrink-0">· {format(new Date(row.recap.createdAt), "dd 'de' MMM", { locale: ptBR })}</span>
+                        {row.recap.client && <span className="shrink-0">· {row.recap.client}</span>}
+                      </Link>
+                      {row.recap.altProvider && (
+                        <button
+                          onClick={() =>
+                            setCompareOpenRecapId((prev) => (prev === row.recap.id ? null : row.recap.id))
+                          }
+                          className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 bg-surface-3 text-ink-faint hover:text-o2-green transition-colors"
+                          title={`Comparar com o que o ${PROVIDER_LABEL[row.recap.altProvider] ?? row.recap.altProvider} sugeriu pra essa mesma reunião`}
+                        >
+                          <GitCompare size={10} />
+                          {PROVIDER_LABEL[row.recap.altProvider] ?? row.recap.altProvider}
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <span className="flex items-center gap-1.5 text-xs text-ink-faint truncate">
                       {row.suggestion.source === "assistente" ? (
@@ -391,6 +429,32 @@ export default function SugestoesIaPage() {
                     </span>
                   )}
                 </div>
+
+                {row.kind === "recap" && compareOpenRecapId === row.recap.id && row.recap.altProvider && (
+                  <div className="mb-3 rounded-lg border border-surface-3 bg-surface-2 p-3">
+                    <p className="text-[11px] font-semibold text-ink-mid mb-2 flex items-center gap-1.5">
+                      <GitCompare size={11} />
+                      O que o {PROVIDER_LABEL[row.recap.altProvider] ?? row.recap.altProvider} sugeriu pra essa mesma reunião
+                    </p>
+                    {(() => {
+                      const altTasks = parseAltTasks(row.recap);
+                      if (altTasks.length === 0) {
+                        return <p className="text-xs text-ink-ghost">Nenhuma tarefa identificada por esse modelo.</p>;
+                      }
+                      return (
+                        <ul className="space-y-1.5">
+                          {altTasks.map((t, i) => (
+                            <li key={i} className="text-xs text-ink-dim">
+                              <span className="text-ink">{t.title || "(sem título)"}</span>
+                              {t.assignee && <span className="text-ink-faint"> · {t.assignee}</span>}
+                              {t.dueDate && <span className="text-ink-faint"> · {format(new Date(t.dueDate), "dd/MM")}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {isEditing && draft ? (
                   <div className="space-y-2.5">

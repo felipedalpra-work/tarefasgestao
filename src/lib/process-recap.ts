@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import { getGroq, GROQ_MODEL } from "./groq";
 import { generateJsonWithGemini } from "./gemini";
-import { getRecapAiConfig } from "./ai-provider";
+import { getRecapAiConfig, getAltRecapAiConfig, type RecapAiConfig } from "./ai-provider";
 import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
 
@@ -47,6 +47,38 @@ async function buildFewShotExamples(db: SquadPrisma, squadId: string): Promise<s
     }
   }
   return text;
+}
+
+// Chama o provedor de IA com o prompt e devolve as tarefas já parseadas — usado tanto
+// pro provedor principal (vira RecapSuggestion de verdade) quanto pro "outro" provedor
+// disponível (só comparação, ver getAltRecapAiConfig).
+async function extractTasksWithProvider(
+  aiConfig: RecapAiConfig,
+  prompt: string
+): Promise<{ client: string | null; tasks: SuggestedTask[] }> {
+  let raw: string;
+  if (aiConfig.provider === "gemini") {
+    raw = (await generateJsonWithGemini(aiConfig.apiKey, prompt)) || "{}";
+  } else {
+    const completion = await getGroq().chat.completions.create({
+      model: GROQ_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 2048,
+    });
+    raw = completion.choices[0]?.message?.content || "{}";
+  }
+  console.log(`[${aiConfig.provider}] resposta bruta:`, raw.slice(0, 800));
+  const text = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    const result: { client?: string; tasks?: SuggestedTask[] } = JSON.parse(jsonMatch[0]);
+    return { client: result.client || null, tasks: result.tasks || [] };
+  }
+  const arrayMatch = text.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) throw new Error(`JSON não encontrado na resposta do ${aiConfig.provider}`);
+  return { client: null, tasks: JSON.parse(arrayMatch[0]) };
 }
 
 // Marca superseded as sugestões ainda pendentes de uma leva anterior (preserva aceitas/editadas/rejeitadas como histórico)
@@ -112,36 +144,28 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
   const aiConfig = await getRecapAiConfig(recap.squadId);
 
   try {
-    let raw: string;
-    if (aiConfig.provider === "gemini") {
-      raw = (await generateJsonWithGemini(aiConfig.apiKey, prompt)) || "{}";
-    } else {
-      const completion = await getGroq().chat.completions.create({
-        model: GROQ_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.1,
-        max_tokens: 2048,
-      });
-      raw = completion.choices[0]?.message?.content || "{}";
-    }
-    console.log(`[${aiConfig.provider}] resposta bruta:`, raw.slice(0, 800));
-    const text = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
-    let tasks: SuggestedTask[] = [];
-    let client: string | null = null;
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const result: { client?: string; tasks?: SuggestedTask[] } = JSON.parse(jsonMatch[0]);
-      tasks = result.tasks || [];
-      client = result.client || null;
-    } else {
-      const arrayMatch = text.match(/\[[\s\S]*\]/);
-      if (!arrayMatch) throw new Error("JSON não encontrado na resposta do Groq");
-      tasks = JSON.parse(arrayMatch[0]);
-    }
+    const { client, tasks } = await extractTasksWithProvider(aiConfig, prompt);
 
     await supersedePendingSuggestions(db, recapId);
+
+    // melhor-esforço: roda o OUTRO modelo disponível (se houver) com o mesmo prompt, só
+    // pra comparação lado a lado em /sugestoes-ia — nunca vira RecapSuggestion, nunca
+    // impede o processamento principal de concluir se falhar (quota, chave inválida etc.)
+    let altProvider: string | null = null;
+    let altSuggestedTasks: string | null = null;
+    const altConfig = await getAltRecapAiConfig(recap.squadId, aiConfig);
+    if (altConfig) {
+      try {
+        const alt = await extractTasksWithProvider(altConfig, prompt);
+        altProvider = altConfig.provider;
+        altSuggestedTasks = JSON.stringify(alt.tasks);
+      } catch (altErr) {
+        await log("ia-recap", `Comparação com o outro modelo (${altConfig.provider}) falhou — ignorado`, {
+          detail: String(altErr),
+          squadId: recap.squadId,
+        });
+      }
+    }
 
     await db.meetRecap.update({
       where: { id: recapId },
@@ -149,6 +173,8 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
         suggestedTasks: JSON.stringify(tasks),
         processedAt: new Date(),
         client,
+        altProvider,
+        altSuggestedTasks,
       },
     });
 
