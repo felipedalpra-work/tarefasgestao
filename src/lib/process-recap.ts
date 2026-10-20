@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import { getGroq, GROQ_MODEL } from "./groq";
+import { generateJsonWithGemini } from "./gemini";
+import { getRecapAiConfig } from "./ai-provider";
 import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
 
@@ -107,16 +109,22 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
   ]
 }`;
 
-  try {
-    const completion = await getGroq().chat.completions.create({
-      model: GROQ_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-      max_tokens: 2048,
-    });
+  const aiConfig = await getRecapAiConfig(recap.squadId);
 
-    const raw = completion.choices[0]?.message?.content || "{}";
-    console.log("[groq] resposta bruta:", raw.slice(0, 800));
+  try {
+    let raw: string;
+    if (aiConfig.provider === "gemini") {
+      raw = (await generateJsonWithGemini(aiConfig.apiKey, prompt)) || "{}";
+    } else {
+      const completion = await getGroq().chat.completions.create({
+        model: GROQ_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+        max_tokens: 2048,
+      });
+      raw = completion.choices[0]?.message?.content || "{}";
+    }
+    console.log(`[${aiConfig.provider}] resposta bruta:`, raw.slice(0, 800));
     const text = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
     let tasks: SuggestedTask[] = [];
@@ -165,15 +173,21 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
     }
 
     console.log(`[process-recap] client="${client}", ${validTasks.length} sugestão(ões)`);
-    await log("ia-recap", `Meet Recap processado pela IA — ${validTasks.length} sugestão(ões) de tarefa identificada(s)`, {
+    await log("ia-recap", `Meet Recap processado pela IA (${aiConfig.provider}) — ${validTasks.length} sugestão(ões) de tarefa identificada(s)`, {
       detail: client ? `Cliente: ${client}` : undefined,
+      squadId: recap.squadId,
     });
 
     return validTasks.length;
   } catch (err) {
-    await log("ia-recap", "Erro ao processar Meet Recap com IA", {
+    // Falha do Gemini (chave inválida, quota) NÃO cai pro Groq silenciosamente — loga
+    // e esse ciclo falha, igual já acontecia quando a própria Groq falhava. Quem
+    // conectou a chave precisa saber que ela parou de funcionar, não ter o app
+    // mascarando isso trocando de provedor sem avisar.
+    await log("ia-recap", `Erro ao processar Meet Recap com IA (${aiConfig.provider})`, {
       level: "error",
       detail: String(err),
+      squadId: recap.squadId,
     });
     console.error("[process-recap] erro:", err);
     return 0;

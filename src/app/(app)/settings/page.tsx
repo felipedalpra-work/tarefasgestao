@@ -2,7 +2,7 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck, KeyRound, Trash2 } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +62,12 @@ export default function SettingsPage() {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Gemini pessoal (self-service) state
+  const [geminiConnected, setGeminiConnected] = useState(false);
+  const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [geminiSaving, setGeminiSaving] = useState(false);
+  const [geminiError, setGeminiError] = useState<string | null>(null);
+
   // Slack state
   const [users, setUsers] = useState<SquadUser[]>([]);
   const [slackToken, setSlackToken] = useState("");
@@ -97,6 +103,10 @@ export default function SettingsPage() {
     fetch("/api/settings/google-status")
       .then((r) => r.json())
       .then((d) => { setGoogleConnected(d.connected); setLoading(false); });
+
+    fetch("/api/settings/gemini-key")
+      .then((r) => r.json())
+      .then((d) => setGeminiConnected(d.connected));
 
     fetch("/api/settings/meet-recap")
       .then((r) => r.json())
@@ -143,6 +153,38 @@ export default function SettingsPage() {
 
   async function connectGoogle() {
     await signIn("google", { callbackUrl: "/settings" });
+  }
+
+  async function saveGeminiKey() {
+    if (!geminiKeyInput.trim()) return;
+    setGeminiSaving(true);
+    setGeminiError(null);
+    const res = await fetch("/api/settings/gemini-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: geminiKeyInput.trim() }),
+    });
+    setGeminiSaving(false);
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setGeminiConnected(true);
+      setGeminiKeyInput("");
+      toast("Gemini conectado", "success");
+    } else {
+      setGeminiError(d.error || "Erro ao conectar");
+    }
+  }
+
+  async function disconnectGemini() {
+    setGeminiSaving(true);
+    const res = await fetch("/api/settings/gemini-key", { method: "DELETE" });
+    setGeminiSaving(false);
+    if (res.ok) {
+      setGeminiConnected(false);
+      toast("Gemini desconectado", "success");
+    } else {
+      toast("Erro ao desconectar", "error");
+    }
   }
 
   async function regenerateN8nSecret() {
@@ -412,6 +454,55 @@ export default function SettingsPage() {
                 <Globe size={16} />
                 Conectar conta Google
               </button>
+            )}
+          </div>
+
+          {/* Gemini pessoal (self-service) */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">IA pessoal (Gemini)</h2>
+            <p className="text-xs text-ink-mid mb-6">
+              Conecte sua própria chave do Google Gemini. Hoje isso só entra em uso na extração de tarefa dos
+              Meet Recaps — e só se você for a pessoa designada pra sincronizar Meet Recap do squad (aba Squad
+              mais abaixo). Ainda não afeta o Assistente de IA.
+            </p>
+
+            {geminiConnected ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-o2-green bg-o2-green/10 px-4 py-3 rounded-xl">
+                  <CheckCircle2 size={15} />
+                  Gemini conectado
+                </div>
+                <button
+                  onClick={disconnectGemini}
+                  disabled={geminiSaving}
+                  className="flex items-center gap-2 text-xs text-ink-faint hover:text-red-400 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={13} />
+                  Desconectar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound size={14} className="text-ink-faint shrink-0" />
+                  <input
+                    type="password"
+                    value={geminiKeyInput}
+                    onChange={(e) => { setGeminiKeyInput(e.target.value); setGeminiError(null); }}
+                    placeholder="Cole sua chave do Google AI Studio"
+                    className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50"
+                  />
+                </div>
+                {geminiError && <p className="text-xs text-red-400">{geminiError}</p>}
+                <button
+                  onClick={saveGeminiKey}
+                  disabled={geminiSaving || !geminiKeyInput.trim()}
+                  className="w-full flex items-center justify-center gap-2 bg-o2-green text-bg font-bold py-2.5 px-4 rounded-xl hover:bg-o2-green-bright transition-all text-sm disabled:opacity-50"
+                >
+                  {geminiSaving ? <RefreshCw size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                  Conectar Gemini
+                </button>
+              </div>
             )}
           </div>
         </div>
