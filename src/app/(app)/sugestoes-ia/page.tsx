@@ -9,7 +9,7 @@ import { toast } from "@/components/Toaster";
 import { DeadlineConfirmModal } from "@/components/DeadlineConfirmModal";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { AssigneePicker } from "@/components/AssigneePicker";
-import { CLIENT_CHOICE, isExternalChoice, externalNameFromId, type AssigneeInput } from "@/lib/task-assignees";
+import { CLIENT_CHOICE, type AssigneeInput } from "@/lib/task-assignees";
 
 type SuggestionStatus = "pending" | "accepted" | "edited" | "rejected" | "duplicate";
 
@@ -189,7 +189,6 @@ export default function SugestoesIaPage() {
       return editable.assignees
         .map((a) => {
           if (a.id === CLIENT_CHOICE) return "Cliente";
-          if (isExternalChoice(a.id)) return externalNameFromId(a.id);
           const u = users.find((x) => x.id === a.id);
           return u?.name || u?.email || "—";
         })
