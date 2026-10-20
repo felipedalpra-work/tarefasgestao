@@ -7,6 +7,7 @@ import { advanceRecurringTasks } from "@/lib/task-recurrence";
 import { sendMeetingBriefings } from "@/lib/meeting-briefing";
 import { sendWeeklyDigest } from "@/lib/weekly-digest";
 import { sendDailyBackups } from "@/lib/backup-email";
+import { syncAllSquadsPipefy } from "@/lib/pipefy-sync";
 import { log } from "@/lib/logger";
 
 type Params = { params: Promise<{ job: string }> };
@@ -39,6 +40,9 @@ const JOBS: Record<string, () => Promise<void>> = {
   // src/lib/backup-email.ts. Existe por causa do episódio de set/2026 (banco
   // bloqueado por quota, backup mais recente disponível com 10 dias).
   "backup-email": sendDailyBackups,
+  // Temperatura/Próximos Passos do Pipefy (Squad Gustavo) -> CalendarEvent, pra
+  // não divergir do que a Revisão Semanal mostra — ver src/lib/pipefy-sync.ts.
+  "pipefy-sync": syncAllSquadsPipefy,
 };
 
 // Endpoint chamado por um agendador externo (GitHub Actions), já que node-cron
