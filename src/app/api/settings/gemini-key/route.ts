@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encryptSecret } from "@/lib/credential-crypto";
-import { geminiKeySettingKey } from "@/lib/ai-provider";
+import { geminiKeySettingKey, geminiPreferenceSettingKey } from "@/lib/ai-provider";
 import { testGeminiKey } from "@/lib/gemini";
 
 // Self-service, por usuário — sem gate de admin, mesma régua de
@@ -14,10 +14,29 @@ export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const row = await prisma.setting.findUnique({
-    where: { squadId_key: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id) } },
+  const [row, prefRow] = await Promise.all([
+    prisma.setting.findUnique({ where: { squadId_key: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id) } } }),
+    prisma.setting.findUnique({ where: { squadId_key: { squadId: session.user.squadId, key: geminiPreferenceSettingKey(session.user.id) } } }),
+  ]);
+  return NextResponse.json({ connected: !!row, provider: prefRow?.value === "groq" ? "groq" : "gemini" });
+}
+
+// Troca a preferência (Groq ↔ Gemini) sem desconectar a chave — ex: pra
+// comparar qual dá resultado melhor, ou se o Gemini der problema
+// temporariamente, voltar pro Groq sem perder a chave já salva.
+export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const provider = body.provider === "groq" ? "groq" : "gemini";
+
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId: session.user.squadId, key: geminiPreferenceSettingKey(session.user.id) } },
+    create: { squadId: session.user.squadId, key: geminiPreferenceSettingKey(session.user.id), value: provider },
+    update: { value: provider },
   });
-  return NextResponse.json({ connected: !!row });
+  return NextResponse.json({ provider });
 }
 
 export async function POST(req: NextRequest) {
@@ -61,7 +80,7 @@ export async function DELETE() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await prisma.setting.deleteMany({
-    where: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id) },
+    where: { squadId: session.user.squadId, key: { in: [geminiKeySettingKey(session.user.id), geminiPreferenceSettingKey(session.user.id)] } },
   });
   return NextResponse.json({ connected: false });
 }

@@ -67,6 +67,8 @@ export default function SettingsPage() {
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [geminiSaving, setGeminiSaving] = useState(false);
   const [geminiError, setGeminiError] = useState<string | null>(null);
+  const [aiProvider, setAiProvider] = useState<"gemini" | "groq">("gemini");
+  const [aiProviderSaving, setAiProviderSaving] = useState(false);
 
   // Slack state
   const [users, setUsers] = useState<SquadUser[]>([]);
@@ -106,7 +108,7 @@ export default function SettingsPage() {
 
     fetch("/api/settings/gemini-key")
       .then((r) => r.json())
-      .then((d) => setGeminiConnected(d.connected));
+      .then((d) => { setGeminiConnected(d.connected); setAiProvider(d.provider === "groq" ? "groq" : "gemini"); });
 
     fetch("/api/settings/meet-recap")
       .then((r) => r.json())
@@ -184,6 +186,25 @@ export default function SettingsPage() {
       toast("Gemini desconectado", "success");
     } else {
       toast("Erro ao desconectar", "error");
+    }
+  }
+
+  async function changeAiProvider(provider: "gemini" | "groq") {
+    if (provider === aiProvider) return;
+    setAiProviderSaving(true);
+    const prev = aiProvider;
+    setAiProvider(provider);
+    const res = await fetch("/api/settings/gemini-key", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider }),
+    });
+    setAiProviderSaving(false);
+    if (res.ok) {
+      toast(provider === "gemini" ? "Usando Gemini" : "Usando Groq", "success");
+    } else {
+      setAiProvider(prev);
+      toast("Erro ao trocar", "error");
     }
   }
 
@@ -472,6 +493,38 @@ export default function SettingsPage() {
                   <CheckCircle2 size={15} />
                   Gemini conectado
                 </div>
+
+                <div>
+                  <label className="block text-xs text-ink-mid mb-1.5">Provedor ativo</label>
+                  <div className="flex items-center bg-surface-2 border border-border rounded-xl p-1 w-fit">
+                    <button
+                      onClick={() => changeAiProvider("groq")}
+                      disabled={aiProviderSaving}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50",
+                        aiProvider === "groq" ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+                      )}
+                    >
+                      Groq
+                    </button>
+                    <button
+                      onClick={() => changeAiProvider("gemini")}
+                      disabled={aiProviderSaving}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50",
+                        aiProvider === "gemini" ? "bg-o2-green/10 text-o2-green" : "text-ink-mid hover:text-ink"
+                      )}
+                    >
+                      Gemini
+                    </button>
+                  </div>
+                  <p className="text-xs text-ink-faint mt-1.5">
+                    {aiProvider === "gemini"
+                      ? "Meet Recap usa sua chave do Gemini."
+                      : "Meet Recap usa o Groq do squad (sua chave do Gemini fica salva, só não é usada)."}
+                  </p>
+                </div>
+
                 <button
                   onClick={disconnectGemini}
                   disabled={geminiSaving}
