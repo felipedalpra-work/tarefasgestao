@@ -35,11 +35,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Chave inválida ou Gemini recusou a chamada: ${test.error}` }, { status: 400 });
   }
 
-  await prisma.setting.upsert({
-    where: { squadId_key: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id) } },
-    create: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id), value: encryptSecret(apiKey) },
-    update: { value: encryptSecret(apiKey) },
-  });
+  // separado do teste de conexão de propósito: se isso falhar (ex:
+  // CREDENTIALS_ENCRYPTION_KEY ausente no ambiente), o erro precisa dizer
+  // claramente que a chave É válida e o problema é ao salvar — não misturar
+  // com "chave inválida" acima, que é um problema completamente diferente
+  try {
+    const encrypted = encryptSecret(apiKey);
+    await prisma.setting.upsert({
+      where: { squadId_key: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id) } },
+      create: { squadId: session.user.squadId, key: geminiKeySettingKey(session.user.id), value: encrypted },
+      update: { value: encrypted },
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Chave do Gemini é válida, mas falhou ao salvar no servidor: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({ connected: true });
 }
