@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
+import { pushCalendarEventToPipefy } from "@/lib/pipefy-sync";
 
 type Params = { params: Promise<{ id: string }> };
 
-const TEMPERATURE_VALUES = ["otimo", "bom", "atencao", "critico"];
+// 3 níveis, de propósito iguais às 3 cores do Pipefy (🟢🟡🔴) — ver pushCalendarEventToPipefy
+const TEMPERATURE_VALUES = ["bom", "atencao", "critico"];
 const MEETING_TYPE_VALUES = ["semanal", "comite", "kickoff", "setup", "interno"];
 
 // Atualiza a Temperatura (clima) e/ou o tipo de uma reunião já sincronizada
@@ -36,6 +38,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
 
   const event = await db.calendarEvent.update({ where: { id }, data });
+
+  // best-effort, nunca derruba essa resposta — ver pushCalendarEventToPipefy
+  if (body.temperature !== undefined || body.nextSteps !== undefined) {
+    await pushCalendarEventToPipefy(session.user.squadId, event.pipefyRecordId, {
+      temperature: event.temperature,
+      nextSteps: event.nextSteps,
+    });
+  }
 
   revalidateTag("calendar", "max");
 

@@ -1,4 +1,5 @@
-// Integração somente-leitura com o Pipefy (Squad Gustavo).
+// Integração com o Pipefy (Squad Gustavo) — leitura (painel /saude-carteira,
+// sync pro CalendarEvent) e escrita (plataforma → Pipefy, ver pushFieldsToPipefy).
 // Roda SÓ no servidor (usa PIPEFY_TOKEN). A API do Pipefy é bloqueada na rede
 // de automação da O2, mas o backend na Vercel alcança normalmente.
 import { unstable_cache } from "next/cache";
@@ -25,6 +26,40 @@ async function gql<T>(query: string): Promise<T> {
   const json = await res.json();
   if (json.errors) throw new Error("Pipefy GraphQL: " + JSON.stringify(json.errors));
   return json.data as T;
+}
+
+// GraphQL permite os mesmos escapes do JSON (aspas, barra invertida, quebra de linha
+// como \n) — Próximos Passos é texto livre digitado por gente, então precisa escapar
+// antes de interpolar na query (a API não tem um jeito simples de passar variáveis
+// aqui, só string literal).
+function gqlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+// Escreve Temperatura e/ou Próximos Passos de volta no card/registro do Pipefy — usado
+// quando alguém preenche esses campos pela plataforma (PATCH /api/calendar/[id]) em vez
+// de preencher direto no Pipefy. "fieldId" é o id interno do campo (os mesmos usados pra
+// ler em buildMeeting: "temperatura", "pr_ximos_passos"). Lança em caso de erro; quem
+// chama decide se trata como best-effort (ver src/lib/pipefy-sync.ts).
+export async function pushFieldsToPipefy(
+  tableRecordId: string,
+  fields: { temperatura?: string; proximosPassos?: string }
+): Promise<void> {
+  const values: string[] = [];
+  if (fields.temperatura) values.push(`{ fieldId: "temperatura", value: ${gqlString(fields.temperatura)} }`);
+  if (fields.proximosPassos !== undefined) {
+    values.push(`{ fieldId: "pr_ximos_passos", value: ${gqlString(fields.proximosPassos)} }`);
+  }
+  if (values.length === 0) return;
+
+  const data = await gql<{
+    updateFieldsValues: { success: boolean; userErrors: { field: string; message: string }[] };
+  }>(
+    `mutation { updateFieldsValues(input: { nodeId: ${gqlString(tableRecordId)}, values: [${values.join(", ")}] }) { success userErrors { field message } } }`
+  );
+  if (!data.updateFieldsValues.success) {
+    throw new Error("Pipefy updateFieldsValues falhou: " + JSON.stringify(data.updateFieldsValues.userErrors));
+  }
 }
 
 type CardNode = { assignees: { name: string }[]; fields: { name: string; value: string }[] };

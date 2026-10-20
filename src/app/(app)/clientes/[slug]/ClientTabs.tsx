@@ -69,9 +69,9 @@ const MEETING_TYPE_INFO: Record<string, { label: string; className: string }> = 
   interno: { label: "Interno", className: "bg-surface-3 text-ink-faint" },
 };
 
+// 3 níveis, de propósito iguais às 3 cores do Pipefy (🟢🟡🔴) — ver pushCalendarEventToPipefy
 const TEMPERATURE_INFO: Record<string, { className: string }> = {
-  otimo: { className: "bg-o2-green/10 text-o2-green" },
-  bom: { className: "bg-blue-400/10 text-blue-400" },
+  bom: { className: "bg-o2-green/10 text-o2-green" },
   atencao: { className: "bg-yellow-400/10 text-yellow-400" },
   critico: { className: "bg-red-400/10 text-red-400" },
 };
@@ -277,7 +277,6 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                         )}
                       >
                         <option value="" className="bg-panel text-ink">— não definida —</option>
-                        <option value="otimo" className="bg-panel text-ink">Ótimo</option>
                         <option value="bom" className="bg-panel text-ink">Bom</option>
                         <option value="atencao" className="bg-panel text-ink">Atenção</option>
                         <option value="critico" className="bg-panel text-ink">Crítico</option>

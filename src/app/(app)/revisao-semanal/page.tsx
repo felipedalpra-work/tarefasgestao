@@ -100,9 +100,9 @@ const MEETING_TYPE_LABELS: Record<string, string> = {
   interno: "Interno",
 };
 
+// 3 níveis, de propósito iguais às 3 cores do Pipefy (🟢🟡🔴) — ver pushCalendarEventToPipefy
 const TEMPERATURE_META: Record<string, { label: string; className: string }> = {
-  otimo: { label: "Ótimo", className: "text-o2-green bg-o2-green/10" },
-  bom: { label: "Bom", className: "text-blue-400 bg-blue-400/10" },
+  bom: { label: "Bom", className: "text-o2-green bg-o2-green/10" },
   atencao: { label: "Atenção", className: "text-yellow-400 bg-yellow-400/10" },
   critico: { label: "Crítico", className: "text-red-400 bg-red-400/10" },
 };
