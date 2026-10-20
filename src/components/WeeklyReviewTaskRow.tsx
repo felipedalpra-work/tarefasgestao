@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronDown, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, Sparkles, Pencil, Trash2 } from "lucide-react";
 import { cn, dueDateOnly, isTaskOverdue, statusLabel } from "@/lib/utils";
 import { UserAvatar } from "./UserAvatar";
 import { AssigneePicker } from "./AssigneePicker";
@@ -95,14 +95,7 @@ export function WeeklyReviewTaskRow({
           </span>
         )}
 
-        <button
-          type="button"
-          onClick={() => onOpen(task)}
-          className="text-sm text-ink font-medium flex-1 min-w-[10rem] text-left hover:text-o2-green hover:underline transition-colors"
-          title="Abrir detalhes completos da tarefa"
-        >
-          {task.title}
-        </button>
+        <p className="text-sm text-ink font-medium flex-1 min-w-[10rem]">{task.title}</p>
 
         <select
           value={task.status}
@@ -145,6 +138,15 @@ export function WeeklyReviewTaskRow({
           ) : null}
           <span className="truncate">{responsibles.length > 0 ? describeResponsibles(responsibles) : "Sem responsável"}</span>
           <ChevronDown size={11} className={cn("shrink-0 transition-transform", assigneeOpen && "rotate-180")} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onOpen(task)}
+          className="shrink-0 text-ink-faint hover:text-o2-green transition-colors p-1"
+          title="Abrir detalhes completos da tarefa"
+        >
+          <Pencil size={13} />
         </button>
 
         <button
