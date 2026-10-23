@@ -167,10 +167,15 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
       // se o e-mail linkar o Google Doc completo de "Anotações do Gemini", usa ele
       // no lugar do resumo curto acima — é um superconjunto (mesma lista de próximas
       // etapas + mais contexto + transcrição). Qualquer falha cai de volta pro resumo,
-      // sem quebrar a sincronização — mas sempre loga, pra não falhar calado.
+      // sem quebrar a sincronização — mas sempre loga, pra não falhar calado. O link em
+      // si (diferente do texto) não depende do escopo do Drive — é só regex na parte
+      // HTML — então grava mesmo que a leitura do conteúdo falhe; é o "📎 Ata" citado nas
+      // tarefas extraídas (ver src/lib/process-recap.ts), igual o workflow n8n já fazia.
+      let transcriptLink: string | null = null;
       if (payload?.parts) {
         const docId = findMeetingNotesDocId(payload.parts);
         if (docId) {
+          transcriptLink = `https://docs.google.com/document/d/${docId}/edit`;
           const { text, reason } = await fetchGoogleDocText(oauth2, docId);
           if (text) {
             body = text.slice(0, 20000);
@@ -185,7 +190,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
       }
 
       await db.meetRecap.create({
-        data: { squadId: user.squadId, gmailId: msg.id!, subject, body },
+        data: { squadId: user.squadId, gmailId: msg.id!, subject, body, transcriptLink },
       });
 
       synced++;

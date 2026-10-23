@@ -372,6 +372,9 @@ model MeetRecap {
   client         String?
   processedAt    DateTime?
   suggestedTasks String?
+  transcriptLink String? // link do Google Doc da ata completa ("Anotações do Gemini"),
+  // quando o e-mail trouxer um (ver src/lib/gmail-sync.ts) — pra citar como "📎 Ata" nas
+  // tarefas extraídas, igual já fazia o workflow n8n
   suggestions    RecapSuggestion[]
   // resultado (somente leitura, não vira RecapSuggestion) do OUTRO modelo de IA disponível
   // pro squad, pra comparar qual extrai tarefas mais fiéis — ex.: squad usa Groq como

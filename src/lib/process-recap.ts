@@ -1,3 +1,4 @@
+import { subDays } from "date-fns";
 import { prisma } from "./prisma";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
 import { getGroq, GROQ_MODEL } from "./groq";
@@ -5,10 +6,12 @@ import { generateJsonWithGemini } from "./gemini";
 import { getRecapAiConfig, getAltRecapAiConfig, type RecapAiConfig } from "./ai-provider";
 import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
+import { dueDateOnly } from "./utils";
 
 type SuggestedTask = {
   title?: string;
   description?: string;
+  evidence?: string; // trecho literal do conteúdo que embasa a tarefa — mesmo padrão do "💬 Evidência" que o workflow n8n já cita
   assignee?: string;
   priority?: string;
   dueDate?: string | null;
@@ -133,8 +136,9 @@ ${recap.body.slice(0, 5000)}
 Instruções:
 - Identifique o nome do cliente da reunião se mencionado (ex: "Fismatek", "Zé do Flor")
 - Para cada tarefa identifique quem deve entregar: "client" se é o cliente que entrega para a O2, "o2" se é a O2 que entrega para o cliente, "internal" se é tarefa interna
-- "assignee": APENAS se o nome de um destes membros for explicitamente mencionado como responsável: ${memberList}. Se não for mencionado explicitamente, use string vazia "". NUNCA invente um responsável.
-- Prazos: converta para YYYY-MM-DD considerando hoje = ${new Date().toISOString().split("T")[0]}
+- "assignee": se o nome de um destes membros do squad for explicitamente mencionado como responsável, use o nome dele: ${memberList}. Se deliverTo for "client" e nenhuma pessoa específica do lado do cliente for citada pelo nome, use "Cliente". Se não der pra identificar ninguém, use string vazia "". NUNCA invente um responsável que não esteja no texto.
+- "evidence": cite o trecho literal (verbatim, sem parafrasear) do conteúdo que embasa essa tarefa — o mesmo texto que apareceu na transcrição, não um resumo seu
+- Prazos: converta para YYYY-MM-DD considerando hoje = ${new Date().toISOString().split("T")[0]} — só preencha se uma data for claramente mencionada; senão deixe null (o prazo padrão, baseado na próxima reunião desse cliente, é aplicado depois, fora deste prompt)
 - priority: "high" se urgente, "medium" como padrão, "low" sem urgência
 ${fewShot}
 Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicações:
@@ -144,7 +148,8 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
     {
       "title": "título objetivo (máx 80 chars)",
       "description": "contexto adicional",
-      "assignee": "nome do membro do squad ou string vazia",
+      "evidence": "trecho literal da transcrição",
+      "assignee": "nome do membro do squad, \"Cliente\", ou string vazia",
       "priority": "high|medium|low",
       "dueDate": "YYYY-MM-DD ou null",
       "deliverTo": "o2|client|internal"
@@ -189,20 +194,46 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
       },
     });
 
+    // mesmo padrão que o workflow n8n já usava: prazo padrão é 1 dia antes da PRÓXIMA
+    // reunião desse cliente (não o palpite da IA em cima do texto, que vinha inconsistente
+    // ou vazio) — só cai no palpite da IA quando não há reunião futura agendada pra ele.
+    let defaultDueDate: Date | null = null;
+    if (client) {
+      const nextMeeting = await db.calendarEvent.findFirst({
+        where: { client, startAt: { gt: new Date() } },
+        orderBy: { startAt: "asc" },
+        select: { startAt: true },
+      });
+      if (nextMeeting) defaultDueDate = subDays(dueDateOnly(nextMeeting.startAt), 1);
+    }
+
+    // mesmo formato que o n8n já usava pra deixar rastreável de onde veio a tarefa
+    const transcriptLink = recap.transcriptLink;
+    function buildDescription(t: SuggestedTask): string | null {
+      const parts: string[] = [];
+      if (t.description?.trim()) parts.push(t.description.trim());
+      if (t.evidence?.trim()) parts.push(`💬 Evidência: "${t.evidence.trim()}"`);
+      if (transcriptLink) parts.push(`📎 Ata: ${transcriptLink}`);
+      return parts.length > 0 ? parts.join("\n\n") : null;
+    }
+
     const validTasks = tasks.filter((t) => t.title?.trim());
     if (validTasks.length > 0) {
+      const taskDueDates = validTasks.map((t) => defaultDueDate ?? (t.dueDate ? new Date(t.dueDate) : null));
       const duplicateNotes = await Promise.all(
-        validTasks.map((t) => findDuplicateNote(recap.squadId, t.title!, client, t.dueDate ? new Date(t.dueDate) : null))
+        validTasks.map((t, i) => findDuplicateNote(recap.squadId, t.title!, client, taskDueDates[i]))
       );
       await db.recapSuggestion.createMany({
         data: validTasks.map((t, index) => ({
           recapId,
           index,
           title: t.title!.slice(0, 255),
-          description: t.description || null,
-          assignee: t.assignee || null,
+          description: buildDescription(t),
+          // "Cliente" já deveria vir pronto da IA (ver prompt) — reforça aqui como rede de
+          // segurança caso ela não siga a instrução
+          assignee: t.assignee || (t.deliverTo === "client" ? "Cliente" : null),
           priority: ["high", "medium", "low"].includes(t.priority ?? "") ? t.priority! : "medium",
-          dueDate: t.dueDate ? new Date(t.dueDate) : null,
+          dueDate: taskDueDates[index],
           status: duplicateNotes[index] ? "duplicate" : "pending",
           duplicateNote: duplicateNotes[index],
         })),
