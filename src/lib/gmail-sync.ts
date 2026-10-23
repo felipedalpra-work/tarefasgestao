@@ -41,22 +41,30 @@ function findMeetingNotesDocId(parts: any[]): string | null {
   return null;
 }
 
-// null = não conseguiu (sem permissão ainda — precisa reconectar o Google —,
-// documento apagado, etc.) — quem chama cai de volta pro resumo do e-mail,
-// nunca quebra a sincronização por causa disso.
+// text null = não conseguiu (documento apagado, API do Drive desabilitada no projeto
+// Google Cloud, conta sem o escopo drive.readonly ainda, etc.) — quem chama cai de volta
+// pro resumo do e-mail, nunca quebra a sincronização por causa disso. "reason" sempre vem
+// preenchido no erro (mesmo quando não é um dos dois casos conhecidos abaixo) — é o que
+// permite logar algo acionável em vez de falhar calado (como acontecia antes: um erro sem
+// bater no regex de escopo insuficiente não gerava log nenhum).
 async function fetchGoogleDocText(
   oauth2: InstanceType<typeof google.auth.OAuth2>,
   documentId: string
-): Promise<{ text: string | null; insufficientScope: boolean }> {
+): Promise<{ text: string | null; reason: string | null }> {
   try {
     const drive = google.drive({ version: "v3", auth: oauth2 });
     const res = await drive.files.export({ fileId: documentId, mimeType: "text/plain" });
     const text = typeof res.data === "string" ? res.data : String(res.data ?? "");
-    return { text: text.trim() || null, insufficientScope: false };
+    return { text: text.trim() || null, reason: null };
   } catch (err) {
-    const insufficientScope =
-      err instanceof Error && /insufficient.*scope|insufficient permission/i.test(err.message);
-    return { text: null, insufficientScope };
+    const message = err instanceof Error ? err.message : String(err);
+    if (/insufficient.*scope|insufficient permission/i.test(message)) {
+      return { text: null, reason: "Precisa reconectar o Google (Configurações → Perfil) pra conceder o escopo de leitura do Drive" };
+    }
+    if (/has not been used|service_disabled|accessnotconfigured/i.test(message)) {
+      return { text: null, reason: `API do Google Drive não está habilitada no projeto Google Cloud do app: ${message}` };
+    }
+    return { text: null, reason: message };
   }
 }
 
@@ -158,18 +166,18 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
 
       // se o e-mail linkar o Google Doc completo de "Anotações do Gemini", usa ele
       // no lugar do resumo curto acima — é um superconjunto (mesma lista de próximas
-      // etapas + mais contexto + transcrição). Falha (escopo ainda não concedido,
-      // doc apagado) cai de volta pro resumo, sem quebrar a sincronização.
+      // etapas + mais contexto + transcrição). Qualquer falha cai de volta pro resumo,
+      // sem quebrar a sincronização — mas sempre loga, pra não falhar calado.
       if (payload?.parts) {
         const docId = findMeetingNotesDocId(payload.parts);
         if (docId) {
-          const { text, insufficientScope } = await fetchGoogleDocText(oauth2, docId);
+          const { text, reason } = await fetchGoogleDocText(oauth2, docId);
           if (text) {
             body = text.slice(0, 20000);
-          } else if (insufficientScope) {
-            await log("gmail-sync", "Sem permissão pra ler o Google Doc da ata completa — usando só o resumo do e-mail", {
+          } else if (reason) {
+            await log("gmail-sync", "Não consegui ler o Google Doc da ata completa — usando só o resumo do e-mail", {
               level: "error",
-              detail: "Precisa reconectar o Google (Configurações → Perfil) pra conceder o novo escopo de leitura do Drive",
+              detail: reason,
               squadId: user.squadId,
             });
           }
