@@ -64,7 +64,9 @@ async function extractTasksWithProvider(
       model: GROQ_MODEL,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
-      max_tokens: 2048,
+      // mesmo motivo do maxOutputTokens do Gemini (ver src/lib/gemini.ts) — a ata completa
+      // dá mais contexto pra achar tarefa, lista fica mais longa, 2048 cortava o JSON
+      max_tokens: 8192,
     });
     raw = completion.choices[0]?.message?.content || "{}";
   }

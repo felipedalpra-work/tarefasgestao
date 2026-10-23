@@ -13,7 +13,11 @@ function buildModel(apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: 2048 },
+    // 2048 bastava quando a extração partia do resumo curto do e-mail; com a ata completa
+    // (2026-10-23) o modelo tem mais contexto pra achar tarefa e gera uma lista mais longa
+    // — 2048 cortava o JSON no meio (erro real, visto em produção: "Babyland" com ata longa
+    // truncou a meio de uma description, invalidando o array inteiro).
+    generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: 8192 },
   });
 }
 
