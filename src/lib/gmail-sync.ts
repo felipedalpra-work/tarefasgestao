@@ -201,7 +201,7 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
         select: { id: true },
       });
       for (const { id: recapId } of pending) {
-        const count = await processRecap(recapId);
+        const { count } = await processRecap(recapId);
         suggestionsExtracted += count;
       }
     }

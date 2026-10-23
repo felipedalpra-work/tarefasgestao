@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const count = await processRecap(recap.id);
+  const { count, error } = await processRecap(recap.id);
 
   const suggestions = await db.recapSuggestion.findMany({
     where: { recapId: recap.id, status: { not: "superseded" } },
@@ -51,5 +51,12 @@ export async function POST(req: NextRequest) {
 
   revalidateTag("recaps", "max");
 
-  return NextResponse.json({ recapId: recap.id, count, suggestions });
+  // o recap em si já foi criado e salvo (res.ok continua true) — só a extração por IA
+  // que falhou; "error" aqui avisa sem fingir que não achou nenhuma tarefa
+  return NextResponse.json({
+    recapId: recap.id,
+    count,
+    suggestions,
+    error: error ? `${error} — tente reprocessar em instantes.` : undefined,
+  });
 }

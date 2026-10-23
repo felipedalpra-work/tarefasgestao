@@ -17,13 +17,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // força reprocessar mesmo se já foi processado antes — preserva o histórico de sugestões
   // já aceitas/editadas/rejeitadas, só marca as pendentes antigas como "superseded"
-  const count = await processRecap(id, { force: true });
+  const { count, error } = await processRecap(id, { force: true });
 
   const suggestions = await db.recapSuggestion.findMany({
     where: { recapId: id, status: { not: "superseded" } },
     orderBy: { index: "asc" },
   });
 
+  // "error" preenchido = a IA nem terminou de responder (quota, API fora do ar) — mensagem
+  // tem que deixar isso claro, bem diferente de "processou certinho e não achou nada"
+  if (error) {
+    return NextResponse.json({ error: `${error} — tente de novo em instantes.`, suggestions: [] }, { status: 200 });
+  }
   if (suggestions.length === 0 && count === 0) {
     return NextResponse.json({ error: "Nenhuma tarefa identificada na transcrição.", suggestions: [] }, { status: 200 });
   }

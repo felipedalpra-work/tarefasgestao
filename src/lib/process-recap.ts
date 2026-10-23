@@ -96,18 +96,27 @@ async function supersedePendingSuggestions(db: SquadPrisma, recapId: string) {
  * NÃO cria Task nenhuma — isso só acontece quando o usuário clica "Adicionar" na tela.
  * `force`: reprocessa mesmo se já foi processado antes (usado pelo botão de reprocessar).
  */
-export async function processRecap(recapId: string, opts?: { force?: boolean }): Promise<number> {
+export type ProcessRecapResult = {
+  count: number;
+  // preenchido só quando a IA falhou de verdade (quota, API fora do ar, chave
+  // inválida) — diferente de "processou certinho e não achou nenhuma tarefa"
+  // (count: 0 sem error). Quem chama usa isso pra não mostrar "nenhuma tarefa
+  // identificada" quando na verdade a chamada nem completou.
+  error?: string;
+};
+
+export async function processRecap(recapId: string, opts?: { force?: boolean }): Promise<ProcessRecapResult> {
   // busca sem escopo — squadId ainda não é conhecido nesse ponto; é o próprio recap
   // encontrado aqui que informa qual squad usar dali em diante
   const recap = await prisma.meetRecap.findUnique({ where: { id: recapId } });
-  if (!recap) return 0;
-  if (recap.processedAt && !opts?.force) return 0;
+  if (!recap) return { count: 0 };
+  if (recap.processedAt && !opts?.force) return { count: 0 };
 
   const db = forSquad(recap.squadId);
 
   if (!recap.body || recap.body.trim().length < 20) {
     await db.meetRecap.update({ where: { id: recapId }, data: { suggestedTasks: "[]", processedAt: new Date() } });
-    return 0;
+    return { count: 0 };
   }
 
   const users = await db.user.findMany({ select: { id: true, name: true, email: true } });
@@ -206,18 +215,19 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
       squadId: recap.squadId,
     });
 
-    return validTasks.length;
+    return { count: validTasks.length };
   } catch (err) {
     // Falha do Gemini (chave inválida, quota) NÃO cai pro Groq silenciosamente — loga
     // e esse ciclo falha, igual já acontecia quando a própria Groq falhava. Quem
     // conectou a chave precisa saber que ela parou de funcionar, não ter o app
     // mascarando isso trocando de provedor sem avisar.
+    const message = err instanceof Error ? err.message : String(err);
     await log("ia-recap", `Erro ao processar Meet Recap com IA (${aiConfig.provider})`, {
       level: "error",
-      detail: String(err),
+      detail: message,
       squadId: recap.squadId,
     });
     console.error("[process-recap] erro:", err);
-    return 0;
+    return { count: 0, error: `Erro ao chamar a IA (${aiConfig.provider}): ${message}` };
   }
 }

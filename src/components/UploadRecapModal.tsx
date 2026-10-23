@@ -5,6 +5,7 @@ import { Upload, X, FileText, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import { toast } from "./Toaster";
 
 export function UploadRecapModal({
   onCancel,
@@ -50,6 +51,9 @@ export function UploadRecapModal({
       setError(data.error || "Erro ao enviar a transcrição.");
       return;
     }
+    // recap foi criado (res.ok) mas a extração por IA pode ter falhado de verdade — "error"
+    // aqui não é o mesmo caso de "nenhuma tarefa encontrada", precisa de um aviso separado
+    if (data.error) toast(data.error, "error");
     onUploaded({ recapId: data.recapId, count: data.count });
   }
 
