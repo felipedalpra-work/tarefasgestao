@@ -34,7 +34,8 @@ type Suggestion = {
 type Recap = {
   id: string;
   subject: string;
-  body: string;
+  // não vem mais na lista (GET /api/recaps omite de propósito, ver lá) — só é buscado
+  // sob demanda quando a pessoa clica "Ver e-mail original" (ver bodies/loadBody abaixo)
   createdAt: string;
   processedAt?: string | null;
   client?: string | null;
@@ -62,6 +63,8 @@ function RecapsPageInner() {
   const [syncing, setSyncing] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showBody, setShowBody] = useState<Record<string, boolean>>({});
+  const [bodies, setBodies] = useState<Record<string, string>>({});
+  const [bodyLoading, setBodyLoading] = useState<Record<string, boolean>>({});
   const [actingKey, setActingKey] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ title: "", description: "", assignee: "", priority: "medium" });
@@ -89,33 +92,62 @@ function RecapsPageInner() {
     if (recapParam) setExpanded(recapParam);
   }, [searchParams]);
 
+  // try/finally em ambas: sem isso, uma resposta inesperada (erro de rede, JSON
+  // inválido) deixava o spinner girando pra sempre — setSyncing/setLoading(false)
+  // nunca era alcançado porque a exceção pulava direto pro catch de fora (nenhum).
   async function sync() {
     setSyncing(true);
-    const res = await fetch("/api/recaps/sync", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok && data.error) {
-      toast(data.error, "error");
-    } else if (data.synced === 0) {
-      toast("Nenhuma transcrição nova encontrada.", "info");
-    } else {
-      toast(`${data.synced} transcrição(ões) sincronizada(s). ${data.suggestionsExtracted} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`, "success");
+    try {
+      const res = await fetch("/api/recaps/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok && data.error) {
+        toast(data.error, "error");
+      } else if (data.synced === 0) {
+        toast("Nenhuma transcrição nova encontrada.", "info");
+      } else {
+        toast(`${data.synced} transcrição(ões) sincronizada(s). ${data.suggestionsExtracted} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`, "success");
+      }
+      await load();
+    } catch {
+      toast("Erro ao sincronizar — tente de novo", "error");
+    } finally {
+      setSyncing(false);
     }
-    await load();
-    setSyncing(false);
   }
 
   async function process(id: string) {
     setLoading(true);
-    const res = await fetch(`/api/recaps/${id}/process`, { method: "POST" });
-    const data = await res.json();
-    if (data.error && !data.suggestions?.length) {
-      toast(data.error, "error");
-    } else if (data.count > 0) {
-      toast(`${data.count} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`, "success");
+    try {
+      const res = await fetch(`/api/recaps/${id}/process`, { method: "POST" });
+      const data = await res.json();
+      if (data.error && !data.suggestions?.length) {
+        toast(data.error, "error");
+      } else if (data.count > 0) {
+        toast(`${data.count} sugestão(ões) de tarefa identificada(s) — revise antes de adicionar.`, "success");
+      }
+      await load();
+      setExpanded(id);
+    } catch {
+      toast("Erro ao extrair tarefas — tente de novo", "error");
+    } finally {
+      setLoading(false);
     }
-    await load();
-    setLoading(false);
-    setExpanded(id);
+  }
+
+  // body não vem mais na lista (GET /api/recaps) — busca sob demanda na primeira vez
+  // que a pessoa abre "Ver e-mail original" pra esse recap, e fica em cache em `bodies`.
+  async function loadBody(id: string) {
+    if (bodies[id] !== undefined || bodyLoading[id]) return;
+    setBodyLoading((prev) => ({ ...prev, [id]: true }));
+    try {
+      const res = await fetch(`/api/recaps/${id}`);
+      const data = await res.json();
+      setBodies((prev) => ({ ...prev, [id]: data.body || "" }));
+    } catch {
+      toast("Erro ao carregar o e-mail original", "error");
+    } finally {
+      setBodyLoading((prev) => ({ ...prev, [id]: false }));
+    }
   }
 
   function matchAssigneeId(name: string | null): string | null {
@@ -347,7 +379,10 @@ function RecapsPageInner() {
               {isExpanded && (
                 <div className="border-t border-surface-3 px-5 pt-4">
                   <button
-                    onClick={() => setShowBody((prev) => ({ ...prev, [recap.id]: !prev[recap.id] }))}
+                    onClick={() => {
+                      setShowBody((prev) => ({ ...prev, [recap.id]: !prev[recap.id] }));
+                      loadBody(recap.id);
+                    }}
                     className="flex items-center gap-1.5 text-xs text-ink-dim hover:text-ink transition-colors"
                   >
                     <Mail size={12} />
@@ -356,7 +391,7 @@ function RecapsPageInner() {
                   </button>
                   {showBody[recap.id] && (
                     <pre className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap break-words bg-surface-2 border border-surface-3 rounded-lg p-3 text-xs text-ink-dim font-sans">
-                      {recap.body || "(sem conteúdo)"}
+                      {bodyLoading[recap.id] ? "Carregando…" : bodies[recap.id] || "(sem conteúdo)"}
                     </pre>
                   )}
                 </div>
