@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-10-23 (Meet Recap: ata completa do Gemini — API do Drive desabilitada + backfill)
+
+- Depois do fix de 2026-10-20 (escopo `drive.readonly` + buscar o Google Doc linkado no e-mail em vez do resumo curto), os recaps novos continuavam vindo com o resumo curto, sem nenhum log de erro. Investigado direto contra a conta real da Tainara: a causa não era falta de reconexão dela — era a **API do Google Drive nunca ter sido habilitada no projeto do Google Cloud** das credenciais OAuth do app ("Google Drive API has not been used in project ... or it is disabled"). Esse erro não batia no regex de "escopo insuficiente" em `fetchGoogleDocText` (`src/lib/gmail-sync.ts`), então a falha era silenciosa — nenhum log, ninguém saberia.
+- `fetchGoogleDocText` agora devolve um motivo pra **qualquer** falha (não só as duas já conhecidas), e o chamador sempre loga quando não consegue ler o documento — continua caindo pro resumo do e-mail sem quebrar a sincronização, só que agora de forma visível.
+- API do Drive habilitada pelo usuário no console do Google Cloud + Tainara reconectou o Google → confirmado funcionando contra a API real.
+- **`scripts/backfill-meetrecap-transcripts.mjs`** (novo, idempotente): os ~150 Meet Recaps sincronizados antes desse fix tinham ficado com o resumo curto pra sempre (a sincronização normal só busca e-mail novo). O script re-busca o e-mail original de cada recap existente na caixa do designado do squad, acha o link do Google Doc e substitui o `body`. Rodado contra produção: **149 de 150 atualizados**, 1 sem link de Doc no e-mail (um "Fwd" com formatação diferente, mantido como estava), 0 erros.
 ## 2026-10-07 (revisão semanal: "riscado" não sobrevivia a recarregar a página)
 
 - Bug: marcar uma empresa como já revisada na Revisão Semanal sumia ao dar F5/recarregar. Causa: a chave de persistência no `localStorage` usava `windowStart` (recorte rolante da API, muda a cada carregamento), então nunca batia com a chave salva antes. Trocado por uma chave estável de ano+semana ISO (`weekStorageKey()`, via `getISOWeek`/`getISOWeekYear` do `date-fns`) — o "riscado" agora persiste a semana inteira e só reseta na semana seguinte.
