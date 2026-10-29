@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
 import { decryptSecret } from "./credential-crypto";
 import { getMeetRecapGmailUserId } from "./settings";
+import { getGroq, GROQ_MODEL } from "./groq";
+import { generateJsonWithGemini } from "./gemini";
 
 // Convenção da chave: mesmo truque já usado pelo Slack (src/lib/slack.ts,
 // "slack_user_<id>") pra guardar um valor por usuário dentro da tabela
@@ -65,4 +67,23 @@ export async function getAltRecapAiConfig(squadId: string, primary: RecapAiConfi
   } catch {
     return null;
   }
+}
+
+// Chamada crua ao provedor (Groq ou Gemini) — devolve o texto bruto da resposta, sem
+// nenhuma suposição sobre o formato esperado (quem chama decide como parsear). Extraído
+// de dentro de process-recap.ts (extractTasksWithProvider) pra ser reaproveitado também
+// por temperature-suggestion.ts — mesma lógica de chamada, prompts diferentes.
+export async function callAiRaw(aiConfig: RecapAiConfig, prompt: string): Promise<string> {
+  if (aiConfig.provider === "gemini") {
+    return (await generateJsonWithGemini(aiConfig.apiKey, prompt)) || "{}";
+  }
+  const completion = await getGroq().chat.completions.create({
+    model: GROQ_MODEL,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.1,
+    // mesmo motivo de process-recap.ts: prompt com mais contexto (ata completa) gera
+    // resposta mais longa, 2048 cortava o JSON no meio
+    max_tokens: 8192,
+  });
+  return completion.choices[0]?.message?.content || "{}";
 }

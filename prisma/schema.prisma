@@ -531,8 +531,16 @@ model CalendarEvent {
   endAt               DateTime
   briefingSent        Boolean  @default(false)
   meetingType         String? // "semanal" | "comite" | "kickoff" | "setup" | "interno" — extraído do título "| <Tipo>"
-  temperature         String? // "otimo" | "bom" | "atencao" | "critico" — clima da reunião, preenchido depois
+  temperature         String? // "bom" | "atencao" | "critico" (mesmas 3 cores do Pipefy) — clima da reunião, preenchido depois
   nextSteps           String? // próximos passos validados pós-reunião
+  suggestedTemperature   String? // sugestão da IA (mesmos 3 valores de `temperature`) a partir da
+  // transcrição do Meet Recap — ver src/lib/temperature-suggestion.ts. Só existe enquanto
+  // ninguém resolveu (aprovou ou editou, ver PATCH /api/calendar/[id]); nunca é a fonte de
+  // verdade por si só, só vira `temperature` quando alguém aprova.
+  suggestedNextSteps     String? // próximos passos sugeridos pela IA, par de suggestedTemperature
+  temperatureSuggestedAt DateTime? // marca que já tentou gerar sugestão pra essa reunião — evita
+  // reprocessar em todo sync de Meet Recap; null = nunca tentou. Fica preenchido mesmo que a
+  // sugestão tenha sido resolvida (aprovada/editada) ou que a IA não tenha retornado um valor válido.
   attendanceConfirmed Boolean  @default(false) // presença confirmada/corrigida
   registroConferido   Boolean  @default(false) // registro (gravação/transcrição) conferido
   pipefyRecordId      String? // id do table_record do Pipefy casado por cliente+dia (ver src/lib/pipefy-sync.ts)

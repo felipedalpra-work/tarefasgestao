@@ -6,6 +6,8 @@ const MEET_RECAP_SUGGESTIONS_KEY = "meet_recap_suggestions_enabled";
 const MEET_RECAP_GMAIL_USER_KEY = "meet_recap_gmail_user_id";
 const N8N_WEBHOOK_SECRET_KEY = "n8n_webhook_secret";
 const BILLING_DRAFT_OWNER_KEY = "billing_draft_owner_user_id";
+const TEMPERATURE_PROMPT_KEY = "pipefy_temperature_prompt";
+const TEMPERATURE_PROMPT_DISMISSED_KEY = "pipefy_temperature_prompt_dismissed";
 
 // Sem linha na tabela Setting = ligado (comportamento histórico, antes de existir esse flag)
 export async function isMeetRecapSuggestionsEnabled(squadId: string): Promise<boolean> {
@@ -91,6 +93,37 @@ export async function setBillingDraftOwnerUserId(squadId: string, userId: string
     where: { squadId_key: { squadId, key: BILLING_DRAFT_OWNER_KEY } },
     update: { value: userId },
     create: { squadId, key: BILLING_DRAFT_OWNER_KEY, value: userId },
+  });
+}
+
+// Critério (prompt livre) que o CFO define pra IA avaliar Temperatura/Próximos Passos a
+// partir da transcrição de uma reunião — ver src/lib/temperature-suggestion.ts. null/sem
+// linha = ninguém configurou ainda; quem usa cai no DEFAULT_TEMPERATURE_PROMPT de lá.
+export async function getTemperaturePrompt(squadId: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: TEMPERATURE_PROMPT_KEY } } });
+  return row?.value || null;
+}
+
+export async function setTemperaturePrompt(squadId: string, prompt: string): Promise<void> {
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: TEMPERATURE_PROMPT_KEY } },
+    update: { value: prompt },
+    create: { squadId, key: TEMPERATURE_PROMPT_KEY, value: prompt },
+  });
+}
+
+// Marca que o popup de primeira configuração já apareceu pra um admin e foi fechado sem
+// preencher ("Agora não") — não insiste de novo, mas o campo continua em Configurações.
+export async function isTemperaturePromptDismissed(squadId: string): Promise<boolean> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: TEMPERATURE_PROMPT_DISMISSED_KEY } } });
+  return row?.value === "true";
+}
+
+export async function dismissTemperaturePrompt(squadId: string): Promise<void> {
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: TEMPERATURE_PROMPT_DISMISSED_KEY } },
+    update: { value: "true" },
+    create: { squadId, key: TEMPERATURE_PROMPT_DISMISSED_KEY, value: "true" },
   });
 }
 

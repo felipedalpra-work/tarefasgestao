@@ -21,6 +21,8 @@ type CalendarEvent = {
   meetingType: string | null;
   temperature: string | null;
   nextSteps: string | null;
+  suggestedTemperature: string | null;
+  suggestedNextSteps: string | null;
   attendanceConfirmed: boolean;
   registroConferido: boolean;
 };
@@ -75,6 +77,9 @@ const TEMPERATURE_INFO: Record<string, { className: string }> = {
   atencao: { className: "bg-yellow-400/10 text-yellow-400" },
   critico: { className: "bg-red-400/10 text-red-400" },
 };
+
+// pro banner de sugestão da IA — mesmo emoji das opções do dropdown de Temperatura
+const TEMPERATURE_LABEL: Record<string, string> = { bom: "🟢 Bom", atencao: "🟡 Atenção", critico: "🔴 Crítico" };
 
 type OxyFields = {
   updateFrequency: string;
@@ -189,6 +194,44 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     }
   }
 
+  // "Aprovar" na sugestão da IA — grava os dois campos de uma vez (o PATCH já limpa a
+  // sugestão e já manda pro Pipefy, mesmo caminho de uma edição manual)
+  async function approveSuggestion(e: CalendarEvent) {
+    const prevEvents = events;
+    const { suggestedTemperature, suggestedNextSteps } = e;
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === e.id
+          ? { ...ev, temperature: suggestedTemperature, nextSteps: suggestedNextSteps, suggestedTemperature: null, suggestedNextSteps: null }
+          : ev
+      )
+    );
+    const res = await fetch(`/api/calendar/${e.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temperature: suggestedTemperature, nextSteps: suggestedNextSteps }),
+    });
+    if (!res.ok) {
+      setEvents(prevEvents);
+      toast("Erro ao aprovar sugestão", "error");
+    } else {
+      toast("Temperatura aprovada — enviada pro Pipefy", "success");
+    }
+  }
+
+  // "Editar" — só descarta a sugestão (sem tocar na Temperatura/Próximos passos oficiais
+  // nem acionar o Pipefy), a pessoa edita o campo normal como já faz hoje
+  async function dismissSuggestion(eventId: string) {
+    const prevEvents = events;
+    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, suggestedTemperature: null, suggestedNextSteps: null } : e)));
+    const res = await fetch(`/api/calendar/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dismissSuggestion: true }),
+    });
+    if (!res.ok) setEvents(prevEvents);
+  }
+
   const tabs = [
     { key: "meetings", label: "Reuniões", icon: CalendarDays, count: events.length },
     { key: "recaps", label: "Meet Recaps", icon: FileText, count: recaps.length },
@@ -266,6 +309,30 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                 </div>
                 {isPast && (
                   <div className="mt-3 pt-3 border-t border-surface-3 space-y-2.5">
+                    {e.suggestedTemperature && (
+                      <div className="bg-o2-green/5 border border-o2-green/20 rounded-lg px-3 py-2.5 space-y-1.5">
+                        <p className="text-xs text-ink-dim">
+                          🤖 IA sugere: <span className="font-medium text-ink">{TEMPERATURE_LABEL[e.suggestedTemperature] ?? e.suggestedTemperature}</span>
+                        </p>
+                        {e.suggestedNextSteps && (
+                          <p className="text-xs text-ink-faint line-clamp-2">{e.suggestedNextSteps}</p>
+                        )}
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <button
+                            onClick={() => approveSuggestion(e)}
+                            className="text-xs font-medium px-2.5 py-1 rounded-lg bg-o2-green/15 text-o2-green hover:bg-o2-green/25 transition-colors"
+                          >
+                            Aprovar
+                          </button>
+                          <button
+                            onClick={() => dismissSuggestion(e.id)}
+                            className="text-xs font-medium px-2.5 py-1 rounded-lg text-ink-faint hover:text-ink transition-colors"
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-ink-faint w-28 shrink-0">Temperatura:</span>
                       <select

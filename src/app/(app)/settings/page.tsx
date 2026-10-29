@@ -2,9 +2,10 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck, KeyRound, Trash2 } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck, KeyRound, Trash2, Thermometer } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null; role?: string };
 
@@ -92,6 +93,10 @@ export default function SettingsPage() {
   const [n8nRegenerating, setN8nRegenerating] = useState(false);
   const [n8nConfirmRegen, setN8nConfirmRegen] = useState(false);
 
+  // Critério de Temperatura (IA) state
+  const [temperaturePrompt, setTemperaturePrompt] = useState("");
+  const [temperaturePromptSaving, setTemperaturePromptSaving] = useState(false);
+
   // Minuta de cobrança (rascunho no Gmail) state
   const [billingDraftOwnerId, setBillingDraftOwnerId] = useState<string | null>(null);
   const [billingDraftSaving, setBillingDraftSaving] = useState(false);
@@ -125,6 +130,10 @@ export default function SettingsPage() {
     fetch("/api/settings/ignored-clients")
       .then((r) => r.json())
       .then((d) => setIgnoredClients(d.clients ?? []));
+
+    fetch("/api/settings/pipefy-temperature")
+      .then((r) => r.json())
+      .then((d) => setTemperaturePrompt(d.prompt ?? ""));
 
     // load squad users + slack settings in parallel
     Promise.all([
@@ -226,6 +235,17 @@ export default function SettingsPage() {
     if (!n8nSecret) return;
     navigator.clipboard.writeText(n8nSecret);
     toast("Secret copiado", "success");
+  }
+
+  async function saveTemperaturePrompt() {
+    setTemperaturePromptSaving(true);
+    const res = await fetch("/api/settings/pipefy-temperature", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: temperaturePrompt }),
+    });
+    setTemperaturePromptSaving(false);
+    toast(res.ok ? "Critério salvo" : "Erro ao salvar", res.ok ? "success" : "error");
   }
 
   async function saveBillingDraftOwner(ownerUserId: string | null) {
@@ -749,6 +769,40 @@ export default function SettingsPage() {
           {!isAdmin && (
             <p className="text-xs text-ink-faint px-1">A integração n8n é uma credencial de acesso — só admin do squad consegue ver/gerar.</p>
           )}
+
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2 flex items-center gap-2">
+              <Thermometer size={14} className="text-o2-green" />
+              Critério de Temperatura (IA)
+            </h2>
+            <p className="text-xs text-ink-mid mb-4">
+              Usado pela IA pra sugerir a Temperatura (🟢🟡🔴) e os Próximos Passos de cada
+              reunião a partir da ata — a sugestão aparece na aba Reuniões de cada cliente
+              pra você aprovar ou ajustar antes de virar oficial.
+            </p>
+            <AutoGrowTextarea
+              value={temperaturePrompt}
+              onChange={(e) => setTemperaturePrompt(e.target.value)}
+              disabled={!isAdmin}
+              rows={5}
+              maxHeight={300}
+              placeholder="ex.: 🟢 Bom: cliente satisfeito, sem pendências críticas..."
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 font-mono disabled:opacity-70"
+            />
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={saveTemperaturePrompt}
+                disabled={temperaturePromptSaving}
+                className="mt-3 flex items-center gap-1.5 bg-o2-green text-bg px-4 py-2 rounded-lg font-bold text-xs hover:bg-o2-green-bright transition-all disabled:opacity-50"
+              >
+                <Save size={13} />
+                {temperaturePromptSaving ? "Salvando…" : "Salvar"}
+              </button>
+            ) : (
+              <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>
+            )}
+          </div>
         </div>
       )}
 

@@ -37,6 +37,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.attendanceConfirmed !== undefined) data.attendanceConfirmed = !!body.attendanceConfirmed;
   if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
 
+  // resolveu a sugestão da IA (seja aprovando — manda temperature/nextSteps iguais à
+  // sugestão — seja editando manualmente) — limpa o banner. temperatureSuggestedAt fica,
+  // nunca gera sugestão de novo pra essa reunião.
+  if (body.temperature !== undefined || body.nextSteps !== undefined) {
+    data.suggestedTemperature = null;
+    data.suggestedNextSteps = null;
+  }
+  // "Editar": só descarta a sugestão sem tocar em temperature/nextSteps oficiais nem
+  // acionar o Pipefy — a pessoa edita o campo normal, que já salva/empurra do jeito de sempre.
+  if (body.dismissSuggestion === true) {
+    data.suggestedTemperature = null;
+    data.suggestedNextSteps = null;
+  }
+
   const event = await db.calendarEvent.update({ where: { id }, data });
 
   // best-effort, nunca derruba essa resposta — ver pushCalendarEventToPipefy

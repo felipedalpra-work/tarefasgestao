@@ -1,12 +1,11 @@
 import { subDays } from "date-fns";
 import { prisma } from "./prisma";
 import { forSquad, type SquadPrisma } from "./tenant-prisma";
-import { getGroq, GROQ_MODEL } from "./groq";
-import { generateJsonWithGemini } from "./gemini";
-import { getRecapAiConfig, getAltRecapAiConfig, type RecapAiConfig } from "./ai-provider";
+import { getRecapAiConfig, getAltRecapAiConfig, callAiRaw, type RecapAiConfig } from "./ai-provider";
 import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
 import { dueDateOnly } from "./utils";
+import { suggestTemperatureForRecap } from "./temperature-suggestion";
 
 type SuggestedTask = {
   title?: string;
@@ -59,20 +58,7 @@ async function extractTasksWithProvider(
   aiConfig: RecapAiConfig,
   prompt: string
 ): Promise<{ client: string | null; tasks: SuggestedTask[] }> {
-  let raw: string;
-  if (aiConfig.provider === "gemini") {
-    raw = (await generateJsonWithGemini(aiConfig.apiKey, prompt)) || "{}";
-  } else {
-    const completion = await getGroq().chat.completions.create({
-      model: GROQ_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-      // mesmo motivo do maxOutputTokens do Gemini (ver src/lib/gemini.ts) — a ata completa
-      // dá mais contexto pra achar tarefa, lista fica mais longa, 2048 cortava o JSON
-      max_tokens: 8192,
-    });
-    raw = completion.choices[0]?.message?.content || "{}";
-  }
+  const raw = await callAiRaw(aiConfig, prompt);
   console.log(`[${aiConfig.provider}] resposta bruta:`, raw.slice(0, 800));
   const text = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
@@ -205,6 +191,21 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
         select: { startAt: true },
       });
       if (nextMeeting) defaultDueDate = subDays(dueDateOnly(nextMeeting.startAt), 1);
+    }
+
+    // sugere Temperatura/Próximos Passos pra reunião correspondente (mesmo cliente+dia
+    // deste recap) com base no critério do CFO — best-effort, nunca derruba o resto do
+    // processamento do recap se falhar
+    if (client) {
+      try {
+        await suggestTemperatureForRecap(db, recap.squadId, client, recap.body, recap.createdAt);
+      } catch (err) {
+        await log("ia-recap", "Erro ao gerar sugestão de temperatura", {
+          level: "error",
+          detail: String(err),
+          squadId: recap.squadId,
+        });
+      }
     }
 
     // mesmo formato que o n8n já usava pra deixar rastreável de onde veio a tarefa
