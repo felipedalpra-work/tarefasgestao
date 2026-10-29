@@ -276,10 +276,13 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                           TEMPERATURE_INFO[e.temperature ?? ""]?.className ?? "bg-surface-3 text-ink-faint"
                         )}
                       >
-                        <option value="" className="bg-panel text-ink">— não definida —</option>
-                        <option value="bom" className="bg-panel text-ink">Bom</option>
-                        <option value="atencao" className="bg-panel text-ink">Atenção</option>
-                        <option value="critico" className="bg-panel text-ink">Crítico</option>
+                        {/* emoji de propósito (não só cor via CSS, que o <option> nativo não
+                            respeita direito em todo navegador) — mesmas cores do Pipefy, pra
+                            reconhecer de relance sem precisar abrir e ler o texto */}
+                        <option value="" className="bg-panel text-ink">⚪ não definida</option>
+                        <option value="bom" className="bg-panel text-ink">🟢 Bom</option>
+                        <option value="atencao" className="bg-panel text-ink">🟡 Atenção</option>
+                        <option value="critico" className="bg-panel text-ink">🔴 Crítico</option>
                       </select>
                     </div>
                     <div className="flex items-center gap-2">
