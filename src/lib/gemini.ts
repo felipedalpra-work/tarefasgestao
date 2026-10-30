@@ -7,7 +7,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // gemini-2.0-flash foi aposentado pela Google pouco depois desta integração
 // entrar no ar (erro 404 "no longer available", recomendando gemini-3.8-flash
 // no lugar) — exatamente o tipo de coisa que este comentário já previa.
-export const GEMINI_MODEL = "gemini-3.8-flash";
+// 2026-10-30: trocado de gemini-3.8-flash pra gemini-3.5-flash (pedido do
+// usuário) — 3.8-flash estava derrubando chamadas com 503 "experiencing high
+// demand" repetidamente em produção. Confirmado funcionando com chamada real
+// (generateContent) contra a API antes de trocar.
+export const GEMINI_MODEL = "gemini-3.5-flash";
 
 function buildModel(apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
