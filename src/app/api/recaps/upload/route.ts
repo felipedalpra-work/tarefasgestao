@@ -9,6 +9,10 @@ import { revalidateTag } from "next/cache";
 // ferramenta). Cria o MeetRecap com source "manual" e já processa com a IA na hora —
 // diferente do fluxo do Gmail, aqui não existe pausa de extração: quem envia já quer
 // ver as sugestões, é uma ação explícita da pessoa, não um job em background.
+// maxDuration: mesmo motivo de /api/recaps/[id]/process — processRecap pode fazer até 3
+// chamadas de IA sequenciais, o default da Vercel não sobra em dia de provedor lento.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

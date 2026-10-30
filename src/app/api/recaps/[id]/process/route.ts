@@ -3,6 +3,11 @@ import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { processRecap } from "@/lib/process-recap";
 
+// Até 3 chamadas de IA sequenciais num processamento (extração + comparação do outro
+// modelo + sugestão de temperatura) — o default da Vercel não sobra em dia de provedor
+// lento/instável. Mesmo valor já usado em /api/cron/[job] pelo mesmo motivo.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

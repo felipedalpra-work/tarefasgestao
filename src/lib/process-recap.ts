@@ -193,21 +193,6 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
       if (nextMeeting) defaultDueDate = subDays(dueDateOnly(nextMeeting.startAt), 1);
     }
 
-    // sugere Temperatura/Próximos Passos pra reunião correspondente (mesmo cliente+dia
-    // deste recap) com base no critério do CFO — best-effort, nunca derruba o resto do
-    // processamento do recap se falhar
-    if (client) {
-      try {
-        await suggestTemperatureForRecap(db, recap.squadId, client, recap.body, recap.createdAt);
-      } catch (err) {
-        await log("ia-recap", "Erro ao gerar sugestão de temperatura", {
-          level: "error",
-          detail: String(err),
-          squadId: recap.squadId,
-        });
-      }
-    }
-
     // mesmo formato que o n8n já usava pra deixar rastreável de onde veio a tarefa
     const transcriptLink = recap.transcriptLink;
     function buildDescription(t: SuggestedTask): string | null {
@@ -246,6 +231,26 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
       detail: client ? `Cliente: ${client}` : undefined,
       squadId: recap.squadId,
     });
+
+    // sugere Temperatura/Próximos Passos pra reunião correspondente (mesmo cliente+dia
+    // deste recap) com base no critério do CFO — SÓ depois de garantir que as tarefas de
+    // verdade (RecapSuggestion, acima) já foram criadas. É uma 3ª chamada de IA sequencial
+    // (extração + comparação do outro modelo + esta); rodar ela antes já deixou a função
+    // estourar o timeout da Vercel num dia de Gemini lento/instável, matando a execução
+    // DEPOIS do MeetRecap já marcado como processado mas ANTES de criar as RecapSuggestion
+    // — o recap sumia das telas que dependem delas (Meet Recaps, Sugestões da IA) mesmo a
+    // IA tendo extraído certinho. Best-effort, nunca derruba o retorno desta função.
+    if (client) {
+      try {
+        await suggestTemperatureForRecap(db, recap.squadId, client, recap.body, recap.createdAt);
+      } catch (err) {
+        await log("ia-recap", "Erro ao gerar sugestão de temperatura", {
+          level: "error",
+          detail: String(err),
+          squadId: recap.squadId,
+        });
+      }
+    }
 
     return { count: validTasks.length };
   } catch (err) {
