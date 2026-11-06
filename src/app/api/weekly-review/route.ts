@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { knownClientNames } from "@/lib/client-resolve";
-import { currentWeekKey } from "@/lib/utils";
+import { currentWeekKey, normalizeText } from "@/lib/utils";
 
 const WINDOW_DAYS = 7;
 
@@ -101,14 +101,32 @@ export async function GET() {
       db.weeklyReviewDone.findMany({ where: { weekKey }, select: { client: true } }),
     ]);
 
+  // mesmo espírito do matchesClient() em src/lib/pipefy.ts — tolera acento/caixa e
+  // considera igual quando um nome é "extensão" do outro (ex.: "Etel | BPO" do n8n
+  // contém "Etel"), evitando abrir aba nova pra toda variação de grafia do mesmo cliente
+  function namesMatch(a: string, b: string): boolean {
+    const normA = normalizeText(a);
+    const normB = normalizeText(b);
+    if (!normA || !normB) return false;
+    if (normA === normB) return true;
+    const shorter = normA.length <= normB.length ? normA : normB;
+    const longer = normA.length <= normB.length ? normB : normA;
+    return shorter.length >= 3 && longer.includes(shorter);
+  }
+
   const buckets = new Map<string, ClientBucket>();
   function bucketFor(name: string | null | undefined): ClientBucket | null {
     if (!name) return null;
-    let b = buckets.get(name);
-    if (!b) {
-      b = { name, health: null, oxyStage: null, meetings: [], suggestions: [], tasksCompleted: [], tasksOpen: [] };
-      buckets.set(name, b);
+    const exact = buckets.get(name);
+    if (exact) return exact;
+    // funde grafia variante na aba do cliente já conhecido em vez de criar uma aba nova —
+    // só NÃO funde quando a string é mesmo nova (cliente novo, ex.: kickoff recém-marcado,
+    // que `names` já incluiu como seed abaixo e por isso nunca cai aqui)
+    for (const [key, bucket] of buckets) {
+      if (namesMatch(key, name)) return bucket;
     }
+    const b: ClientBucket = { name, health: null, oxyStage: null, meetings: [], suggestions: [], tasksCompleted: [], tasksOpen: [] };
+    buckets.set(name, b);
     return b;
   }
 

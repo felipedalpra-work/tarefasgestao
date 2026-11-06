@@ -6,6 +6,7 @@ import { log } from "./logger";
 import { findDuplicateNote } from "./duplicate-detection";
 import { dueDateOnly } from "./utils";
 import { suggestTemperatureForRecap } from "./temperature-suggestion";
+import { knownClientNames } from "./client-resolve";
 
 type SuggestedTask = {
   title?: string;
@@ -111,6 +112,11 @@ export async function processRecap(recapId: string, opts?: { force?: boolean }):
   const users = await db.user.findMany({ select: { id: true, name: true, email: true } });
   const memberList = users.map((u) => u.name || u.email).join(", ");
   const fewShot = await buildFewShotExamples(db, recap.squadId);
+  // lista de clientes já conhecidos pro prompt preferir o nome oficial em vez de um
+  // apelido/nome interno que apareça na transcrição (ex.: achado em produção — uma
+  // reunião da Captable virou "client": "CFG" porque alguém se referiu à empresa por um
+  // nome alternativo na ata, criando uma aba duplicada na Revisão Semanal)
+  const clientList = [...(await knownClientNames(db, recap.squadId))].sort().join(", ");
 
   const prompt = `Você é um assistente de gestão de tarefas para a empresa O2 Inc. Analise o conteúdo abaixo (transcrição, resumo ou lista de próximas etapas de reunião) e extraia TODAS as tarefas e compromissos.
 
@@ -120,7 +126,7 @@ Conteúdo:
 ${recap.body.slice(0, 5000)}
 
 Instruções:
-- Identifique o nome do cliente da reunião se mencionado (ex: "Fismatek", "Zé do Flor")
+- Identifique o nome do cliente da reunião se mencionado. Clientes já conhecidos da carteira: ${clientList || "(nenhum ainda)"}. Se a reunião for com um desses clientes, use EXATAMENTE o nome como está nessa lista, mesmo que a transcrição se refira a ele por um apelido, sigla ou nome de sistema diferente (ex.: a ata menciona "CFG" mas a reunião é da "Captable" — use "Captable"). Só use um nome fora dessa lista se a reunião for claramente com um cliente novo, que ainda não está na carteira.
 - Para cada tarefa identifique quem deve entregar: "client" se é o cliente que entrega para a O2, "o2" se é a O2 que entrega para o cliente, "internal" se é tarefa interna
 - "assignee": se o nome de um destes membros do squad for explicitamente mencionado como responsável, use o nome dele: ${memberList}. Se deliverTo for "client" e nenhuma pessoa específica do lado do cliente for citada pelo nome, use "Cliente". Se não der pra identificar ninguém, use string vazia "". NUNCA invente um responsável que não esteja no texto.
 - "evidence": cite o trecho literal (verbatim, sem parafrasear) do conteúdo que embasa essa tarefa — o mesmo texto que apareceu na transcrição, não um resumo seu
