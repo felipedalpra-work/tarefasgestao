@@ -179,7 +179,21 @@ export default function WeeklyReviewPage() {
   const prev = useCallback(() => goTo(index - 1), [goTo, index]);
 
   useEffect(() => {
+    // Esc/setinhas são atalhos de navegação do "showroom" (sair da revisão, trocar de
+    // empresa) — mas disparavam mesmo digitando num campo (ex.: editar Próximos Passos),
+    // porque o listener é no window e não checava o que estava focado. Setinha dentro de
+    // um <input>/<textarea> deveria mover o cursor no texto, não trocar de empresa; Esc
+    // num campo deveria só tirar o foco dele, não navegar pra fora da página inteira.
+    function isEditingText(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+    }
     function onKey(e: KeyboardEvent) {
+      if (isEditingText(e.target)) {
+        if (e.key === "Escape") (e.target as HTMLElement).blur();
+        return;
+      }
       if (e.key === "Escape") { router.push("/tasks"); return; }
       if (!started) return;
       if (e.key === "ArrowRight") next();
