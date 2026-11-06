@@ -558,7 +558,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
             </div>
             {task.description && (
               <div className="px-5 py-4 border-b border-surface-3">
-                <p className="text-xs text-ink-mid leading-relaxed whitespace-pre-wrap">{task.description}</p>
+                <p className="text-xs text-ink-mid leading-relaxed whitespace-pre-wrap break-words">{task.description}</p>
               </div>
             )}
           </>

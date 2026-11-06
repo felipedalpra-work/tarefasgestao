@@ -174,7 +174,7 @@ function MeetingCard({ m }: { m: PipefyMeeting }) {
       {m.observacoes && (
         <div className="mt-2">
           <div className="text-[11px] uppercase tracking-wide text-ink-dim mb-0.5">Observações do CFO</div>
-          <p className="text-sm text-ink-mid whitespace-pre-wrap">{m.observacoes}</p>
+          <p className="text-sm text-ink-mid whitespace-pre-wrap break-words">{m.observacoes}</p>
         </div>
       )}
 

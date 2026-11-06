@@ -54,7 +54,7 @@ export async function PipefyClientBlock({ client }: { client: string }) {
               {m.tipo && <span>· {m.tipo}</span>}
               {!m.preenchida && <span className="text-amber-400">· sem preenchimento</span>}
             </div>
-            {m.observacoes && <p className="text-sm text-ink-mid whitespace-pre-wrap mt-1.5">{m.observacoes}</p>}
+            {m.observacoes && <p className="text-sm text-ink-mid whitespace-pre-wrap break-words mt-1.5">{m.observacoes}</p>}
             {m.linkTranscricao && (
               <a href={m.linkTranscricao} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-o2-green hover:underline mt-1.5">
                 <ExternalLink size={12} /> Transcrição

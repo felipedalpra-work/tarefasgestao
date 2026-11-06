@@ -262,7 +262,7 @@ export function AiAssistant() {
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap",
+                    "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words",
                     m.role === "user" ? "bg-o2-green text-bg font-medium" : "bg-surface-2 text-ink"
                   )}
                 >
