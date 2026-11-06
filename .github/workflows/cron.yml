@@ -7,7 +7,7 @@ name: Scheduled jobs
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # gmail-sync + task-reminders — a cada 5 min
+    - cron: "*/5 * * * *"  # task-reminders — a cada 5 min
     - cron: "*/30 * * * *" # calendar-sync — a cada 30 min
     - cron: "0 11 * * *"   # deadlines — 8h BRT
     - cron: "0 20 * * *"   # deadlines — 17h BRT
@@ -15,6 +15,9 @@ on:
     - cron: "0 11 * * 1"   # digest — segunda 8h BRT
     - cron: "0 6 * * *"    # backup-email — 3h BRT, fora do horário de uso
     - cron: "0 12 * * *"   # pipefy-sync — 9h BRT
+    - cron: "0 23 * * *"   # gmail-sync — 20h BRT (1x/dia, pedido do usuário — antes era a
+    # cada 5 min; extração automática por IA religada em 2026-11-06 já cobre o dia todo
+    # num ciclo só, sem precisar rodar com tanta frequência)
   workflow_dispatch:
     inputs:
       job:
@@ -34,10 +37,7 @@ jobs:
             echo "jobs=${{ github.event.inputs.job }}" >> "$GITHUB_OUTPUT"
           else
             case "${{ github.event.schedule }}" in
-              # dois jobs no mesmo slot: duas entradas de cron idênticas não dariam pra
-              # distinguir aqui (github.event.schedule seria a mesma string), e uma
-              # segunda entrada */5 dobraria o consumo de minutos do Actions
-              "*/5 * * * *")  echo "jobs=gmail-sync task-reminders" >> "$GITHUB_OUTPUT" ;;
+              "*/5 * * * *")  echo "jobs=task-reminders" >> "$GITHUB_OUTPUT" ;;
               "*/30 * * * *") echo "jobs=calendar-sync" >> "$GITHUB_OUTPUT" ;;
               "0 11 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
               "0 20 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
@@ -45,6 +45,7 @@ jobs:
               "0 11 * * 1")   echo "jobs=digest" >> "$GITHUB_OUTPUT" ;;
               "0 6 * * *")    echo "jobs=backup-email" >> "$GITHUB_OUTPUT" ;;
               "0 12 * * *")   echo "jobs=pipefy-sync" >> "$GITHUB_OUTPUT" ;;
+              "0 23 * * *")   echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
               *) echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
             esac
           fi
