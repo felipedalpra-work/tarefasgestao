@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, getISOWeek, getISOWeekYear } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   X, ChevronLeft, ChevronRight, Sparkles, CalendarDays, CheckCircle2,
@@ -43,7 +43,7 @@ type ReviewClient = {
   tasksOpen: ReviewTask[];
 };
 
-type ReviewData = { windowStart: string; windowDays: number; clients: ReviewClient[]; users: UserOption[] };
+type ReviewData = { windowStart: string; windowDays: number; clients: ReviewClient[]; users: UserOption[]; doneClients: string[] };
 
 // campos da sugestão que dá pra editar antes de virar tarefa (mesmo conjunto da
 // edição em Sugestões da IA) — client fica fixo no cliente do slide atual, só o
@@ -66,16 +66,6 @@ function defaultSuggestionEditable(client: ReviewClient, s: ReviewSuggestion): S
     client: client.name,
     assignees: [],
   };
-}
-
-const DONE_STORAGE_PREFIX = "weekly-review-done-";
-
-// chave estável pra semana atual (ano-ISO + semana-ISO) — windowStart da API é um
-// recorte rolante (now - N dias) e muda a cada milissegundo, então nunca serviria de
-// chave de localStorage sem perder a marcação a cada reload
-function weekStorageKey(): string {
-  const now = new Date();
-  return `${getISOWeekYear(now)}-W${getISOWeek(now)}`;
 }
 
 const HEALTH_META: Record<string, { label: string; dot: string; text: string }> = {
@@ -139,14 +129,10 @@ export default function WeeklyReviewPage() {
       .then((r) => r.json())
       .then((json: ReviewData) => {
         setData(json);
-        // quais empresas já foram "riscadas" nessa revisão — guardado pela semana-ISO
-        // atual, pra sobreviver a reload e só zerar na semana seguinte
-        try {
-          const raw = localStorage.getItem(DONE_STORAGE_PREFIX + weekStorageKey());
-          setDoneNames(new Set(raw ? JSON.parse(raw) : []));
-        } catch {
-          setDoneNames(new Set());
-        }
+        // quais empresas já foram "riscadas" essa semana — compartilhado pelo squad
+        // inteiro (ver /api/weekly-review/done; antes era só localStorage, cada pessoa
+        // via o próprio estado — Gustavo marcava e Tainara via tudo desmarcado no dela)
+        setDoneNames(new Set(json.doneClients ?? []));
       })
       .catch(() => toast("Erro ao carregar a revisão semanal", "error"))
       .finally(() => setLoading(false));
@@ -156,16 +142,22 @@ export default function WeeklyReviewPage() {
   const total = clients.length;
   const current = clients[index] ?? null;
 
-  function persistDone(next: Set<string>) {
-    setDoneNames(next);
-    try { localStorage.setItem(DONE_STORAGE_PREFIX + weekStorageKey(), JSON.stringify([...next])); } catch {}
-  }
-
-  function toggleDone(name: string) {
+  async function toggleDone(name: string) {
+    const wasDone = doneNames.has(name);
     const next = new Set(doneNames);
-    if (next.has(name)) next.delete(name);
+    if (wasDone) next.delete(name);
     else next.add(name);
-    persistDone(next);
+    setDoneNames(next);
+
+    const res = await fetch("/api/weekly-review/done", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client: name, done: !wasDone }),
+    });
+    if (!res.ok) {
+      setDoneNames(doneNames); // reverte
+      toast("Erro ao salvar — tente de novo", "error");
+    }
   }
 
   // navegar NÃO marca nada como revisado — só o botão "Marcar como concluída"

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { knownClientNames } from "@/lib/client-resolve";
+import { currentWeekKey } from "@/lib/utils";
 
 const WINDOW_DAYS = 7;
 
@@ -50,7 +51,9 @@ export async function GET() {
   const now = new Date();
   const windowStart = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const [names, notes, meetings, recapSuggestions, externalSuggestions, completedActivity, tasksOpen, users] =
+  const weekKey = currentWeekKey();
+
+  const [names, notes, meetings, recapSuggestions, externalSuggestions, completedActivity, tasksOpen, users, doneRows] =
     await Promise.all([
       knownClientNames(db, session.user.squadId),
       db.clientNote.findMany({ select: { client: true, healthStatus: true, oxyStage: true } }),
@@ -95,6 +98,7 @@ export async function GET() {
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
       }),
       db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true, image: true } }),
+      db.weeklyReviewDone.findMany({ where: { weekKey }, select: { client: true } }),
     ]);
 
   const buckets = new Map<string, ClientBucket>();
@@ -162,5 +166,12 @@ export async function GET() {
 
   const clients = [...buckets.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-  return NextResponse.json({ windowStart: windowStart.toISOString(), windowDays: WINDOW_DAYS, clients, users });
+  return NextResponse.json({
+    windowStart: windowStart.toISOString(),
+    windowDays: WINDOW_DAYS,
+    clients,
+    users,
+    weekKey,
+    doneClients: doneRows.map((r) => r.client),
+  });
 }

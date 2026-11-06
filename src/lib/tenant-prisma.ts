@@ -31,6 +31,7 @@ const SCOPED_MODELS = new Set([
   "Notification",
   "Setting",
   "User",
+  "WeeklyReviewDone",
 ]);
 
 const WHERE_OPS = new Set([

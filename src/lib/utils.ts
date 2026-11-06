@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { getISOWeek, getISOWeekYear } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -91,6 +92,15 @@ export function brtNow(now: Date = new Date()): { today: Date; minutesOfDay: num
     today: new Date(Date.UTC(get("year"), get("month") - 1, get("day"))),
     minutesOfDay: get("hour") * 60 + get("minute"),
   };
+}
+
+// Chave estável da semana atual (ano-ISO + semana-ISO, ex.: "2026-W45") — usada pra
+// marcar quais clientes já foram revisados na Revisão Semanal (ver WeeklyReviewDone no
+// schema). Em Brasília, não UTC: o servidor roda em UTC e a semana ISO vira 3h antes do
+// que deveria perto da virada de domingo pra segunda — mesmo motivo de brtNow().
+export function currentWeekKey(): string {
+  const { today } = brtNow();
+  return `${getISOWeekYear(today)}-W${getISOWeek(today)}`;
 }
 
 // "09:00" → 540. Retorna null se não for um horário válido.

@@ -43,6 +43,7 @@ model User {
   tratativas            Tratativa[]          @relation("TratativaResponsavel")
   createdTratativas     Tratativa[]          @relation("TratativaCreatedBy")
   uploadedRecaps        MeetRecap[]          @relation("UploadedRecaps")
+  weeklyReviewsMarked   WeeklyReviewDone[]   @relation("WeeklyReviewMarkedBy")
   assistantMessages     AssistantMessage[]
   platformOwner         PlatformOwner?
   createdAt             DateTime             @default(now())
@@ -574,6 +575,25 @@ model FechamentoMensal {
   @@unique([squadId, client, year, month])
   @@index([client])
   @@index([squadId])
+}
+
+// Qual cliente já foi "riscado" (revisado) na Revisão Semanal — era guardado só em
+// localStorage (achado em 2026-11-06: Gustavo marcava num squad, Tainara abria em outra
+// sessão e via tudo desmarcado — cada navegador tinha o seu próprio estado, não
+// compartilhado entre o squad). weekKey é ano-ISO+semana-ISO (ex.: "2026-W45"), mesma
+// convenção que já existia no front — zera sozinho na semana seguinte, não precisa de
+// limpeza manual.
+model WeeklyReviewDone {
+  id       String   @id @default(cuid())
+  squadId  String
+  weekKey  String
+  client   String
+  doneAt   DateTime @default(now())
+  doneById String?
+  doneBy   User?    @relation("WeeklyReviewMarkedBy", fields: [doneById], references: [id])
+
+  @@unique([squadId, weekKey, client])
+  @@index([squadId, weekKey])
 }
 
 // Rotinas automatizadas fora do app (hoje rodam como tarefas agendadas do
