@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, X, Loader2, RotateCcw, Check, AlertTriangle, Mic, MicOff } from "lucide-react";
 import { LogoIcon } from "./LogoIcon";
+import { Linkify } from "./Linkify";
 import { cn } from "@/lib/utils";
 import { buildVoiceVocabulary, correctTranscript } from "@/lib/voice-correction";
 
@@ -266,7 +267,7 @@ export function AiAssistant() {
                     m.role === "user" ? "bg-o2-green text-bg font-medium" : "bg-surface-2 text-ink"
                   )}
                 >
-                  {m.content}
+                  <Linkify text={m.content} />
                 </div>
               </div>
             ))}

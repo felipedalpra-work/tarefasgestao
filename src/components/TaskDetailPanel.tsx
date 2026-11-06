@@ -14,6 +14,7 @@ import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { WeekdayPicker } from "./WeekdayPicker";
 import { AssigneePicker } from "./AssigneePicker";
+import { Linkify } from "./Linkify";
 import { CLIENT_CHOICE, taskResponsibles, isJointTask, describeResponsibles, type AssigneeInput } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
@@ -558,7 +559,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
             </div>
             {task.description && (
               <div className="px-5 py-4 border-b border-surface-3">
-                <p className="text-xs text-ink-mid leading-relaxed whitespace-pre-wrap break-words">{task.description}</p>
+                <p className="text-xs text-ink-mid leading-relaxed whitespace-pre-wrap break-words"><Linkify text={task.description} /></p>
               </div>
             )}
           </>
