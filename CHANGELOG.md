@@ -4,6 +4,37 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-10 (gmail-sync: para graciosamente antes de estourar o tempo)
+
+- A reunião da Zanotti (09/11) sincronizou normalmente mas ficou com `processedAt: null` pra sempre, sem nenhum log de erro — a Vercel mata a função no meio da execução ao estourar `maxDuration` (60s), sem exceção nem catch. Com o cron agora rodando 1x/dia (em vez de 5 em 5 min, ver 2026-11-06), um ciclo acumula mais recap pendente e fica mais fácil estourar o orçamento no meio de um `processRecap`.
+- `syncUserGmail` (`src/lib/gmail-sync.ts`) agora para graciosamente antes de estourar o tempo (orçamento de 45s com 20s de margem por recap, compartilhado entre todos os usuários de um mesmo ciclo), deixando qualquer recap restante com `processedAt: null` — pego automaticamente no próximo ciclo, sem sumir sem log de novo. `/api/recaps/sync` (botão manual) ganhou `maxDuration = 60`, que faltava.
+
+## 2026-11-06 (gmail-sync diário, Revisão Semanal: atalhos/compartilhado/fusão de cliente, links clicáveis)
+
+- **gmail-sync**: de 5 em 5 min pra 1x/dia, 20h BRT — fazia sentido rodar a cada 5 min quando a extração automática por IA estava desligada; com ela religada, 1x/dia cobre o dia inteiro num ciclo só. `task-reminders` continua a cada 5 min (motivo diferente: granularidade de horário de tarefa).
+- **Revisão Semanal — atalhos de teclado**: Esc/setinhas (sair da revisão, trocar de empresa) atropelavam campo em edição — digitar num campo e apertar Esc saía da página inteira em vez de só tirar o foco. Agora só agem quando o alvo do evento não é um campo editável.
+- **Revisão Semanal — "cliente revisado" compartilhado**: a marcação vivia só em `localStorage`, então cada pessoa via o próprio estado. Nova tabela `WeeklyReviewDone` (squadId, weekKey, client) + `GET/PATCH /api/weekly-review`(`/done`) — agora é visto pelo squad inteiro, zera sozinho a cada semana ISO nova.
+- **Revisão Semanal — funde grafia variante de cliente**: achado pelo usuário que "CFG" (e outros, ex. "D2M Distribuidora | BPO") abria aba própria em vez de cair dentro do cliente de verdade (Captable). Dois fixes: `bucketFor()` agora funde contra clientes já conhecidos (mesmo espírito do `matchesClient()` do Pipefy) e o prompt de extração do Meet Recap passou a listar os clientes conhecidos pra IA usar o nome oficial.
+- **Links clicáveis + quebra de texto longo**: link "📎 Ata: `<url>`" na descrição da tarefa estourava a largura do modal e não dava pra clicar. `break-words` + novo componente `Linkify` (`src/components/Linkify.tsx`) aplicados nos 4 lugares com texto livre que pode conter link (detalhe da tarefa, observações do Pipefy x2, mensagens do assistente de IA).
+
+## 2026-10-30 (Corrige recap "sumindo" por timeout + troca de modelo Gemini)
+
+- Achado no caso real do Grupo Lidon: a IA extraiu certinho, mas nenhuma `RecapSuggestion` chegou a ser criada, sem log de erro — a Vercel matou a função no meio da execução (não uma exceção) porque `processRecap` passou a fazer até 3 chamadas de IA sequenciais sem `maxDuration` nas rotas que chamam na hora. `suggestTemperatureForRecap` (a chamada nova) movida pra DEPOIS de criar as `RecapSuggestion`, e `maxDuration = 60` adicionado em `/api/recaps/[id]/process` e `/api/recaps/upload`.
+- `gemini-3.8-flash` trocado por `gemini-3.5-flash` (pedido do usuário) — o 3.8 estava derrubando chamadas em produção com 503 "high demand" repetidos, inclusive causando o incidente acima. Confirmado que o 3.5 responde de verdade antes de trocar.
+
+## 2026-10-29 (Sugestão de Temperatura por IA a partir da ata, com critério do CFO)
+
+- Fecha o ciclo da integração Pipefy: quando a ata completa de uma reunião é processada (Meet Recap), a IA já analisa o conteúdo e sugere Temperatura + Próximos Passos — a pessoa só aprova (grava direto, já manda pro Pipefy) ou edita (campo normal, fluxo que já existia). O critério do que é "Bom" vs "Crítico" é definido pelo CFO via prompt configurável, não hardcoded.
+- `CalendarEvent` ganha `suggestedTemperature`/`suggestedNextSteps`/`temperatureSuggestedAt`; `callAiRaw` extraído pra `src/lib/ai-provider.ts` (reaproveitado por extração de tarefas e sugestão de temperatura); `src/lib/temperature-suggestion.ts` (novo) casa o recap com a reunião por cliente+dia e chama a IA com o critério do CFO (ou um default genérico). Popup de primeira configuração pra qualquer admin do squad (mesmo padrão do `OnboardingGate`), com opção de dispensar sem travar a funcionalidade; campo editável depois em Configurações. Banner "🤖 IA sugere" com Aprovar/Editar na aba Reuniões do cliente.
+- Dropdown de Temperatura ganhou o emoji de cor (🟢🟡🔴) direto nas opções, mesmo padrão visual que o Pipefy já usa — `<option>` não respeita cor de fundo via CSS de forma confiável entre navegadores.
+
+## 2026-10-23 (Meet Recap: "Extrair tarefas" travando, limite de tokens, erro vs "sem tarefa", padrão n8n)
+
+- **"Extrair tarefas" travando pra sempre**: não era a chamada de IA — era o refetch da lista inteira de recaps logo depois. Com a ata completa (backfill abaixo), o body de cada recap foi de ~2-5KB pra até 20KB; `GET /api/recaps` passou a devolver ~2,6MB só de body numa lista onde ninguém usa esse campo. Lista agora omite `body`; novo `GET /api/recaps/[id]` busca sob demanda quando a pessoa expande "Ver e-mail original". `sync()`/`process()` ganharam `try/finally` (sem isso, erro de rede no meio deixava o spinner girando pra sempre).
+- **Limite de tokens de saída da IA**: 2048 → 8192 (Gemini e Groq) — achado um caso real (Babyland) onde o modelo cortava o JSON no meio de uma description com a ata completa (mais contexto, lista mais longa), invalidando a extração inteira.
+- **Erro de IA vs "não achou tarefa"**: `processRecap` tratava "503 do Gemini 3x seguidas" e "não tinha tarefa na ata" do mesmo jeito (`count: 0`). Agora devolve `{ count, error? }` — a rota de reprocessar/upload mostra a mensagem de erro real em vez de "nenhuma tarefa identificada".
+- **Tarefas extraídas seguem o padrão do n8n**: prazo = 1 dia antes da próxima reunião do cliente (antes só o palpite da IA sobre o texto), prompt ganhou "evidência" (cita o trecho da transcrição), description junto com "💬 Evidência" + "📎 Ata", `assignee` reconhece "Cliente" como responsável. `MeetRecap.transcriptLink` novo campo (link do Google Doc, grava mesmo se a leitura do conteúdo falhar) + backfill nos 150 recaps já existentes (149/150 atualizados).
+
 ## 2026-10-23 (Meet Recap: ata completa do Gemini — API do Drive desabilitada + backfill)
 
 - Depois do fix de 2026-10-20 (escopo `drive.readonly` + buscar o Google Doc linkado no e-mail em vez do resumo curto), os recaps novos continuavam vindo com o resumo curto, sem nenhum log de erro. Investigado direto contra a conta real da Tainara: a causa não era falta de reconexão dela — era a **API do Google Drive nunca ter sido habilitada no projeto do Google Cloud** das credenciais OAuth do app ("Google Drive API has not been used in project ... or it is disabled"). Esse erro não batia no regex de "escopo insuficiente" em `fetchGoogleDocText` (`src/lib/gmail-sync.ts`), então a falha era silenciosa — nenhum log, ninguém saberia.
