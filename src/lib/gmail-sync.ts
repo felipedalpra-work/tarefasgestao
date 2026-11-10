@@ -98,7 +98,20 @@ function extractTextFromParts(parts: any[]): string {
   return text;
 }
 
-export async function syncUserGmail(userId: string): Promise<{ synced: number; suggestionsExtracted: number }> {
+// Vercel mata a função no meio da execução ao estourar maxDuration (60s nas rotas que chamam
+// isso) — sem exceção, sem log, só a linha do banco fica pela metade (foi o que aconteceu com
+// o recap da Zanotti em 10/11: sincronizado, mas processedAt nunca gravado, zero log de erro,
+// porque o ciclo tinha recap demais pra processar num dia só depois do cron virar diário).
+// Em vez de arriscar ser morto no meio de um processRecap (até 3 chamadas de IA, pode levar
+// dezenas de segundos), para graciosamente antes de estourar o orçamento — o(s) recap(s) que
+// sobrarem continuam com processedAt: null e são pegos no próximo ciclo, sem sumir de novo.
+const GMAIL_SYNC_TIME_BUDGET_MS = 45_000;
+const PER_RECAP_SAFETY_MARGIN_MS = 20_000;
+
+export async function syncUserGmail(
+  userId: string,
+  deadline: number = Date.now() + GMAIL_SYNC_TIME_BUDGET_MS
+): Promise<{ synced: number; suggestionsExtracted: number }> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { squadId: true } });
   if (!user) return { synced: 0, suggestionsExtracted: 0 };
   const db = forSquad(user.squadId);
@@ -205,8 +218,15 @@ export async function syncUserGmail(userId: string): Promise<{ synced: number; s
         where: { processedAt: null },
         select: { id: true },
       });
-      for (const { id: recapId } of pending) {
-        const { count } = await processRecap(recapId);
+      for (let i = 0; i < pending.length; i++) {
+        if (Date.now() >= deadline - PER_RECAP_SAFETY_MARGIN_MS) {
+          await log("gmail-sync", "Tempo esgotado nesse ciclo — recap(s) restante(s) ficam pro próximo", {
+            detail: `${pending.length - i} de ${pending.length} recap(s) pendente(s) ainda sem processar`,
+            squadId: user.squadId,
+          });
+          break;
+        }
+        const { count } = await processRecap(pending[i].id);
         suggestionsExtracted += count;
       }
     }
@@ -238,8 +258,13 @@ export async function syncAllUsers(): Promise<void> {
 
   console.log(`[cron] sincronizando ${accounts.length} usuário(s)...`);
 
+  // orçamento de tempo compartilhado entre todos os usuários desse ciclo — não é um
+  // orçamento por usuário, senão o segundo squad da lista sempre teria os 45s inteiros
+  // mesmo que o primeiro já tivesse consumido a maior parte do maxDuration da rota.
+  const deadline = Date.now() + GMAIL_SYNC_TIME_BUDGET_MS;
+
   for (const { userId } of accounts) {
-    const { synced, suggestionsExtracted } = await syncUserGmail(userId);
+    const { synced, suggestionsExtracted } = await syncUserGmail(userId, deadline);
     if (synced > 0) {
       console.log(`[cron] userId=${userId}: ${synced} recap(s), ${suggestionsExtracted} sugestão(ões) extraída(s)`);
     }

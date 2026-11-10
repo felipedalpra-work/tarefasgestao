@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { syncUserGmail } from "@/lib/gmail-sync";
 import { revalidateTag } from "next/cache";
 
+// mesmo motivo de /api/cron/[job] (job "gmail-sync"): esse botão também passa pelo loop de
+// processRecap em syncUserGmail, que pode levar dezenas de segundos por recap pendente.
+export const maxDuration = 60;
+
 export async function POST() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
