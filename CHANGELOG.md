@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-10 (Saúde da Carteira: aba "Jornada de Onboarding")
+
+- O painel individual do cliente (commit `e95021e`, mesmo dia) não dava visão de carteira inteira — usuário pediu uma tela só pra ver "em que marco está cada cliente" de uma vez.
+- Nova aba em `/saude-carteira` ("Jornada de Onboarding", ao lado de "Temperatura"): tabela com Kick-off/Diagnóstico/Oxy Integrada/Comitê mensal/reuniões pendentes, uma linha por cliente conhecido do squad (inclui quem ainda não tem nenhuma reunião no Pipefy, pra aparecer como "não iniciado" em vez de sumir da lista). Mesma fonte de dados já cacheada (`getOnboardingCards`), só leitura.
+
 ## 2026-11-10 (Pipefy: jornada de onboarding + comitê mensal no painel do cliente)
 
 - Pedido do usuário: trazer Kickoff/Diagnóstico/Oxy Integrada/Comitê mensal do Pipefy pra plataforma, "só pra controle do squad" — só leitura, nenhuma escrita de volta (diferente do fluxo de Temperatura, que é bidirecional).
