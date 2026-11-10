@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-10 (Pipefy: jornada de onboarding + comitê mensal no painel do cliente)
+
+- Pedido do usuário: trazer Kickoff/Diagnóstico/Oxy Integrada/Comitê mensal do Pipefy pra plataforma, "só pra controle do squad" — só leitura, nenhuma escrita de volta (diferente do fluxo de Temperatura, que é bidirecional).
+- Achado investigando o Pipefy real (API, só leitura): existe um pipe inteiro pra isso, "3.02 Gestão de Rotinas (CFO)", com fases Kick-off do Projeto → Primeiras Entregas - Diagnóstico → Oxy Integrada → Execução de Rotinas → Entregue/Concluído — cross-squad (cards de vários CFOs, não só Gustavo). Cada cliente tem um card POR ENTREGA (não um card só migrando de fase), então pode aparecer em mais de uma fase ao mesmo tempo.
+- `src/lib/pipefy.ts`: `getOnboardingCards()` (cacheado 2h, mesma tag `pipefy`) + `onboardingSummaryForClient()` — prioriza o card concluído quando há mais de um do mesmo tipo pro mesmo cliente. "Comitê mensal" reaproveita os dados que já existiam (`PipefyMeeting.tipo` da tabela de reuniões), sem tocar numa tabela órfã do Pipefy ("CF – Acompanhamento Mensal") que não tem campo de cliente e cuja ligação não foi possível confirmar.
+- `PipefyClientBlock.tsx`: faixa de badges (✅/⏳/⬜/⛔ por marco + data) acima da lista de reuniões, best-effort (se falhar, só essa faixa some).
+
 ## 2026-11-10 (gmail-sync: para graciosamente antes de estourar o tempo)
 
 - A reunião da Zanotti (09/11) sincronizou normalmente mas ficou com `processedAt: null` pra sempre, sem nenhum log de erro — a Vercel mata a função no meio da execução ao estourar `maxDuration` (60s), sem exceção nem catch. Com o cron agora rodando 1x/dia (em vez de 5 em 5 min, ver 2026-11-06), um ciclo acumula mais recap pendente e fica mais fácil estourar o orçamento no meio de um `processRecap`.
