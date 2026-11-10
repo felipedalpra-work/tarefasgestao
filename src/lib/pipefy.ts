@@ -214,6 +214,13 @@ export function meetingsForClient(meetings: PipefyMeeting[], platformName: strin
   return meetings.filter((m) => matchesClient(m.clientLabel, platformName));
 }
 
+// Reunião mais recente do tipo "Comitê Estratégico Mensal" (marco D+90 do playbook, ver
+// memória project_cfoaas_playbook) — `meetings` já vem ordenado desc por createdAt (ver
+// loadGustavoMeetings), então o primeiro match já é o mais recente.
+export function latestComiteMensal(meetings: PipefyMeeting[], platformName: string): PipefyMeeting | null {
+  return meetingsForClient(meetings, platformName).find((m) => /comit/i.test(m.tipo)) ?? null;
+}
+
 // ---------- jornada de onboarding (Kick-off / Diagnóstico / Oxy Integrada) ----------
 // Só LEITURA — nenhuma escrita (pedido do usuário: "só pra controle do squad"). Lê o pipe
 // "3.02 Gestão de Rotinas (CFO)", que modela a jornada do cliente como um card POR ENTREGA
@@ -334,6 +341,19 @@ export function onboardingSummaryForClient(cards: OnboardingCard[], platformName
   };
   return { kickoff: build("kickoff"), diagnostico: build("diagnostico"), oxy: build("oxy") };
 }
+
+// Linha da visão geral "Jornada de Onboarding" em /saude-carteira — um registro por
+// cliente conhecido do squad (não só quem já tem reunião no Pipefy), pra dar pra ver quem
+// ainda nem começou. Montada em page.tsx (combina onboardingSummaryForClient + groupByClient
+// + latestComiteMensal, que vêm de fontes diferentes), só o tipo mora aqui.
+export type OnboardingOverviewRow = {
+  client: string;
+  kickoff: OnboardingMilestoneStatus;
+  diagnostico: OnboardingMilestoneStatus;
+  oxy: OnboardingMilestoneStatus;
+  comiteMensalData: string | null; // MM/DD/YYYY
+  reunioesPendentes: number;
+};
 
 export type ClientGroup = {
   client: string;

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, AlertTriangle, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Linkify } from "@/components/Linkify";
-import type { ClientGroup, PipefyMeeting, Temperatura } from "@/lib/pipefy";
+import type { ClientGroup, PipefyMeeting, Temperatura, OnboardingOverviewRow, OnboardingMilestoneStatus } from "@/lib/pipefy";
 
 const TEMP_META: Record<string, { dot: string; label: string; chip: string }> = {
   "🔴": { dot: "bg-red-500", label: "Vermelho", chip: "bg-red-500/10 text-red-400" },
@@ -34,8 +34,18 @@ function splitPassos(texto: string): string[] {
 }
 
 type Filtro = "todos" | "🔴" | "🟡" | "🟢" | "pendentes";
+type Aba = "temperatura" | "jornada";
 
-export function SaudeCarteiraView({ groups, error }: { groups: ClientGroup[]; error: string | null }) {
+export function SaudeCarteiraView({
+  groups,
+  onboardingRows,
+  error,
+}: {
+  groups: ClientGroup[];
+  onboardingRows: OnboardingOverviewRow[];
+  error: string | null;
+}) {
+  const [aba, setAba] = useState<Aba>("temperatura");
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [aberto, setAberto] = useState<Set<string>>(new Set());
 
@@ -87,34 +97,123 @@ export function SaudeCarteiraView({ groups, error }: { groups: ClientGroup[]; er
     { id: "pendentes", label: `Pendentes (${contagem.pendentes})` },
   ];
 
+  const abas: { id: Aba; label: string }[] = [
+    { id: "temperatura", label: "Temperatura" },
+    { id: "jornada", label: "Jornada de Onboarding" },
+  ];
+
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-5">
-        {chips.map((ch) => (
+      <div className="flex gap-1 mb-5 border-b border-white/10">
+        {abas.map((a) => (
           <button
-            key={ch.id}
-            onClick={() => setFiltro(ch.id)}
+            key={a.id}
+            onClick={() => setAba(a.id)}
             className={cn(
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border",
-              filtro === ch.id
-                ? "bg-o2-green/10 text-o2-green border-o2-green/30"
-                : "bg-transparent text-ink-mid border-white/10 hover:text-ink"
+              "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              aba === a.id ? "border-o2-green text-ink" : "border-transparent text-ink-mid hover:text-ink"
             )}
           >
-            {ch.label}
+            {a.label}
           </button>
         ))}
       </div>
 
-      {visiveis.length === 0 ? (
-        <p className="text-ink-dim text-sm py-8 text-center">Nenhum cliente neste filtro.</p>
+      {aba === "jornada" ? (
+        <JornadaTable rows={onboardingRows} />
       ) : (
-        <div className="space-y-2">
-          {visiveis.map((g) => (
-            <ClientRow key={g.client} g={g} aberto={aberto.has(g.client)} onToggle={() => toggle(g.client)} />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-wrap gap-2 mb-5">
+            {chips.map((ch) => (
+              <button
+                key={ch.id}
+                onClick={() => setFiltro(ch.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border",
+                  filtro === ch.id
+                    ? "bg-o2-green/10 text-o2-green border-o2-green/30"
+                    : "bg-transparent text-ink-mid border-white/10 hover:text-ink"
+                )}
+              >
+                {ch.label}
+              </button>
+            ))}
+          </div>
+
+          {visiveis.length === 0 ? (
+            <p className="text-ink-dim text-sm py-8 text-center">Nenhum cliente neste filtro.</p>
+          ) : (
+            <div className="space-y-2">
+              {visiveis.map((g) => (
+                <ClientRow key={g.client} g={g} aberto={aberto.has(g.client)} onToggle={() => toggle(g.client)} />
+              ))}
+            </div>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+const MILESTONE_META: Record<OnboardingMilestoneStatus["status"], { icon: string; className: string; label: string }> = {
+  concluido: { icon: "✅", className: "text-o2-green", label: "Concluído" },
+  em_andamento: { icon: "⏳", className: "text-amber-400", label: "Em andamento" },
+  cancelado: { icon: "⛔", className: "text-ink-dim", label: "Cancelado" },
+  nao_iniciado: { icon: "⬜", className: "text-ink-dim/60", label: "Não iniciado" },
+};
+
+function MilestoneCell({ info }: { info: OnboardingMilestoneStatus }) {
+  const meta = MILESTONE_META[info.status];
+  return (
+    <div className={cn("flex items-center gap-1.5 text-xs", meta.className)} title={meta.label}>
+      <span>{meta.icon}</span>
+      {info.doneAt && <span className="text-ink-dim">{fmtData(info.doneAt)}</span>}
+    </div>
+  );
+}
+
+function JornadaTable({ rows }: { rows: OnboardingOverviewRow[] }) {
+  if (!rows.length) return <p className="text-ink-dim text-sm py-8 text-center">Nenhum cliente na carteira.</p>;
+  return (
+    <div className="overflow-x-auto rounded-xl border border-white/10">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-ink-dim">
+            <th className="px-4 py-2.5 font-medium">Cliente</th>
+            <th className="px-4 py-2.5 font-medium">Kick-off</th>
+            <th className="px-4 py-2.5 font-medium">Diagnóstico</th>
+            <th className="px-4 py-2.5 font-medium">Oxy Integrada</th>
+            <th className="px-4 py-2.5 font-medium">Comitê mensal</th>
+            <th className="px-4 py-2.5 font-medium">Reuniões pendentes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.client} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
+              <td className="px-4 py-2.5 font-medium text-ink whitespace-nowrap">{r.client}</td>
+              <td className="px-4 py-2.5">
+                <MilestoneCell info={r.kickoff} />
+              </td>
+              <td className="px-4 py-2.5">
+                <MilestoneCell info={r.diagnostico} />
+              </td>
+              <td className="px-4 py-2.5">
+                <MilestoneCell info={r.oxy} />
+              </td>
+              <td className="px-4 py-2.5 text-xs text-ink-mid">
+                {r.comiteMensalData ? fmtData(r.comiteMensalData) : <span className="text-ink-dim/60">⬜</span>}
+              </td>
+              <td className="px-4 py-2.5">
+                {r.reunioesPendentes > 0 ? (
+                  <span className="text-xs bg-amber-400/10 text-amber-400 rounded-md px-2 py-0.5">{r.reunioesPendentes}</span>
+                ) : (
+                  <span className="text-ink-dim/60 text-xs">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
