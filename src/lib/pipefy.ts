@@ -214,6 +214,127 @@ export function meetingsForClient(meetings: PipefyMeeting[], platformName: strin
   return meetings.filter((m) => matchesClient(m.clientLabel, platformName));
 }
 
+// ---------- jornada de onboarding (Kick-off / Diagnóstico / Oxy Integrada) ----------
+// Só LEITURA — nenhuma escrita (pedido do usuário: "só pra controle do squad"). Lê o pipe
+// "3.02 Gestão de Rotinas (CFO)", que modela a jornada do cliente como um card POR ENTREGA
+// (não um card só migrando de fase): "Grupo Lidon" tem um card pro Diagnóstico e outro pra
+// Oxy Integrada, por exemplo, então o mesmo cliente pode aparecer em mais de uma fase ao
+// mesmo tempo. Cross-squad (cards de vários "Líder Responsável", não só o Gustavo) — por
+// isso não tem CFO_ASSIGNEE aqui, o filtro de "é da minha carteira" é o mesmo
+// matchesClient() usado no resto do arquivo.
+const ONBOARDING_PIPE_PHASES: { id: number; key: OnboardingPhaseKey }[] = [
+  { id: 340748725, key: "kickoff" }, // Kick-off do Projeto
+  { id: 340748726, key: "diagnostico" }, // Primeiras Entregas - Diagnóstico
+  { id: 340800379, key: "oxy_integrada" }, // Oxy Integrada
+  { id: 340748727, key: "execucao_rotinas" }, // Execução de Rotinas (mesma fase já lida em fetchGustavoTitles)
+  { id: 340748728, key: "concluido" }, // Entregue / Concluído
+  { id: 341385640, key: "cancelado" }, // Cancelado
+];
+
+export type OnboardingPhaseKey = "kickoff" | "diagnostico" | "oxy_integrada" | "execucao_rotinas" | "concluido" | "cancelado";
+
+type MilestoneKey = "kickoff" | "diagnostico" | "oxy";
+
+// "Tipo de Entrega" do card -> qual dos 3 marcos ele representa (outros tipos, ex.
+// entregas pontuais avulsas, ficam fora do escopo desta jornada)
+const MILESTONE_TYPE: Record<string, MilestoneKey> = {
+  "Kick-off": "kickoff",
+  "Diagnóstico Financeiro": "diagnostico",
+  "Oxy Integrada": "oxy",
+};
+
+// campo de data de conclusão (só vem preenchido quando o card chega em "Entregue/Concluído")
+const DONE_DATE_LABEL: Record<MilestoneKey, string> = {
+  kickoff: "Data do Kick-off",
+  diagnostico: "Data de Conclusão",
+  oxy: "Data de Entrega da Oxy",
+};
+
+type OnboardingCard = {
+  client: string; // título do card no Pipefy
+  milestone: MilestoneKey;
+  phase: OnboardingPhaseKey;
+  doneAt: string | null; // MM/DD/YYYY, só quando phase === "concluido"
+  responsavel: string | null;
+};
+
+async function fetchOnboardingCardsInPhase(phaseId: number, phaseKey: OnboardingPhaseKey): Promise<OnboardingCard[]> {
+  const out: OnboardingCard[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 20; page++) {
+    const data: {
+      phase: {
+        cards: {
+          pageInfo: { hasNextPage: boolean; endCursor: string };
+          edges: { node: { title: string; fields: { name: string; value: string }[] } }[];
+        };
+      };
+    } = await gql(
+      `query { phase(id: ${phaseId}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title fields { name value } } } } } }`
+    );
+    const c = data.phase.cards;
+    for (const { node } of c.edges) {
+      const tipo = node.fields.find((f) => f.name === "Tipo de Entrega")?.value || "";
+      const milestone = MILESTONE_TYPE[tipo];
+      if (!milestone) continue;
+      const doneAt = phaseKey === "concluido" ? node.fields.find((f) => f.name === DONE_DATE_LABEL[milestone])?.value || null : null;
+      const respRaw = node.fields.find((f) => f.name === "Líder Responsável")?.value;
+      let responsavel: string | null = null;
+      if (respRaw) {
+        try {
+          responsavel = (JSON.parse(respRaw) as string[])[0] ?? null;
+        } catch {
+          responsavel = respRaw;
+        }
+      }
+      out.push({ client: node.title, milestone, phase: phaseKey, doneAt, responsavel });
+    }
+    if (!c.pageInfo.hasNextPage) break;
+    after = c.pageInfo.endCursor;
+  }
+  return out;
+}
+
+async function loadOnboardingCards(): Promise<OnboardingCard[]> {
+  const perPhase = await Promise.all(ONBOARDING_PIPE_PHASES.map((p) => fetchOnboardingCardsInPhase(p.id, p.key)));
+  return perPhase.flat();
+}
+
+// Cacheado por 2h, mesmo motivo/tag de getGustavoMeetings (poupar quota da API do Pipefy).
+export const getOnboardingCards = unstable_cache(loadOnboardingCards, ["pipefy-onboarding-cards"], {
+  revalidate: 7200,
+  tags: ["pipefy"],
+});
+
+export type OnboardingMilestoneStatus = {
+  status: "concluido" | "em_andamento" | "cancelado" | "nao_iniciado";
+  doneAt: string | null; // MM/DD/YYYY
+  responsavel: string | null;
+};
+
+export type ClientOnboardingSummary = {
+  kickoff: OnboardingMilestoneStatus;
+  diagnostico: OnboardingMilestoneStatus;
+  oxy: OnboardingMilestoneStatus;
+};
+
+// Se houver mais de um card do mesmo tipo pro mesmo cliente (card recriado, etc.),
+// prioriza o que já concluiu — nunca mostra "em andamento" se já tem um concluído.
+function pickBestCard(cards: OnboardingCard[]): OnboardingCard | undefined {
+  return cards.find((c) => c.phase === "concluido") ?? cards.find((c) => c.phase !== "cancelado") ?? cards[0];
+}
+
+export function onboardingSummaryForClient(cards: OnboardingCard[], platformName: string): ClientOnboardingSummary {
+  const mine = cards.filter((c) => matchesClient(c.client, platformName));
+  const build = (milestone: MilestoneKey): OnboardingMilestoneStatus => {
+    const card = pickBestCard(mine.filter((c) => c.milestone === milestone));
+    if (!card) return { status: "nao_iniciado", doneAt: null, responsavel: null };
+    const status = card.phase === "concluido" ? "concluido" : card.phase === "cancelado" ? "cancelado" : "em_andamento";
+    return { status, doneAt: card.doneAt, responsavel: card.responsavel };
+  };
+  return { kickoff: build("kickoff"), diagnostico: build("diagnostico"), oxy: build("oxy") };
+}
+
 export type ClientGroup = {
   client: string;
   naoCadastrado: boolean; // veio do Pipefy mas não está na carteira da plataforma

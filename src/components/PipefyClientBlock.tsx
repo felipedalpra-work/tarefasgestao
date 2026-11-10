@@ -1,6 +1,14 @@
 // Bloco somente-leitura com a saúde/reuniões do cliente vindas do Pipefy.
 // Server component — reaproveita o cache de getGustavoMeetings.
-import { getGustavoMeetings, meetingsForClient, type Temperatura } from "@/lib/pipefy";
+import {
+  getGustavoMeetings,
+  meetingsForClient,
+  getOnboardingCards,
+  onboardingSummaryForClient,
+  type Temperatura,
+  type ClientOnboardingSummary,
+  type OnboardingMilestoneStatus,
+} from "@/lib/pipefy";
 import { ExternalLink } from "lucide-react";
 import { Linkify } from "./Linkify";
 
@@ -25,6 +33,23 @@ function fmt(d: string): string {
   return `${m[2].padStart(2, "0")}/${m[1].padStart(2, "0")}/${m[3]}`;
 }
 
+const MILESTONE_STATUS_META: Record<OnboardingMilestoneStatus["status"], { icon: string; className: string }> = {
+  concluido: { icon: "✅", className: "text-o2-green" },
+  em_andamento: { icon: "⏳", className: "text-amber-400" },
+  cancelado: { icon: "⛔", className: "text-ink-dim" },
+  nao_iniciado: { icon: "⬜", className: "text-ink-dim/60" },
+};
+
+function MilestonePill({ label, info, fmt }: { label: string; info: OnboardingMilestoneStatus; fmt: (d: string) => string }) {
+  const meta = MILESTONE_STATUS_META[info.status];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1 ${meta.className}`}>
+      {meta.icon} {label}
+      {info.doneAt ? ` · ${fmt(info.doneAt)}` : ""}
+    </span>
+  );
+}
+
 export async function PipefyClientBlock({ client }: { client: string }) {
   let meetings;
   try {
@@ -33,6 +58,17 @@ export async function PipefyClientBlock({ client }: { client: string }) {
     return null; // sem token ou falha — não quebra a página do cliente
   }
   if (!meetings.length) return null;
+
+  // jornada de onboarding (Kick-off/Diagnóstico/Oxy Integrada) + comitê mensal — só pra
+  // controle do squad (leitura), nunca escreve no Pipefy. Best-effort: se falhar, só essa
+  // faixa some, o resto do bloco (já validado acima) continua normal.
+  let onboarding: ClientOnboardingSummary | null = null;
+  try {
+    onboarding = onboardingSummaryForClient(await getOnboardingCards(), client);
+  } catch {
+    onboarding = null;
+  }
+  const comiteMensal = meetings.find((m) => /comit/i.test(m.tipo)) ?? null;
 
   const latest = meetings[0];
   const temp = (latest.temperatura || "") as Temperatura;
@@ -46,6 +82,16 @@ export async function PipefyClientBlock({ client }: { client: string }) {
           {LABEL[temp] ?? LABEL[""]}
         </span>
       </div>
+      {onboarding && (
+        <div className="mb-3 flex flex-wrap gap-2 text-xs">
+          <MilestonePill label="Kick-off" info={onboarding.kickoff} fmt={fmt} />
+          <MilestonePill label="Diagnóstico" info={onboarding.diagnostico} fmt={fmt} />
+          <MilestonePill label="Oxy Integrada" info={onboarding.oxy} fmt={fmt} />
+          <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1 text-ink-mid">
+            {comiteMensal ? `🗓️ Comitê mensal · ${fmt(comiteMensal.data)}` : "⬜ Comitê mensal"}
+          </span>
+        </div>
+      )}
       <div className="space-y-2">
         {meetings.slice(0, 3).map((m) => (
           <div key={m.id} className="rounded-lg bg-white/[0.02] border border-white/5 p-3">
