@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-11 (Listagem de Clientes: badge "Em tratativa" na linha do cliente)
+
+- Pedido do usuário, a partir de um print da tabela de clientes: o aviso de tratativa deveria aparecer direto na linha, não só em `/tratativas`.
+- `getClientsTable` ganha `emTratativa: true` quando há Tratativa aberta na plataforma OU o CS já sinalizou no Pipefy (reaproveita `getClientsEmTratativaPipefy`) — qualquer um dos dois sinais já conta, não só o que virou registro formal. Badge vermelho abaixo do nome, linka pra `/tratativas`.
+
 ## 2026-11-11 (Tratativas: nudge a partir dos clientes "Em Tratativa" no Pipefy)
 
 - Pedido do usuário: "em vez de ter que criar manual, poderiam aparecer os clientes que estão em tratativas no Pipefy pra automatizarmos esses dados".
