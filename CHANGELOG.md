@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-11 (Resumo do Pipefy vira editável na plataforma, sem escrever de volta)
+
+- Pedido do usuário logo depois do toggle acima: "deixar esse resumo editável, mas sem alterar no Pipefy, só na plataforma".
+- `CalendarEvent.resumoEditado` (novo, nullable): quando preenchido, tem prioridade sobre o valor ao vivo do Pipefy na exibição. `PATCH /api/calendar/[id]` aceita o campo fora do gate que aciona `pushCalendarEventToPipefy` — nunca é empurrado de volta, de propósito.
+- O texto que antes era só leitura (`<p>`) virou `AutoGrowTextarea`, salva `onBlur`, mesmo padrão já usado em "Próximos passos" ao lado.
+
 ## 2026-11-11 (Card de reunião: toggle "Resumo (Pipefy)" na aba Reuniões)
 
 - Pedido do usuário (a partir de um print da aba Reuniões): no card de cada reunião realizada, queria uma "abinha" que abrisse o Resumo da reunião vindo do Pipefy — campo distinto de Observações CFO, que já existia só no painel read-only (`PipefyClientBlock`), nunca apareceu na aba Reuniões.
