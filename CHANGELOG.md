@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-11 (Clientes: sugere cadastro a partir de contrato assinado no Pipefy)
+
+- Pedido do usuário: "cliente novo entra sozinho quando o negócio fecha no Pipefy [...] dá pra detectar e sugerir a criação (mesmo padrão de sugestão, nunca automático)".
+- Fonte escolhida foi a fase "Contrato assinado" do pipe "1.1 Funil de Vendas - CFOaaS", não "Ganho" (fase seguinte) — "Ganho" é o arquivo histórico de todos os negócios já fechados, sem filtro de data, incluindo negócios pontuais que nunca viram cliente recorrente de CFOaaS aqui; teria virado uma lista de sugestão enorme e cheia de ruído. "Contrato assinado" fica pequeno por natureza (cards passam rápido por ali rumo a "Ganho"), então cada card ali é mesmo recente.
+- `src/lib/pipefy.ts`: `getNegociosFechadosPipefy()` (cacheado 2h) extrai Empresa/CNPJ/ERP do card, só leitura. `/clientes` filtra contra os já cadastrados (`matchesClient`). `ClientsTable.tsx`: banner acima de "Adicionar Cliente" — clicar no nome sugerido abre o modal já preenchido (nome + CNPJ/ERP encontrados); criar aplica o ERP automaticamente e tira a sugestão da lista. Continua precisando do clique em "Adicionar" — nunca cria cliente sozinho.
+
 ## 2026-11-11 (Listagem de Clientes: badge "Em tratativa" na linha do cliente)
 
 - Pedido do usuário, a partir de um print da tabela de clientes: o aviso de tratativa deveria aparecer direto na linha, não só em `/tratativas`.
