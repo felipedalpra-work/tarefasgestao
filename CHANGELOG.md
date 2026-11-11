@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-11 (Tratativas: nudge a partir dos clientes "Em Tratativa" no Pipefy)
+
+- Pedido do usuário: "em vez de ter que criar manual, poderiam aparecer os clientes que estão em tratativas no Pipefy pra automatizarmos esses dados".
+- Investigado na API real: a antiga referência a um pipe dedicado "3.08 Tratativas" não existe mais pra esse token — o sinal real é a fase "Em Tratativa" do pipe "3.00 Central de Projetos (CS)" (cross-squad, 11 clientes reais no momento). Como o Pipefy só diz QUEM está em atrito (sem tipo/motivo/plano de ação), virou um nudge pra abrir a tratativa aqui já com o cliente selecionado — nunca um registro criado sozinho.
+- `src/lib/pipefy.ts`: `getClientsEmTratativaPipefy()` (cacheado 2h). `/tratativas` cruza com as tratativas já abertas e só sobra quem ainda não tem registro. `NewTratativaForm` ganhou `initialClient`/`autoOpen` (pré-seleciona sem travar o campo); a sugestão some da lista assim que a tratativa é criada.
+
 ## 2026-11-11 (Resumo do Pipefy vira editável na plataforma, sem escrever de volta)
 
 - Pedido do usuário logo depois do toggle acima: "deixar esse resumo editável, mas sem alterar no Pipefy, só na plataforma".
