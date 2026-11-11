@@ -387,6 +387,56 @@ export const getClientsEmTratativaPipefy = unstable_cache(loadClientsEmTratativa
   tags: ["pipefy"],
 });
 
+// ---------- negócio fechado, cliente ainda não cadastrado na plataforma ----------
+// Só LEITURA, nunca cria cliente sozinho. Fase "Contrato assinado" do pipe "1.1 Funil de
+// Vendas - CFOaaS" — o contrato já foi assinado mas o card ainda não foi arquivado em
+// "Ganho" (fase seguinte, histórico de TODOS os negócios já fechados, sem filtro de data —
+// por isso não é essa a fonte aqui: viraria uma lista enorme de empresas antigas, muitas já
+// cadastradas ou que nunca viraram cliente recorrente de CFOaaS). "Contrato assinado" é
+// naturalmente pequeno (cards passam rápido por ali), então cada um é mesmo recente.
+const CONTRATO_ASSINADO_PHASE_ID = 324654555; // "Contrato assinado" (1.1 Funil de Vendas - CFOaaS)
+
+export type NegocioFechadoPipefy = {
+  empresa: string;
+  cnpj: string | null;
+  erp: string | null;
+};
+
+async function loadNegociosFechadosPipefy(): Promise<NegocioFechadoPipefy[]> {
+  const out: NegocioFechadoPipefy[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const data: {
+      phase: {
+        cards: {
+          pageInfo: { hasNextPage: boolean; endCursor: string };
+          edges: { node: { title: string; fields: { name: string; value: string }[] } }[];
+        };
+      };
+    } = await gql(
+      `query { phase(id: ${CONTRATO_ASSINADO_PHASE_ID}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title fields { name value } } } } } }`
+    );
+    const c = data.phase.cards;
+    for (const { node } of c.edges) {
+      const empresa = node.fields.find((f) => f.name === "Empresa")?.value || node.title;
+      out.push({
+        empresa,
+        cnpj: node.fields.find((f) => f.name === "CNPJ/EIN")?.value || null,
+        erp: node.fields.find((f) => f.name === "ERP")?.value || null,
+      });
+    }
+    if (!c.pageInfo.hasNextPage) break;
+    after = c.pageInfo.endCursor;
+  }
+  return out;
+}
+
+// Cacheado 2h, mesma tag/motivo do resto da integração.
+export const getNegociosFechadosPipefy = unstable_cache(loadNegociosFechadosPipefy, ["pipefy-contrato-assinado"], {
+  revalidate: 7200,
+  tags: ["pipefy"],
+});
+
 export type ClientGroup = {
   client: string;
   naoCadastrado: boolean; // veio do Pipefy mas não está na carteira da plataforma

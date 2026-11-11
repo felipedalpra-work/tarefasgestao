@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronRight, Trash2, Plus, X, KeyRound, ShieldAlert } from "lucide-react";
+import { Building2, ChevronRight, Trash2, Plus, X, KeyRound, ShieldAlert, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { ClientAccessesModal } from "@/components/ClientAccessesModal";
@@ -56,7 +56,15 @@ function toDateInputValue(v: string | Date | null) {
   return d.toISOString().slice(0, 10);
 }
 
-export function ClientsTable({ clients }: { clients: ClientRow[] }) {
+export type PipefySuggestion = { empresa: string; cnpj: string | null; erp: string | null };
+
+export function ClientsTable({
+  clients,
+  pipefySuggestions: initialPipefySuggestions,
+}: {
+  clients: ClientRow[];
+  pipefySuggestions: PipefySuggestion[];
+}) {
   const [rows, setRows] = useState(clients);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [accessesFor, setAccessesFor] = useState<string | null>(null);
@@ -64,7 +72,21 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [pipefySuggestions, setPipefySuggestions] = useState(initialPipefySuggestions);
+  const [pendingSuggestion, setPendingSuggestion] = useState<PipefySuggestion | null>(null);
   const deleteTarget = rows.find((r) => r.name === confirmingDelete) ?? null;
+
+  function openAddModal(suggestion?: PipefySuggestion) {
+    setPendingSuggestion(suggestion ?? null);
+    setNewName(suggestion?.empresa ?? "");
+    setShowAddModal(true);
+  }
+
+  function closeAddModal() {
+    setShowAddModal(false);
+    setPendingSuggestion(null);
+    setNewName("");
+  }
 
   async function createClient() {
     const name = newName.trim();
@@ -101,8 +123,19 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
           },
         ].sort((a, b) => a.name.localeCompare(b.name))
       );
+      // veio de uma sugestão do Pipefy (negócio fechado) — já leva o ERP junto, se tinha, e
+      // tira da lista de sugestões (apareceu de novo em outro ciclo do cache pra outro
+      // cliente idêntico não deveria acontecer, mas o filtro de nome já evita duplicado)
+      if (pendingSuggestion?.erp) {
+        await patch(name, { erp: pendingSuggestion.erp });
+        updateRow(name, { erp: pendingSuggestion.erp });
+      }
+      if (pendingSuggestion) {
+        setPipefySuggestions((prev) => prev.filter((s) => s.empresa !== pendingSuggestion.empresa));
+      }
       setShowAddModal(false);
       setNewName("");
+      setPendingSuggestion(null);
       toast("Cliente adicionado", "success");
     } else {
       const data = await res.json().catch(() => ({}));
@@ -150,9 +183,29 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
 
   return (
     <div>
+      {pipefySuggestions.length > 0 && (
+        <div className="bg-o2-green/5 border border-o2-green/20 rounded-xl px-4 py-3 text-sm space-y-2 mb-4">
+          <p className="flex items-center gap-2 text-o2-green">
+            <Sparkles size={16} />
+            Pipefy indica {pipefySuggestions.length} contrato{pipefySuggestions.length > 1 ? "s" : ""} assinado{pipefySuggestions.length > 1 ? "s" : ""} sem cliente cadastrado aqui
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {pipefySuggestions.map((s) => (
+              <button
+                key={s.empresa}
+                onClick={() => openAddModal(s)}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-o2-green/10 text-o2-green hover:bg-o2-green/20 transition-colors"
+              >
+                + {s.empresa}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end mb-4">
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => openAddModal()}
           className="flex items-center gap-2 bg-o2-green text-bg px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-o2-green-bright transition-all"
         >
           <Plus size={16} />
@@ -348,7 +401,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
       {showAddModal && (
         <div
           className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowAddModal(false)}
+          onClick={closeAddModal}
         >
           <div
             className="bg-panel border border-surface-3 rounded-2xl p-6 max-w-sm w-full"
@@ -356,7 +409,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-ink">Adicionar cliente</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-ink-faint hover:text-ink">
+              <button onClick={closeAddModal} className="text-ink-faint hover:text-ink">
                 <X size={16} />
               </button>
             </div>
@@ -367,11 +420,17 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") createClient(); }}
               placeholder="Ex: Fismatek"
-              className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 mb-5"
+              className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
             />
-            <div className="flex gap-2 justify-end">
+            {pendingSuggestion && (
+              <p className="text-xs text-ink-faint mt-1.5 mb-3.5">
+                Vindo do Pipefy (contrato assinado){pendingSuggestion.cnpj ? ` · CNPJ ${pendingSuggestion.cnpj}` : ""}
+                {pendingSuggestion.erp ? ` · ERP ${pendingSuggestion.erp} (já vai preenchido)` : ""}
+              </p>
+            )}
+            <div className={cn("flex gap-2 justify-end", !pendingSuggestion && "mt-5")}>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={closeAddModal}
                 className="text-xs px-4 py-2 rounded-lg font-medium text-ink-dim hover:text-ink transition-colors"
               >
                 Cancelar
