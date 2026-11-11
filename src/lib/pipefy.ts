@@ -355,6 +355,38 @@ export type OnboardingOverviewRow = {
   reunioesPendentes: number;
 };
 
+// ---------- clientes "Em Tratativa" (CS) ----------
+// Só LEITURA — nunca cria/edita Tratativa sozinho. Fase "Em Tratativa" do pipe "3.00
+// Central de Projetos (CS)" é onde o CS já sinaliza manualmente qual cliente está com
+// atrito — mesmo cross-squad do resto do arquivo (cards de vários CFOs). O Pipefy não
+// tem tipo/motivo/plano de ação (só diz QUEM), então isso vira um empurrão pra abrir a
+// tratativa na plataforma com o cliente já selecionado, nunca um registro automático —
+// a riqueza do fluxo (triagem/plano de ação/desfecho) só existe aqui.
+const TRATATIVA_PHASE_ID = 340754913; // "Em Tratativa" (3.00 Central de Projetos (CS))
+
+async function loadClientsEmTratativaPipefy(): Promise<string[]> {
+  const out: string[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const data: {
+      phase: { cards: { pageInfo: { hasNextPage: boolean; endCursor: string }; edges: { node: { title: string } }[] } };
+    } = await gql(
+      `query { phase(id: ${TRATATIVA_PHASE_ID}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title } } } } }`
+    );
+    const c = data.phase.cards;
+    for (const { node } of c.edges) out.push(node.title);
+    if (!c.pageInfo.hasNextPage) break;
+    after = c.pageInfo.endCursor;
+  }
+  return out;
+}
+
+// Cacheado 2h, mesma tag/motivo do resto da integração.
+export const getClientsEmTratativaPipefy = unstable_cache(loadClientsEmTratativaPipefy, ["pipefy-em-tratativa"], {
+  revalidate: 7200,
+  tags: ["pipefy"],
+});
+
 export type ClientGroup = {
   client: string;
   naoCadastrado: boolean; // veio do Pipefy mas não está na carteira da plataforma

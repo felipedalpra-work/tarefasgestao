@@ -21,13 +21,17 @@ export function TratativasBoard({
   tratativas: initial,
   users,
   clientOptions,
+  pipefySuggestions: initialPipefySuggestions,
 }: {
   tratativas: TratativaData[];
   users: UserOption[];
   clientOptions: string[];
+  pipefySuggestions: string[];
 }) {
   const [tratativas, setTratativas] = useState(initial);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("abertas");
+  const [pipefySuggestions, setPipefySuggestions] = useState(initialPipefySuggestions);
+  const [pendingClient, setPendingClient] = useState<string | null>(null);
 
   const shown = tratativas.filter((t) => {
     if (filter === "todas") return true;
@@ -49,7 +53,37 @@ export function TratativasBoard({
         </div>
       )}
 
-      <NewTratativaForm clientOptions={clientOptions} onCreated={(t) => setTratativas((prev) => [t, ...prev])} />
+      {pipefySuggestions.length > 0 && (
+        <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3 text-sm space-y-2">
+          <p className="flex items-center gap-2 text-amber-400">
+            <ShieldAlert size={16} />
+            Pipefy indica {pipefySuggestions.length} cliente{pipefySuggestions.length > 1 ? "s" : ""} em tratativa sem registro aqui
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {pipefySuggestions.map((name) => (
+              <button
+                key={name}
+                onClick={() => setPendingClient(name)}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 transition-colors"
+              >
+                + {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <NewTratativaForm
+        key={pendingClient ?? "default"}
+        clientOptions={clientOptions}
+        initialClient={pendingClient ?? undefined}
+        autoOpen={!!pendingClient}
+        onCreated={(t) => {
+          setTratativas((prev) => [t, ...prev]);
+          setPipefySuggestions((prev) => prev.filter((name) => name !== t.client));
+          setPendingClient(null);
+        }}
+      />
 
       <div className="flex gap-1 bg-surface border border-surface-3 rounded-xl p-1 overflow-x-auto">
         {FILTERS.map((f) => (

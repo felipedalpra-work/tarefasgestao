@@ -9,14 +9,18 @@ import type { TratativaData } from "@/components/TratativaCard";
 export function NewTratativaForm({
   client,
   clientOptions,
+  initialClient,
+  autoOpen,
   onCreated,
 }: {
   client?: string;
   clientOptions?: string[];
+  initialClient?: string; // pré-seleciona o cliente mas continua editável (diferente de `client`, que trava o campo) — usado pelo nudge "Em Tratativa" do Pipefy
+  autoOpen?: boolean; // abre o form já expandido (mesmo nudge acima)
   onCreated: (t: TratativaData) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState(client ?? "");
+  const [open, setOpen] = useState(!!autoOpen);
+  const [selectedClient, setSelectedClient] = useState(client ?? initialClient ?? "");
   const [tipo, setTipo] = useState<"preventiva" | "reativa">("preventiva");
   const [motivo, setMotivo] = useState("");
   const [descricao, setDescricao] = useState("");

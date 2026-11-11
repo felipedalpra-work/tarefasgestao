@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getTratativas, getUsers, getClientsTable } from "@/lib/queries";
+import { getClientsEmTratativaPipefy, matchesClient } from "@/lib/pipefy";
 import { TratativasBoard } from "./TratativasBoard";
 
 export default async function TratativasPage() {
@@ -8,6 +9,18 @@ export default async function TratativasPage() {
   if (!session) redirect("/login");
   const squadId = session.user.squadId;
   const [tratativas, users, clients] = await Promise.all([getTratativas(squadId), getUsers(squadId), getClientsTable(squadId)]);
+
+  // clientes que o CS já sinalizou "Em Tratativa" no Pipefy mas que não têm nenhuma
+  // Tratativa aberta aqui — nudge pra abrir, nunca cria sozinho (ver pipefy.ts). Best-effort:
+  // Pipefy fora do ar não pode impedir a página de carregar.
+  let pipefySuggestions: string[] = [];
+  try {
+    const pipefyClients = await getClientsEmTratativaPipefy();
+    const openClients = new Set(tratativas.filter((t) => t.status !== "concluida").map((t) => t.client));
+    pipefySuggestions = clients
+      .map((c) => c.name)
+      .filter((name) => !openClients.has(name) && pipefyClients.some((pc) => matchesClient(pc, name)));
+  } catch {}
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
@@ -27,6 +40,7 @@ export default async function TratativasPage() {
         }))}
         users={users}
         clientOptions={clients.map((c) => c.name)}
+        pipefySuggestions={pipefySuggestions}
       />
     </div>
   );
