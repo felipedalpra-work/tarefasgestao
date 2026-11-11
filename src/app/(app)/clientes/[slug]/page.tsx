@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { ClientTabs } from "./ClientTabs";
 import { PipefyClientBlock } from "@/components/PipefyClientBlock";
 import { DeleteClientButton } from "./DeleteClientButton";
+import { getGustavoMeetings } from "@/lib/pipefy";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -34,6 +35,17 @@ export default async function ClientePage({ params }: Props) {
   }
 
   const lastMeeting = events.length > 0 ? new Date(events[0].startAt) : null;
+
+  // "Resumo" da reunião no Pipefy (campo distinto de Observações/Próximos passos, que já
+  // aparecem em PipefyClientBlock) — casado pelo mesmo pipefyRecordId que o sync diário
+  // (src/lib/pipefy-sync.ts) já grava em CalendarEvent por cliente+dia. Best-effort: sem
+  // token/falha, os eventos só ficam sem resumo, não quebra a página.
+  const resumoByRecordId = new Map<string, string>();
+  try {
+    for (const m of await getGustavoMeetings()) {
+      if (m.resumo) resumoByRecordId.set(m.id, m.resumo);
+    }
+  } catch {}
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
@@ -67,7 +79,12 @@ export default async function ClientePage({ params }: Props) {
       <PipefyClientBlock client={client} />
 
       <ClientTabs
-        events={events.map((e) => ({ ...e, startAt: new Date(e.startAt).toISOString(), endAt: new Date(e.endAt).toISOString() }))}
+        events={events.map((e) => ({
+          ...e,
+          startAt: new Date(e.startAt).toISOString(),
+          endAt: new Date(e.endAt).toISOString(),
+          pipefyResumo: e.pipefyRecordId ? resumoByRecordId.get(e.pipefyRecordId) ?? null : null,
+        }))}
         recaps={recaps.map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), processedAt: r.processedAt ? new Date(r.processedAt).toISOString() : null }))}
         tasks={tasks.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null }))}
         tratativas={tratativas.map((t) => ({

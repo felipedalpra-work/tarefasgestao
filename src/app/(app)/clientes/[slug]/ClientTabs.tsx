@@ -11,6 +11,7 @@ import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
 import { ClientAccessesSection } from "@/components/ClientAccessesSection";
+import { Linkify } from "@/components/Linkify";
 
 type CalendarEvent = {
   id: string;
@@ -25,6 +26,7 @@ type CalendarEvent = {
   suggestedNextSteps: string | null;
   attendanceConfirmed: boolean;
   registroConferido: boolean;
+  pipefyResumo: string | null; // "Resumo" da reunião no Pipefy (campo distinto de Observações/Próximos passos) — null quando não casou com nenhum registro (ver page.tsx)
 };
 
 type Recap = {
@@ -106,6 +108,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
   const [tratativas, setTratativas] = useState(initialTratativas);
   const [events, setEvents] = useState(initialEvents);
+  const [resumoAbertoIds, setResumoAbertoIds] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
   const [contacts, setContacts] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
@@ -230,6 +233,15 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
       body: JSON.stringify({ dismissSuggestion: true }),
     });
     if (!res.ok) setEvents(prevEvents);
+  }
+
+  function toggleResumo(eventId: string) {
+    setResumoAbertoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
   }
 
   const tabs = [
@@ -382,6 +394,21 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                         Registro conferido
                       </label>
                     </div>
+                    {e.pipefyResumo && (
+                      <div>
+                        <button
+                          onClick={() => toggleResumo(e.id)}
+                          className="text-xs font-medium text-ink-dim hover:text-ink transition-colors"
+                        >
+                          {resumoAbertoIds.has(e.id) ? "▾" : "▸"} Resumo (Pipefy)
+                        </button>
+                        {resumoAbertoIds.has(e.id) && (
+                          <p className="mt-1.5 text-xs text-ink-mid whitespace-pre-wrap break-words bg-surface-2 border border-surface-3 rounded-lg p-2.5">
+                            <Linkify text={e.pipefyResumo} />
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
