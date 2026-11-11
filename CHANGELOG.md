@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-11 (Card de reunião: toggle "Resumo (Pipefy)" na aba Reuniões)
+
+- Pedido do usuário (a partir de um print da aba Reuniões): no card de cada reunião realizada, queria uma "abinha" que abrisse o Resumo da reunião vindo do Pipefy — campo distinto de Observações CFO, que já existia só no painel read-only (`PipefyClientBlock`), nunca apareceu na aba Reuniões.
+- `src/app/(app)/clientes/[slug]/page.tsx` monta um mapa `pipefyRecordId -> resumo` a partir de `getGustavoMeetings()` (já cacheado) e passa `pipefyResumo` pronto pra `ClientTabs` — reaproveita o `pipefyRecordId` que o sync diário já grava em `CalendarEvent` por cliente+dia, nenhum matching novo.
+- `ClientTabs.tsx`: botão "▸ Resumo (Pipefy)" expande/recolhe o texto (só aparece quando há resumo casado), mesmo padrão visual/Linkify já usado nos outros textos livres do Pipefy.
+
 ## 2026-11-10 (Saúde da Carteira: aba "Jornada de Onboarding")
 
 - O painel individual do cliente (commit `e95021e`, mesmo dia) não dava visão de carteira inteira — usuário pediu uma tela só pra ver "em que marco está cada cliente" de uma vez.
