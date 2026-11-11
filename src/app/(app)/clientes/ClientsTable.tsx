@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronRight, Trash2, Plus, X, KeyRound } from "lucide-react";
+import { Building2, ChevronRight, Trash2, Plus, X, KeyRound, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { ClientAccessesModal } from "@/components/ClientAccessesModal";
@@ -20,6 +20,7 @@ export type ClientRow = {
   oxyPendencies: string | null;
   erp: string | null;
   healthStatus: string;
+  emTratativa: boolean; // tratativa aberta na plataforma ou sinalizada pelo CS no Pipefy (ver getClientsTable)
 };
 
 const HEALTH_OPTIONS = [
@@ -96,6 +97,7 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
             oxyPendencies: null,
             erp: null,
             healthStatus: "verde",
+            emTratativa: false,
           },
         ].sort((a, b) => a.name.localeCompare(b.name))
       );
@@ -198,6 +200,15 @@ export function ClientsTable({ clients }: { clients: ClientRow[] }) {
                   <span className="font-medium truncate min-w-0 flex-1">{c.name}</span>
                   <ChevronRight size={14} className="text-ink-ghost group-hover:text-o2-green transition-colors shrink-0" />
                 </Link>
+                {c.emTratativa && (
+                  <Link
+                    href="/tratativas"
+                    title="Em tratativa"
+                    className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-red-400 bg-red-400/10 rounded-full px-1.5 py-0.5 hover:bg-red-400/20 transition-colors"
+                  >
+                    <ShieldAlert size={10} /> Em tratativa
+                  </Link>
+                )}
               </td>
               <td className="px-2.5 py-2.5 overflow-hidden">
                 <Select

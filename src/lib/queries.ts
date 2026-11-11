@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { forSquad } from "./tenant-prisma";
 import { getIgnoredClients, matchesIgnoredClient } from "./settings";
+import { getClientsEmTratativaPipefy, matchesClient } from "./pipefy";
 
 // Responsáveis da tarefa em conjunto — precisa vir junto em toda leitura, senão a UI
 // não tem como saber que a tarefa é em conjunto nem mostrá-la pros participantes.
@@ -124,7 +125,7 @@ export const getClientsOverview = unstable_cache(
 export const getClientsTable = unstable_cache(
   async (squadId: string) => {
     const db = forSquad(squadId);
-    const [overview, notes] = await Promise.all([
+    const [overview, notes, openTratativas, pipefyEmTratativa] = await Promise.all([
       getClientsOverview(squadId),
       db.clientNote.findMany({
         select: {
@@ -138,10 +139,14 @@ export const getClientsTable = unstable_cache(
           healthStatus: true,
         },
       }),
+      db.tratativa.findMany({ where: { status: { not: "concluida" } }, select: { client: true }, distinct: ["client"] }),
+      // best-effort — Pipefy fora do ar não pode impedir a tabela de carregar
+      getClientsEmTratativaPipefy().catch(() => [] as string[]),
     ]);
 
     const overviewByClient = new Map(overview.map((c) => [c.name, c]));
     const notesByClient = new Map(notes.map((n) => [n.client, n]));
+    const openTratativaSet = new Set(openTratativas.map((t) => t.client));
 
     // a carteira de clientes (ClientNote) é a fonte de verdade de quais clientes existem;
     // reuniões/recaps/tarefas só complementam com estatísticas quando houver
@@ -163,11 +168,14 @@ export const getClientsTable = unstable_cache(
         oxyPendencies: n?.oxyPendencies ?? null,
         erp: n?.erp ?? null,
         healthStatus: n?.healthStatus ?? "verde",
+        // tratativa aberta aqui OU o CS já sinalizou "Em Tratativa" no Pipefy (ver
+        // src/lib/pipefy.ts) — qualquer um dos dois já é sinal de atrito em andamento
+        emTratativa: openTratativaSet.has(name) || pipefyEmTratativa.some((pc) => matchesClient(pc, name)),
       };
     });
   },
   ["clients-table"],
-  { tags: ["calendar", "recaps", "tasks", "clients"], revalidate: 60 }
+  { tags: ["calendar", "recaps", "tasks", "clients", "tratativas", "pipefy"], revalidate: 60 }
 );
 
 // Cached: dados completos de um cliente
