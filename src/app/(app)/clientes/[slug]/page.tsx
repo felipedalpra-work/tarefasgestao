@@ -84,6 +84,7 @@ export default async function ClientePage({ params }: Props) {
           startAt: new Date(e.startAt).toISOString(),
           endAt: new Date(e.endAt).toISOString(),
           pipefyResumo: e.pipefyRecordId ? resumoByRecordId.get(e.pipefyRecordId) ?? null : null,
+          resumoEditado: e.resumoEditado,
         }))}
         recaps={recaps.map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), processedAt: r.processedAt ? new Date(r.processedAt).toISOString() : null }))}
         tasks={tasks.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null }))}

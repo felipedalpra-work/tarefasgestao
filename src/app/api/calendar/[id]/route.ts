@@ -34,6 +34,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data.meetingType = body.meetingType;
   }
   if (body.nextSteps !== undefined) data.nextSteps = body.nextSteps || null;
+  // cópia editável do Resumo do Pipefy — nunca entra no gate de push abaixo, de propósito
+  // (pedido do usuário: editável só na plataforma, nunca escrito de volta no Pipefy)
+  if (body.resumoEditado !== undefined) data.resumoEditado = body.resumoEditado || null;
   if (body.attendanceConfirmed !== undefined) data.attendanceConfirmed = !!body.attendanceConfirmed;
   if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
 

@@ -11,7 +11,6 @@ import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
 import { ClientAccessesSection } from "@/components/ClientAccessesSection";
-import { Linkify } from "@/components/Linkify";
 
 type CalendarEvent = {
   id: string;
@@ -26,7 +25,8 @@ type CalendarEvent = {
   suggestedNextSteps: string | null;
   attendanceConfirmed: boolean;
   registroConferido: boolean;
-  pipefyResumo: string | null; // "Resumo" da reunião no Pipefy (campo distinto de Observações/Próximos passos) — null quando não casou com nenhum registro (ver page.tsx)
+  pipefyResumo: string | null; // "Resumo" da reunião no Pipefy, ao vivo (campo distinto de Observações/Próximos passos) — null quando não casou com nenhum registro (ver page.tsx)
+  resumoEditado: string | null; // cópia editável na plataforma — se preenchida, tem prioridade sobre pipefyResumo na exibição; nunca escrita de volta no Pipefy
 };
 
 type Recap = {
@@ -394,7 +394,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                         Registro conferido
                       </label>
                     </div>
-                    {e.pipefyResumo && (
+                    {(e.resumoEditado ?? e.pipefyResumo) && (
                       <div>
                         <button
                           onClick={() => toggleResumo(e.id)}
@@ -403,9 +403,16 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                           {resumoAbertoIds.has(e.id) ? "▾" : "▸"} Resumo (Pipefy)
                         </button>
                         {resumoAbertoIds.has(e.id) && (
-                          <p className="mt-1.5 text-xs text-ink-mid whitespace-pre-wrap break-words bg-surface-2 border border-surface-3 rounded-lg p-2.5">
-                            <Linkify text={e.pipefyResumo} />
-                          </p>
+                          <AutoGrowTextarea
+                            defaultValue={e.resumoEditado ?? e.pipefyResumo ?? ""}
+                            onBlur={(ev) => {
+                              const value = ev.target.value;
+                              if (value !== (e.resumoEditado ?? e.pipefyResumo ?? "")) {
+                                updateEvent(e.id, "resumoEditado", value);
+                              }
+                            }}
+                            className="mt-1.5 w-full text-xs text-ink-mid bg-surface-2 border border-surface-3 rounded-lg p-2.5 focus:outline-none focus:border-o2-green/50"
+                          />
                         )}
                       </div>
                     )}

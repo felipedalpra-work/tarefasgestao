@@ -547,6 +547,10 @@ model CalendarEvent {
   pipefyRecordId      String? // id do table_record do Pipefy casado por cliente+dia (ver src/lib/pipefy-sync.ts)
   // — preenchido pelo sync Pipefy→plataforma, usado pra escrever de volta (plataforma→Pipefy)
   // quando alguém edita temperature/nextSteps por aqui (PATCH /api/calendar/[id])
+  resumoEditado       String? // cópia editável na plataforma do "Resumo" da reunião que vem do
+  // Pipefy (campo distinto de nextSteps/Observações) — pedido do usuário: editável só aqui,
+  // NUNCA escrito de volta no Pipefy. null = ainda não editado, mostra o valor ao vivo do
+  // Pipefy; preenchido = tem prioridade sobre o valor ao vivo (ver page.tsx do cliente)
   attendeeUserIds     String[] @default([]) // User.id de quem do squad participa (e-mail do convidado casado com User.email), pro filtro por pessoa em /calendar
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
