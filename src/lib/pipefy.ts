@@ -426,6 +426,51 @@ export const getClientsEmTratativaPipefy = unstable_cache(loadClientsEmTratativa
   tags: ["pipefy"],
 });
 
+// ---------- status sugerido (Churn / Pausado / Inadimplente) ----------
+// Só LEITURA, nunca muda o status sozinho. As fases abaixo do pipe "3.00 Central de
+// Projetos (CS)" já são o controle operacional de verdade que o CS mantém — útil pra
+// detectar quando o `status` do cliente aqui ficou desatualizado (ex.: cliente já em
+// churn no Pipefy mas continua "ativo" na plataforma).
+const STATUS_SUGERIDO_PHASES: { id: number; status: "pausado" | "encerrado" }[] = [
+  { id: 342832516, status: "pausado" }, // Pausados e Isentos
+  { id: 344247638, status: "pausado" }, // Inadimplentes (Atendimento Pausado)
+  { id: 340754914, status: "encerrado" }, // Churn
+];
+
+export type StatusSugeridoPipefy = { client: string; status: "pausado" | "encerrado" };
+
+async function fetchCardTitlesInPhase(phaseId: number): Promise<string[]> {
+  const out: string[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const data: {
+      phase: { cards: { pageInfo: { hasNextPage: boolean; endCursor: string }; edges: { node: { title: string } }[] } };
+    } = await gql(
+      `query { phase(id: ${phaseId}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title } } } } }`
+    );
+    const c = data.phase.cards;
+    for (const { node } of c.edges) out.push(node.title);
+    if (!c.pageInfo.hasNextPage) break;
+    after = c.pageInfo.endCursor;
+  }
+  return out;
+}
+
+async function loadStatusSugeridoPipefy(): Promise<StatusSugeridoPipefy[]> {
+  const out: StatusSugeridoPipefy[] = [];
+  for (const { id, status } of STATUS_SUGERIDO_PHASES) {
+    const titles = await fetchCardTitlesInPhase(id);
+    for (const client of titles) out.push({ client, status });
+  }
+  return out;
+}
+
+// Cacheado 2h, mesma tag/motivo do resto da integração.
+export const getStatusSugeridoPipefy = unstable_cache(loadStatusSugeridoPipefy, ["pipefy-status-sugerido"], {
+  revalidate: 7200,
+  tags: ["pipefy"],
+});
+
 // ---------- cliente novo já alocado pro Gustavo, ainda não cadastrado na plataforma ----------
 // Só LEITURA, nunca cria cliente sozinho. A fonte certa pra "CFO alocado" (marco D+2 do
 // playbook) NÃO é o funil de vendas "1.1 Funil de Vendas - CFOaaS" — lá quem aparece

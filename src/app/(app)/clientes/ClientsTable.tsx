@@ -21,6 +21,7 @@ export type ClientRow = {
   erp: string | null;
   healthStatus: string;
   emTratativa: boolean; // tratativa aberta na plataforma ou sinalizada pelo CS no Pipefy (ver getClientsTable)
+  statusSugerido: "pausado" | "encerrado" | null; // Pipefy já marcou Churn/Pausado/Inadimplente e diverge do status atual (ver getClientsTable)
 };
 
 const HEALTH_OPTIONS = [
@@ -120,6 +121,7 @@ export function ClientsTable({
             erp: null,
             healthStatus: "verde",
             emTratativa: false,
+            statusSugerido: null,
           },
         ].sort((a, b) => a.name.localeCompare(b.name))
       );
@@ -288,6 +290,15 @@ export function ClientsTable({
                   options={STATUS_OPTIONS}
                   onChange={(v) => handleChange(c.name, "status", v)}
                 />
+                {c.statusSugerido && (
+                  <button
+                    onClick={() => handleChange(c.name, "status", c.statusSugerido!)}
+                    title="Vindo do Pipefy (Churn/Pausado/Inadimplente)"
+                    className="mt-1 block text-[10px] text-amber-400 hover:underline truncate"
+                  >
+                    Pipefy: {STATUS_OPTIONS.find((o) => o.value === c.statusSugerido)?.label} ↻
+                  </button>
+                )}
               </td>
               <td className="px-2.5 py-2.5 overflow-hidden">
                 <Select

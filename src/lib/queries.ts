@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { forSquad } from "./tenant-prisma";
 import { getIgnoredClients, matchesIgnoredClient } from "./settings";
-import { getClientsEmTratativaPipefy, matchesClient } from "./pipefy";
+import { getClientsEmTratativaPipefy, getStatusSugeridoPipefy, matchesClient } from "./pipefy";
 
 // Responsáveis da tarefa em conjunto — precisa vir junto em toda leitura, senão a UI
 // não tem como saber que a tarefa é em conjunto nem mostrá-la pros participantes.
@@ -125,7 +125,7 @@ export const getClientsOverview = unstable_cache(
 export const getClientsTable = unstable_cache(
   async (squadId: string) => {
     const db = forSquad(squadId);
-    const [overview, notes, openTratativas, pipefyEmTratativa] = await Promise.all([
+    const [overview, notes, openTratativas, pipefyEmTratativa, pipefyStatus] = await Promise.all([
       getClientsOverview(squadId),
       db.clientNote.findMany({
         select: {
@@ -142,6 +142,7 @@ export const getClientsTable = unstable_cache(
       db.tratativa.findMany({ where: { status: { not: "concluida" } }, select: { client: true }, distinct: ["client"] }),
       // best-effort — Pipefy fora do ar não pode impedir a tabela de carregar
       getClientsEmTratativaPipefy().catch(() => []),
+      getStatusSugeridoPipefy().catch(() => []),
     ]);
 
     const overviewByClient = new Map(overview.map((c) => [c.name, c]));
@@ -155,13 +156,19 @@ export const getClientsTable = unstable_cache(
     return [...allNames].sort((a, b) => a.localeCompare(b)).map((name) => {
       const c = overviewByClient.get(name);
       const n = notesByClient.get(name);
+      const status = n?.status ?? "ativo";
+      // CS já marcou esse cliente como Churn/Pausado/Inadimplente no Pipefy mas o status
+      // aqui ainda não reflete isso — só sugere quando REALMENTE diverge do atual, senão
+      // mostraria a sugestão pra sempre mesmo depois de já ter sido aplicada
+      const statusSugerido = pipefyStatus.find((s) => s.status !== status && matchesClient(s.client, name))?.status ?? null;
       return {
         name,
         meetings: c?.meetings ?? 0,
         recaps: c?.recaps ?? 0,
         tasks: c?.tasks ?? 0,
         openTasks: c?.openTasks ?? 0,
-        status: n?.status ?? "ativo",
+        status,
+        statusSugerido,
         oxyStage: n?.oxyStage ?? "nao_iniciado",
         importType: n?.importType ?? null,
         lastDataUpdate: n?.lastDataUpdate ?? null,
