@@ -366,17 +366,54 @@ export type OnboardingOverviewRow = {
 // a riqueza do fluxo (triagem/plano de ação/desfecho) só existe aqui.
 const TRATATIVA_PHASE_ID = 340754913; // "Em Tratativa" (3.00 Central de Projetos (CS))
 
-async function loadClientsEmTratativaPipefy(): Promise<string[]> {
-  const out: string[] = [];
+// Além do título, traz o pouco de contexto que o card já carrega (acumulado de fases
+// anteriores, ex. "Em Operação Recorrente") — não é um "motivo da tratativa" estruturado
+// (esse campo não existe no Pipefy pra esse pipe), mas já poupa abrir o Pipefy só pra ver
+// quem é o responsável e o que o cliente falou por último.
+export type ClienteEmTratativaPipefy = {
+  client: string;
+  responsavel: string | null;
+  statusProjeto: string | null; // 🟢🟡🔴, quando o card já passou por "Em Operação Recorrente"
+  ultimaInteracao: string | null; // MM/DD/YYYY
+  feedbackCliente: string | null;
+};
+
+function parseAssigneeField(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    return (JSON.parse(raw) as string[])[0] ?? null;
+  } catch {
+    return raw;
+  }
+}
+
+async function loadClientsEmTratativaPipefy(): Promise<ClienteEmTratativaPipefy[]> {
+  const out: ClienteEmTratativaPipefy[] = [];
   let after: string | null = null;
   for (let page = 0; page < 5; page++) {
     const data: {
-      phase: { cards: { pageInfo: { hasNextPage: boolean; endCursor: string }; edges: { node: { title: string } }[] } };
+      phase: {
+        cards: {
+          pageInfo: { hasNextPage: boolean; endCursor: string };
+          edges: { node: { title: string; fields: { name: string; value: string }[] } }[];
+        };
+      };
     } = await gql(
-      `query { phase(id: ${TRATATIVA_PHASE_ID}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title } } } } }`
+      `query { phase(id: ${TRATATIVA_PHASE_ID}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title fields { name value } } } } } }`
     );
     const c = data.phase.cards;
-    for (const { node } of c.edges) out.push(node.title);
+    for (const { node } of c.edges) {
+      const respRaw =
+        node.fields.find((f) => f.name === "Líder Responsável")?.value ||
+        node.fields.find((f) => f.name === "Responsável")?.value;
+      out.push({
+        client: node.title,
+        responsavel: parseAssigneeField(respRaw),
+        statusProjeto: node.fields.find((f) => f.name === "Status do Projeto")?.value || null,
+        ultimaInteracao: node.fields.find((f) => f.name === "Última Atualização / Interação")?.value || null,
+        feedbackCliente: node.fields.find((f) => f.name === "Feedbacks do Cliente")?.value || null,
+      });
+    }
     if (!c.pageInfo.hasNextPage) break;
     after = c.pageInfo.endCursor;
   }

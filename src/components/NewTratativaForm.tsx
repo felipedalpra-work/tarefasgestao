@@ -10,12 +10,14 @@ export function NewTratativaForm({
   client,
   clientOptions,
   initialClient,
+  initialDescricao,
   autoOpen,
   onCreated,
 }: {
   client?: string;
   clientOptions?: string[];
   initialClient?: string; // pré-seleciona o cliente mas continua editável (diferente de `client`, que trava o campo) — usado pelo nudge "Em Tratativa" do Pipefy
+  initialDescricao?: string; // mesmo nudge — contexto trazido do Pipefy (ex. feedback do cliente), editável/removível antes de salvar
   autoOpen?: boolean; // abre o form já expandido (mesmo nudge acima)
   onCreated: (t: TratativaData) => void;
 }) {
@@ -23,7 +25,7 @@ export function NewTratativaForm({
   const [selectedClient, setSelectedClient] = useState(client ?? initialClient ?? "");
   const [tipo, setTipo] = useState<"preventiva" | "reativa">("preventiva");
   const [motivo, setMotivo] = useState("");
-  const [descricao, setDescricao] = useState("");
+  const [descricao, setDescricao] = useState(initialDescricao ?? "");
   const [problemaNaOxy, setProblemaNaOxy] = useState(false);
   const [saving, setSaving] = useState(false);
 

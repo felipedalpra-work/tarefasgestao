@@ -5,8 +5,16 @@ import { ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
+import type { ClienteEmTratativaPipefy } from "@/lib/pipefy";
 
 type UserOption = { id: string; name: string | null };
+
+// Pipefy devolve a data como MM/DD/YYYY — exibe dd/mm/aaaa (mesmo padrão de SaudeCarteiraView).
+function fmtData(d: string): string {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((d || "").trim());
+  if (!m) return d || "—";
+  return `${m[2].padStart(2, "0")}/${m[1].padStart(2, "0")}/${m[3]}`;
+}
 
 const FILTERS = [
   { key: "abertas", label: "Abertas" },
@@ -26,12 +34,12 @@ export function TratativasBoard({
   tratativas: TratativaData[];
   users: UserOption[];
   clientOptions: string[];
-  pipefySuggestions: string[];
+  pipefySuggestions: ClienteEmTratativaPipefy[];
 }) {
   const [tratativas, setTratativas] = useState(initial);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("abertas");
   const [pipefySuggestions, setPipefySuggestions] = useState(initialPipefySuggestions);
-  const [pendingClient, setPendingClient] = useState<string | null>(null);
+  const [pendingSuggestion, setPendingSuggestion] = useState<ClienteEmTratativaPipefy | null>(null);
 
   const shown = tratativas.filter((t) => {
     if (filter === "todas") return true;
@@ -54,34 +62,49 @@ export function TratativasBoard({
       )}
 
       {pipefySuggestions.length > 0 && (
-        <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3 text-sm space-y-2">
+        <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3 text-sm space-y-3">
           <p className="flex items-center gap-2 text-amber-400">
             <ShieldAlert size={16} />
             Pipefy indica {pipefySuggestions.length} cliente{pipefySuggestions.length > 1 ? "s" : ""} em tratativa sem registro aqui
           </p>
-          <div className="flex flex-wrap gap-2">
-            {pipefySuggestions.map((name) => (
-              <button
-                key={name}
-                onClick={() => setPendingClient(name)}
-                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 transition-colors"
-              >
-                + {name}
-              </button>
+          <div className="space-y-2">
+            {pipefySuggestions.map((s) => (
+              <div key={s.client} className="rounded-lg border border-amber-400/20 bg-surface p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink">{s.client}</p>
+                    <p className="text-xs text-ink-dim mt-0.5">
+                      {s.responsavel && <>Responsável: {s.responsavel}</>}
+                      {s.statusProjeto && <> · Status: {s.statusProjeto}</>}
+                      {s.ultimaInteracao && <> · Última interação: {fmtData(s.ultimaInteracao)}</>}
+                    </p>
+                    {s.feedbackCliente && (
+                      <p className="text-xs text-ink-faint mt-1.5 line-clamp-3">💬 {s.feedbackCliente}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setPendingSuggestion(s)}
+                    className="shrink-0 text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 transition-colors"
+                  >
+                    + Abrir tratativa
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
       )}
 
       <NewTratativaForm
-        key={pendingClient ?? "default"}
+        key={pendingSuggestion?.client ?? "default"}
         clientOptions={clientOptions}
-        initialClient={pendingClient ?? undefined}
-        autoOpen={!!pendingClient}
+        initialClient={pendingSuggestion?.client}
+        initialDescricao={pendingSuggestion?.feedbackCliente ? `Contexto do Pipefy: ${pendingSuggestion.feedbackCliente}` : undefined}
+        autoOpen={!!pendingSuggestion}
         onCreated={(t) => {
           setTratativas((prev) => [t, ...prev]);
-          setPipefySuggestions((prev) => prev.filter((name) => name !== t.client));
-          setPendingClient(null);
+          setPipefySuggestions((prev) => prev.filter((s) => s.client !== t.client));
+          setPendingSuggestion(null);
         }}
       />
 

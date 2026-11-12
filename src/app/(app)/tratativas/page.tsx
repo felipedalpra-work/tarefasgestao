@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getTratativas, getUsers, getClientsTable } from "@/lib/queries";
-import { getClientsEmTratativaPipefy, matchesClient } from "@/lib/pipefy";
+import { getClientsEmTratativaPipefy, matchesClient, type ClienteEmTratativaPipefy } from "@/lib/pipefy";
 import { TratativasBoard } from "./TratativasBoard";
 
 export default async function TratativasPage() {
@@ -13,13 +13,17 @@ export default async function TratativasPage() {
   // clientes que o CS já sinalizou "Em Tratativa" no Pipefy mas que não têm nenhuma
   // Tratativa aberta aqui — nudge pra abrir, nunca cria sozinho (ver pipefy.ts). Best-effort:
   // Pipefy fora do ar não pode impedir a página de carregar.
-  let pipefySuggestions: string[] = [];
+  let pipefySuggestions: ClienteEmTratativaPipefy[] = [];
   try {
     const pipefyClients = await getClientsEmTratativaPipefy();
     const openClients = new Set(tratativas.filter((t) => t.status !== "concluida").map((t) => t.client));
-    pipefySuggestions = clients
-      .map((c) => c.name)
-      .filter((name) => !openClients.has(name) && pipefyClients.some((pc) => matchesClient(pc, name)));
+    pipefySuggestions = pipefyClients.filter((pc) => {
+      // casa o título do card (pode vir com grafia diferente, ex. "CAPTABLE" vs "Captable")
+      // com o nome oficial do cliente aqui — só sugere quem é mesmo da carteira do squad e
+      // ainda não tem tratativa aberta sob esse nome
+      const matched = clients.find((c) => matchesClient(pc.client, c.name));
+      return !!matched && !openClients.has(matched.name);
+    });
   } catch {}
 
   return (

@@ -141,7 +141,7 @@ export const getClientsTable = unstable_cache(
       }),
       db.tratativa.findMany({ where: { status: { not: "concluida" } }, select: { client: true }, distinct: ["client"] }),
       // best-effort — Pipefy fora do ar não pode impedir a tabela de carregar
-      getClientsEmTratativaPipefy().catch(() => [] as string[]),
+      getClientsEmTratativaPipefy().catch(() => []),
     ]);
 
     const overviewByClient = new Map(overview.map((c) => [c.name, c]));
@@ -170,7 +170,7 @@ export const getClientsTable = unstable_cache(
         healthStatus: n?.healthStatus ?? "verde",
         // tratativa aberta aqui OU o CS já sinalizou "Em Tratativa" no Pipefy (ver
         // src/lib/pipefy.ts) — qualquer um dos dois já é sinal de atrito em andamento
-        emTratativa: openTratativaSet.has(name) || pipefyEmTratativa.some((pc) => matchesClient(pc, name)),
+        emTratativa: openTratativaSet.has(name) || pipefyEmTratativa.some((pc) => matchesClient(pc.client, name)),
       };
     });
   },
