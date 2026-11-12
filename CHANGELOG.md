@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Corrige backup diário "enviado com sucesso" sem ninguém receber)
+
+- Investigado: pedido do usuário pra conferir por que o backup automático não estava chegando — logs mostravam "Backup enviado — 3 destinatário(s)" com sucesso todo dia, sem erro, e os 3 membros do squad já são admin (recebem todos).
+- Causa real: o SDK do Resend NÃO lança exceção quando a API recusa um envio (domínio não verificado, from inválido, limite de taxa etc.) — devolve `{ data: null, error: {...} }` normalmente, com status 200. Todo `getResend().emails.send(...)` neste app (backup, alerta de falha, notificação de tarefa, redefinição de senha) ignorava esse `.error` por completo.
+- `src/lib/email.ts`: novo `sendEmailOrThrow()` checa `.error` e lança de verdade nesse caso — `backup-email.ts` (que já tinha try/catch + log por squad) agora captura e loga a recusa de verdade, em vez de mascarar como sucesso.
+
 ## 2026-11-12 (Retry+fallback automático na extração de tarefas; botão de reprocessar pendentes)
 
 - Pedido do usuário: muitos casos de extração de tarefas falhando e só funcionando no ciclo seguinte da rotina (agora 1x/dia).
