@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Revisão Semanal: botão "Nova tarefa" por cliente, mesmo NewTaskModal da plataforma)
+
+- Pedido do usuário: aproveitando a revisão semanal, poder criar tarefa direto ali pro cliente do slide atual, no mesmo padrão já usado em `/tasks` e `/kanban`.
+- Botão "+ Nova tarefa" ao lado de "Marcar como concluída" — abre o mesmo `NewTaskModal`, já com `defaultClient` = cliente do slide (prop que já existia no componente, só não tinha chamador ainda). Criar recarrega a revisão inteira (mesmo padrão simples de `onCreated={load}` que `/tasks`/`/kanban` já usam) — fetch inicial extraído pra `loadReview()`, reaproveitável nos dois lugares.
+
 ## 2026-11-12 (Revisão Semanal: aba "Reuniões" com Temperatura/Próximos passos do Pipefy)
 
 - Pedido do usuário: toda sexta o squad revisa a semana, mas preencher Temperatura/Próximos passos das reuniões exigia sair da Revisão Semanal e entrar em cada cliente separadamente.
