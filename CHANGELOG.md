@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Próximos passos vira clique-pra-abrir, igual o Resumo (Pipefy))
+
+- Pedido do usuário, a partir de um print do card de reunião: "Próximos passos" era um `<input>` de uma linha só, cortando texto longo.
+- Trocado pelo mesmo padrão do Resumo (Pipefy): botão "▸ Próximos passos" que expande num `AutoGrowTextarea` (cresce com o conteúdo, sem cortar), salva `onBlur` como antes.
+
 ## 2026-11-12 (Clientes: sugere status Pausado/Encerrado quando diverge do Pipefy)
 
 - O status do cliente (ativo/pausado/encerrado) é 100% manual hoje, mas o CS já mantém esse controle de verdade no pipe "3.00 Central de Projetos (CS)" — fases Pausados e Isentos, Inadimplentes (Atendimento Pausado) e Churn (155 cards reais no momento).
