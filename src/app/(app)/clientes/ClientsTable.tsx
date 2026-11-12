@@ -56,7 +56,7 @@ function toDateInputValue(v: string | Date | null) {
   return d.toISOString().slice(0, 10);
 }
 
-export type PipefySuggestion = { empresa: string; cnpj: string | null; erp: string | null };
+export type PipefySuggestion = { client: string; erp: string | null };
 
 export function ClientsTable({
   clients,
@@ -78,7 +78,7 @@ export function ClientsTable({
 
   function openAddModal(suggestion?: PipefySuggestion) {
     setPendingSuggestion(suggestion ?? null);
-    setNewName(suggestion?.empresa ?? "");
+    setNewName(suggestion?.client ?? "");
     setShowAddModal(true);
   }
 
@@ -131,7 +131,7 @@ export function ClientsTable({
         updateRow(name, { erp: pendingSuggestion.erp });
       }
       if (pendingSuggestion) {
-        setPipefySuggestions((prev) => prev.filter((s) => s.empresa !== pendingSuggestion.empresa));
+        setPipefySuggestions((prev) => prev.filter((s) => s.client !== pendingSuggestion.client));
       }
       setShowAddModal(false);
       setNewName("");
@@ -187,16 +187,16 @@ export function ClientsTable({
         <div className="bg-o2-green/5 border border-o2-green/20 rounded-xl px-4 py-3 text-sm space-y-2 mb-4">
           <p className="flex items-center gap-2 text-o2-green">
             <Sparkles size={16} />
-            Pipefy indica {pipefySuggestions.length} contrato{pipefySuggestions.length > 1 ? "s" : ""} assinado{pipefySuggestions.length > 1 ? "s" : ""} sem cliente cadastrado aqui
+            Pipefy indica {pipefySuggestions.length} cliente{pipefySuggestions.length > 1 ? "s" : ""} já alocado{pipefySuggestions.length > 1 ? "s" : ""} pro Gustavo sem cadastro aqui
           </p>
           <div className="flex flex-wrap gap-2">
             {pipefySuggestions.map((s) => (
               <button
-                key={s.empresa}
+                key={s.client}
                 onClick={() => openAddModal(s)}
                 className="text-xs font-medium px-2.5 py-1 rounded-lg bg-o2-green/10 text-o2-green hover:bg-o2-green/20 transition-colors"
               >
-                + {s.empresa}
+                + {s.client}
               </button>
             ))}
           </div>
@@ -424,8 +424,7 @@ export function ClientsTable({
             />
             {pendingSuggestion && (
               <p className="text-xs text-ink-faint mt-1.5 mb-3.5">
-                Vindo do Pipefy (contrato assinado){pendingSuggestion.cnpj ? ` · CNPJ ${pendingSuggestion.cnpj}` : ""}
-                {pendingSuggestion.erp ? ` · ERP ${pendingSuggestion.erp} (já vai preenchido)` : ""}
+                Vindo do Pipefy (CFO já alocado){pendingSuggestion.erp ? ` · ERP ${pendingSuggestion.erp} (já vai preenchido)` : ""}
               </p>
             )}
             <div className={cn("flex gap-2 justify-end", !pendingSuggestion && "mt-5")}>

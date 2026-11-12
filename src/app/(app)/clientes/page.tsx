@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getClientsTable } from "@/lib/queries";
-import { getNegociosFechadosPipefy, matchesClient } from "@/lib/pipefy";
+import { getClientesNovosAlocadosGustavo, matchesClient } from "@/lib/pipefy";
 import { ClientsTable } from "./ClientsTable";
 
 export default async function ClientesPage() {
@@ -9,14 +9,14 @@ export default async function ClientesPage() {
   if (!session) redirect("/login");
   const clients = await getClientsTable(session.user.squadId);
 
-  // negócios fechados no Pipefy ("Contrato assinado") que ainda não têm cliente cadastrado
-  // aqui — nudge pra criar, nunca cria sozinho (ver pipefy.ts). Best-effort: Pipefy fora do
-  // ar não pode impedir a página de carregar.
-  let pipefySuggestions: Awaited<ReturnType<typeof getNegociosFechadosPipefy>> = [];
+  // clientes com CFO já alocado no Pipefy (ver pipefy.ts) que ainda não têm cliente
+  // cadastrado aqui — nudge pra criar, nunca cria sozinho. Best-effort: Pipefy fora do ar
+  // não pode impedir a página de carregar.
+  let pipefySuggestions: Awaited<ReturnType<typeof getClientesNovosAlocadosGustavo>> = [];
   try {
-    const negocios = await getNegociosFechadosPipefy();
-    pipefySuggestions = negocios.filter(
-      (n) => !clients.some((c) => matchesClient(n.empresa, c.name))
+    const alocados = await getClientesNovosAlocadosGustavo();
+    pipefySuggestions = alocados.filter(
+      (n) => !clients.some((c) => matchesClient(n.client, c.name))
     );
   } catch {}
 

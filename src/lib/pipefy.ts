@@ -263,6 +263,7 @@ type OnboardingCard = {
   phase: OnboardingPhaseKey;
   doneAt: string | null; // MM/DD/YYYY, só quando phase === "concluido"
   responsavel: string | null;
+  erp: string | null; // só preenchido na fase Kick-off do Projeto
 };
 
 async function fetchOnboardingCardsInPhase(phaseId: number, phaseKey: OnboardingPhaseKey): Promise<OnboardingCard[]> {
@@ -294,7 +295,8 @@ async function fetchOnboardingCardsInPhase(phaseId: number, phaseKey: Onboarding
           responsavel = respRaw;
         }
       }
-      out.push({ client: node.title, milestone, phase: phaseKey, doneAt, responsavel });
+      const erp = node.fields.find((f) => f.name === "ERP")?.value || null;
+      out.push({ client: node.title, milestone, phase: phaseKey, doneAt, responsavel, erp });
     }
     if (!c.pageInfo.hasNextPage) break;
     after = c.pageInfo.endCursor;
@@ -387,55 +389,25 @@ export const getClientsEmTratativaPipefy = unstable_cache(loadClientsEmTratativa
   tags: ["pipefy"],
 });
 
-// ---------- negócio fechado, cliente ainda não cadastrado na plataforma ----------
-// Só LEITURA, nunca cria cliente sozinho. Fase "Contrato assinado" do pipe "1.1 Funil de
-// Vendas - CFOaaS" — o contrato já foi assinado mas o card ainda não foi arquivado em
-// "Ganho" (fase seguinte, histórico de TODOS os negócios já fechados, sem filtro de data —
-// por isso não é essa a fonte aqui: viraria uma lista enorme de empresas antigas, muitas já
-// cadastradas ou que nunca viraram cliente recorrente de CFOaaS). "Contrato assinado" é
-// naturalmente pequeno (cards passam rápido por ali), então cada um é mesmo recente.
-const CONTRATO_ASSINADO_PHASE_ID = 324654555; // "Contrato assinado" (1.1 Funil de Vendas - CFOaaS)
+// ---------- cliente novo já alocado pro Gustavo, ainda não cadastrado na plataforma ----------
+// Só LEITURA, nunca cria cliente sozinho. A fonte certa pra "CFO alocado" (marco D+2 do
+// playbook) NÃO é o funil de vendas "1.1 Funil de Vendas - CFOaaS" — lá quem aparece
+// assinando o card é o time comercial (SDR/Closer), nunca o CFO, e o pipe mistura negócios
+// de vários squads/produtos sem nenhum sinal de qual vai pra qual CFO. O sinal de verdade é
+// o PRÓPRIO pipe "3.02 Gestão de Rotinas (CFO)" (o mesmo já lido pra jornada de onboarding
+// acima): assim que um card aparece ali com "Líder Responsável" = Gustavo, é porque o CFO já
+// foi alocado de verdade — reaproveita getOnboardingCards(), nenhuma chamada nova à API.
+export type NovoClienteAlocado = { client: string; erp: string | null };
 
-export type NegocioFechadoPipefy = {
-  empresa: string;
-  cnpj: string | null;
-  erp: string | null;
-};
-
-async function loadNegociosFechadosPipefy(): Promise<NegocioFechadoPipefy[]> {
-  const out: NegocioFechadoPipefy[] = [];
-  let after: string | null = null;
-  for (let page = 0; page < 5; page++) {
-    const data: {
-      phase: {
-        cards: {
-          pageInfo: { hasNextPage: boolean; endCursor: string };
-          edges: { node: { title: string; fields: { name: string; value: string }[] } }[];
-        };
-      };
-    } = await gql(
-      `query { phase(id: ${CONTRATO_ASSINADO_PHASE_ID}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title fields { name value } } } } } }`
-    );
-    const c = data.phase.cards;
-    for (const { node } of c.edges) {
-      const empresa = node.fields.find((f) => f.name === "Empresa")?.value || node.title;
-      out.push({
-        empresa,
-        cnpj: node.fields.find((f) => f.name === "CNPJ/EIN")?.value || null,
-        erp: node.fields.find((f) => f.name === "ERP")?.value || null,
-      });
-    }
-    if (!c.pageInfo.hasNextPage) break;
-    after = c.pageInfo.endCursor;
+export async function getClientesNovosAlocadosGustavo(): Promise<NovoClienteAlocado[]> {
+  const cards = await getOnboardingCards();
+  const seen = new Map<string, NovoClienteAlocado>();
+  for (const c of cards) {
+    if (c.responsavel !== CFO_ASSIGNEE) continue;
+    if (!seen.has(c.client)) seen.set(c.client, { client: c.client, erp: c.erp });
   }
-  return out;
+  return [...seen.values()];
 }
-
-// Cacheado 2h, mesma tag/motivo do resto da integração.
-export const getNegociosFechadosPipefy = unstable_cache(loadNegociosFechadosPipefy, ["pipefy-contrato-assinado"], {
-  revalidate: 7200,
-  tags: ["pipefy"],
-});
 
 export type ClientGroup = {
   client: string;
