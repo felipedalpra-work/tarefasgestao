@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -16,6 +17,7 @@ import { toast } from "@/components/Toaster";
 import { AssigneePicker } from "@/components/AssigneePicker";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { MeetingReviewCard, type MeetingReviewField } from "@/components/MeetingReviewCard";
+import { NewTaskModal } from "@/components/NewTaskModal";
 import { taskResponsibles, type AssigneeInput } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
@@ -131,6 +133,7 @@ function needsDecision(t: TaskListItem): boolean {
 
 export default function WeeklyReviewPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [data, setData] = useState<ReviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
@@ -141,9 +144,13 @@ export default function WeeklyReviewPage() {
   const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
   const [suggestionDraft, setSuggestionDraft] = useState<SuggestionEditable | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskListItem | null>(null);
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/weekly-review")
+  // extraído do useEffect de carga inicial pra poder chamar de novo depois de criar uma
+  // tarefa pelo botão "+ Nova tarefa" (mesmo padrão simples de /tasks e /kanban: recarrega
+  // tudo em vez de tentar encaixar a tarefa nova no bucket certo na mão)
+  function loadReview() {
+    return fetch("/api/weekly-review")
       .then((r) => r.json())
       .then((json: ReviewData) => {
         setData(json);
@@ -154,6 +161,10 @@ export default function WeeklyReviewPage() {
       })
       .catch(() => toast("Erro ao carregar a revisão semanal", "error"))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadReview();
   }, []);
 
   const clients = useMemo(() => data?.clients ?? [], [data]);
@@ -574,20 +585,32 @@ export default function WeeklyReviewPage() {
                 </div>
               </div>
 
-              {/* só marca concluída quando a pessoa clica aqui — navegar entre empresas
-                  não marca nada sozinho, de propósito */}
-              <button
-                onClick={() => toggleDone(current.name)}
-                className={cn(
-                  "shrink-0 flex items-center gap-1.5 text-xs font-medium rounded-full px-3.5 py-2 border transition-colors",
-                  doneNames.has(current.name)
-                    ? "bg-o2-green/15 text-o2-green border-o2-green/30"
-                    : "bg-surface-2 text-ink-mid border-surface-3 hover:text-ink hover:border-border"
-                )}
-              >
-                <CheckCheck size={14} />
-                {doneNames.has(current.name) ? "Revisão concluída" : "Marcar como concluída"}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {/* mesmo NewTaskModal de /tasks e /kanban (padrão idêntico de criação em
+                    toda a plataforma), só com o cliente do slide atual já fixado */}
+                <button
+                  onClick={() => setShowNewTaskModal(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium rounded-full px-3.5 py-2 border bg-surface-2 text-ink-mid border-surface-3 hover:text-ink hover:border-border transition-colors"
+                >
+                  <Plus size={14} />
+                  Nova tarefa
+                </button>
+
+                {/* só marca concluída quando a pessoa clica aqui — navegar entre empresas
+                    não marca nada sozinho, de propósito */}
+                <button
+                  onClick={() => toggleDone(current.name)}
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs font-medium rounded-full px-3.5 py-2 border transition-colors",
+                    doneNames.has(current.name)
+                      ? "bg-o2-green/15 text-o2-green border-o2-green/30"
+                      : "bg-surface-2 text-ink-mid border-surface-3 hover:text-ink hover:border-border"
+                  )}
+                >
+                  <CheckCheck size={14} />
+                  {doneNames.has(current.name) ? "Revisão concluída" : "Marcar como concluída"}
+                </button>
+              </div>
             </div>
 
             {/* "Geral" é a revisão de sempre (sugestões/tarefas); "Reuniões" é nova — mesma
@@ -910,6 +933,19 @@ export default function WeeklyReviewPage() {
         onUpdated={handlePanelUpdated}
         users={data.users}
       />
+
+      {showNewTaskModal && current && session?.user?.id && (
+        <NewTaskModal
+          users={data.users}
+          currentUserId={session.user.id}
+          defaultClient={current.name}
+          onClose={() => setShowNewTaskModal(false)}
+          onCreated={() => {
+            setShowNewTaskModal(false);
+            loadReview();
+          }}
+        />
+      )}
     </div>
   );
 }
