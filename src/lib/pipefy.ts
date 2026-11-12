@@ -491,6 +491,118 @@ export async function getClientesNovosAlocadosGustavo(): Promise<NovoClienteAloc
   return [...seen.values()];
 }
 
+// ---------- Formulário inicial (Pipefy, comercial) ----------
+// Só LEITURA. Pipe "1.1 Funil de Vendas - CFOaaS" é onde o comercial registra o contexto
+// inicial do cliente (empresa, CNPJ, ERP, contato, produtos contratados, anotações da
+// qualificação). Só busca nas fases de negócio GANHO — "Contrato assinado" e "Ganho" —
+// nunca nas fases de lead/perdido/follow-up (somam quase 20 mil cards no total, inviável
+// de paginar e irrelevante aqui: um cliente de verdade sempre passou por uma dessas duas).
+const FUNIL_VENDAS_WON_PHASES = [324654555, 324406973]; // Contrato assinado, Ganho
+
+export type FormularioInicialPipefy = {
+  empresa: string;
+  razaoSocial: string | null;
+  cnpj: string | null;
+  setor: string | null;
+  uf: string | null;
+  municipio: string | null;
+  erp: string | null;
+  erpOutro: string | null;
+  faturamento: string | null;
+  contatoNome: string | null;
+  contatoEmail: string | null;
+  contatoTelefone: string | null;
+  financeiroNome: string | null;
+  financeiroEmail: string | null;
+  financeiroTelefone: string | null;
+  produtos: string[] | null;
+  regimeTributario: string | null;
+  dataAssinatura: string | null;
+  anotacoesQualificacao: string | null;
+  resumoVendaIA: string | null;
+};
+
+type PipefyCardRaw = { title: string; fields: { name: string; value: string }[] };
+
+function fieldValue(fields: { name: string; value: string }[], ...names: string[]): string | null {
+  for (const n of names) {
+    const f = fields.find((x) => x.name === n);
+    if (f?.value) return f.value;
+  }
+  return null;
+}
+
+function parseJsonArrayField(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(String) : null;
+  } catch {
+    return [raw];
+  }
+}
+
+function buildFormularioInicial(card: PipefyCardRaw): FormularioInicialPipefy {
+  const f = card.fields;
+  return {
+    empresa: fieldValue(f, "Empresa") || card.title,
+    razaoSocial: fieldValue(f, "Razão Social"),
+    cnpj: fieldValue(f, "CNPJ/EIN"),
+    setor: fieldValue(f, "Setor"),
+    uf: fieldValue(f, "UF"),
+    municipio: fieldValue(f, "Município"),
+    erp: fieldValue(f, "ERP"),
+    erpOutro: fieldValue(f, "Se outro ERP, qual é:", "Se outro ERP, qual?"),
+    faturamento: fieldValue(f, "Faixa de faturamento mensal", "Faturamento Anual"),
+    contatoNome: fieldValue(f, "Nome - Interlocução O2"),
+    contatoEmail: fieldValue(f, "E-mail  - Interlocução O2", "E-mail - Interlocução O2"),
+    contatoTelefone: fieldValue(f, "Telefone - Interlocução", "Telefone - Interlocução A"),
+    financeiroNome: fieldValue(f, "Nome responsável financeiro 1"),
+    financeiroEmail: fieldValue(f, "E-mail responsável financeiro 1"),
+    financeiroTelefone: fieldValue(f, "Telefone responsável pelo financeiro 1"),
+    produtos: parseJsonArrayField(fieldValue(f, "Produtos")),
+    regimeTributario: fieldValue(f, "Regime Tributário"),
+    dataAssinatura: fieldValue(f, "Data de assinatura do contrato"),
+    anotacoesQualificacao: fieldValue(f, "ANOTAÇÕES DA QUALIFICAÇÃO"),
+    resumoVendaIA: fieldValue(f, "Resumo da Venda (IA)"),
+  };
+}
+
+async function loadFormularioInicialCardsPipefy(): Promise<PipefyCardRaw[]> {
+  const out: PipefyCardRaw[] = [];
+  for (const phaseId of FUNIL_VENDAS_WON_PHASES) {
+    let after: string | null = null;
+    for (let page = 0; page < 15; page++) {
+      const data: {
+        phase: {
+          cards: {
+            pageInfo: { hasNextPage: boolean; endCursor: string };
+            edges: { node: PipefyCardRaw }[];
+          };
+        };
+      } = await gql(
+        `query { phase(id: ${phaseId}) { cards(first: 50${after ? `, after: "${after}"` : ""}) { pageInfo { hasNextPage endCursor } edges { node { title fields { name value } } } } } }`
+      );
+      const c = data.phase.cards;
+      for (const { node } of c.edges) out.push(node);
+      if (!c.pageInfo.hasNextPage) break;
+      after = c.pageInfo.endCursor;
+    }
+  }
+  return out;
+}
+
+// Cacheado 2h, mesma tag/motivo do resto da integração.
+export const getFormularioInicialCardsPipefy = unstable_cache(loadFormularioInicialCardsPipefy, ["pipefy-formulario-inicial"], {
+  revalidate: 7200,
+  tags: ["pipefy"],
+});
+
+export function formularioInicialForClient(cards: PipefyCardRaw[], platformName: string): FormularioInicialPipefy | null {
+  const match = cards.find((c) => matchesClient(c.title, platformName));
+  return match ? buildFormularioInicial(match) : null;
+}
+
 export type ClientGroup = {
   client: string;
   naoCadastrado: boolean; // veio do Pipefy mas não está na carteira da plataforma

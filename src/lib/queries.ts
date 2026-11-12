@@ -149,9 +149,13 @@ export const getClientsTable = unstable_cache(
     const notesByClient = new Map(notes.map((n) => [n.client, n]));
     const openTratativaSet = new Set(openTratativas.map((t) => t.client));
 
-    // a carteira de clientes (ClientNote) é a fonte de verdade de quais clientes existem;
-    // reuniões/recaps/tarefas só complementam com estatísticas quando houver
-    const allNames = new Set([...overviewByClient.keys(), ...notesByClient.keys()]);
+    // a carteira de clientes (ClientNote) é a fonte de verdade de quais clientes existem —
+    // reuniões/recaps/tarefas só complementam com estatísticas quando houver. Antes isso
+    // também unia overviewByClient.keys() (calendário/recap/tarefa), então um nome novo no
+    // Google Calendar virava uma linha aqui sozinho, sem ninguém clicar "Adicionar Cliente";
+    // achado pelo usuário — cliente novo agora só deve vir do Pipefy (ver pipefySuggestions
+    // em src/app/(app)/clientes/page.tsx), nunca do calendário.
+    const allNames = new Set(notesByClient.keys());
 
     return [...allNames].sort((a, b) => a.localeCompare(b)).map((name) => {
       const c = overviewByClient.get(name);

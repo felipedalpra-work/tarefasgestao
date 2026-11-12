@@ -6,7 +6,7 @@ import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, Stick
 import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
-import { OnboardingTab } from "./OnboardingTab";
+import { FormularioInicialTab } from "./FormularioInicialTab";
 import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
@@ -87,7 +87,7 @@ const EMPTY_OXY: OxyFields = {
 };
 
 export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
-  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "onboarding" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
+  const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "inicial" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
   const [tratativas, setTratativas] = useState(initialTratativas);
   const [events, setEvents] = useState(initialEvents);
@@ -221,7 +221,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     { key: "meetings", label: "Reuniões", icon: CalendarDays, count: events.length },
     { key: "recaps", label: "Meet Recaps", icon: FileText, count: recaps.length },
     { key: "tasks", label: "Tarefas", icon: CheckSquare, count: tasks.length },
-    { key: "onboarding", label: "Onboarding", icon: Rocket, count: null },
+    { key: "inicial", label: "Formulário Inicial", icon: Rocket, count: null },
     { key: "tratativas", label: "Tratativas", icon: ShieldAlert, count: tratativas.length },
     { key: "fechamento", label: "Fechamento", icon: ClipboardCheck, count: null },
     { key: "oxy", label: "Oxy", icon: Database, count: null },
@@ -365,8 +365,8 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
         </div>
       )}
 
-      {/* Onboarding */}
-      {tab === "onboarding" && <OnboardingTab client={client} />}
+      {/* Formulário Inicial */}
+      {tab === "inicial" && <FormularioInicialTab client={client} />}
 
       {/* Tratativas */}
       {tab === "tratativas" && (
