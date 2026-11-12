@@ -11,8 +11,10 @@ import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
 import { ClientAccessesSection } from "@/components/ClientAccessesSection";
-import { MeetingReviewCard } from "@/components/MeetingReviewCard";
 
+// Só leitura — Temperatura/Próximos Passos/Presença/Registro/sugestão da IA migraram pra
+// Saúde da Carteira → aba Temperatura (pedido do usuário, pra centralizar o preenchimento
+// num lugar só em vez de duplicar entre a tela do cliente e a Saúde da Carteira).
 type CalendarEvent = {
   id: string;
   title: string;
@@ -20,14 +22,6 @@ type CalendarEvent = {
   endAt: string | Date;
   briefingSent: boolean;
   meetingType: string | null;
-  temperature: string | null;
-  nextSteps: string | null;
-  suggestedTemperature: string | null;
-  suggestedNextSteps: string | null;
-  attendanceConfirmed: boolean;
-  registroConferido: boolean;
-  pipefyResumo: string | null; // "Resumo" da reunião no Pipefy, ao vivo (campo distinto de Observações/Próximos passos) — null quando não casou com nenhum registro (ver page.tsx)
-  resumoEditado: string | null; // cópia editável na plataforma — se preenchida, tem prioridade sobre pipefyResumo na exibição; nunca escrita de volta no Pipefy
 };
 
 type Recap = {
@@ -66,6 +60,14 @@ const STATUS_LABEL: Record<string, string> = { todo: "A fazer", in_progress: "Em
 const PRIORITY_COLOR: Record<string, string> = { high: "text-red-400", medium: "text-yellow-400", low: "text-o2-green" };
 const PRIORITY_LABEL: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa" };
 
+const MEETING_TYPE_LABEL: Record<string, string> = {
+  semanal: "Semanal",
+  comite: "Comitê Estratégico Mensal",
+  kickoff: "Kickoff",
+  setup: "Setup",
+  interno: "Interno",
+};
+
 type OxyFields = {
   updateFrequency: string;
   updateResponsible: string;
@@ -90,7 +92,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
   const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "inicial" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
   const [tratativas, setTratativas] = useState(initialTratativas);
-  const [events, setEvents] = useState(initialEvents);
+  const events = initialEvents; // só leitura agora — ver aba Reuniões abaixo
   const [notes, setNotes] = useState("");
   const [contacts, setContacts] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
@@ -164,59 +166,6 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     else toast("Erro ao salvar", "error");
   }
 
-  async function updateEvent(eventId: string, field: keyof CalendarEvent, value: string | boolean) {
-    const prevEvents = events;
-    const normalized = typeof value === "string" ? value || null : value;
-    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, [field]: normalized } : e)));
-    const res = await fetch(`/api/calendar/${eventId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: normalized }),
-    });
-    if (!res.ok) {
-      setEvents(prevEvents);
-      toast("Erro ao salvar", "error");
-    }
-  }
-
-  // "Aprovar" na sugestão da IA — grava os dois campos de uma vez (o PATCH já limpa a
-  // sugestão e já manda pro Pipefy, mesmo caminho de uma edição manual)
-  async function approveSuggestion(e: CalendarEvent) {
-    const prevEvents = events;
-    const { suggestedTemperature, suggestedNextSteps } = e;
-    setEvents((prev) =>
-      prev.map((ev) =>
-        ev.id === e.id
-          ? { ...ev, temperature: suggestedTemperature, nextSteps: suggestedNextSteps, suggestedTemperature: null, suggestedNextSteps: null }
-          : ev
-      )
-    );
-    const res = await fetch(`/api/calendar/${e.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ temperature: suggestedTemperature, nextSteps: suggestedNextSteps }),
-    });
-    if (!res.ok) {
-      setEvents(prevEvents);
-      toast("Erro ao aprovar sugestão", "error");
-    } else {
-      toast("Temperatura aprovada — enviada pro Pipefy", "success");
-    }
-  }
-
-  // "Editar" — só descarta a sugestão (sem tocar na Temperatura/Próximos passos oficiais
-  // nem acionar o Pipefy), a pessoa edita o campo normal como já faz hoje
-  async function dismissSuggestion(eventId: string) {
-    const prevEvents = events;
-    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, suggestedTemperature: null, suggestedNextSteps: null } : e)));
-    const res = await fetch(`/api/calendar/${eventId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dismissSuggestion: true }),
-    });
-    if (!res.ok) setEvents(prevEvents);
-  }
-
   const tabs = [
     { key: "meetings", label: "Reuniões", icon: CalendarDays, count: events.length },
     { key: "recaps", label: "Meet Recaps", icon: FileText, count: recaps.length },
@@ -257,20 +206,42 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
         ))}
       </div>
 
-      {/* Reuniões */}
+      {/* Reuniões — só leitura (Temperatura/Próximos Passos/Presença/Registro/sugestão da
+          IA migraram pra Saúde da Carteira → aba Temperatura, pedido do usuário pra
+          centralizar o preenchimento num lugar só) */}
       {tab === "meetings" && (
         <div className="space-y-3">
           {events.length === 0 ? (
             <Empty icon={CalendarDays} text="Nenhuma reunião registrada para este cliente." />
-          ) : events.map((e) => (
-            <MeetingReviewCard
-              key={e.id}
-              event={e}
-              onFieldChange={(field, value) => updateEvent(e.id, field, value)}
-              onApproveSuggestion={() => approveSuggestion(e)}
-              onDismissSuggestion={() => dismissSuggestion(e.id)}
-            />
-          ))}
+          ) : events.map((e) => {
+            const start = new Date(e.startAt);
+            const end = new Date(e.endAt);
+            const isPast = start < new Date();
+            const typeInfo = MEETING_TYPE_LABEL[e.meetingType ?? ""];
+            return (
+              <div key={e.id} className="bg-surface border border-surface-3 rounded-xl p-4 flex items-start gap-4">
+                <div className="text-center min-w-[44px]">
+                  <p className="text-xs text-ink-dim">{start.toLocaleDateString("pt-BR", { month: "short" }).toUpperCase()}</p>
+                  <p className="text-xl font-bold text-ink leading-tight">{start.getDate()}</p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-ink truncate">{e.title}</p>
+                    {typeInfo && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-ink-soft">{typeInfo}</span>}
+                  </div>
+                  <p className="text-xs text-ink-dim mt-0.5">
+                    {start.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} –{" "}
+                    {end.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    {" · "}
+                    {start.toLocaleDateString("pt-BR", { weekday: "long" })}
+                  </p>
+                </div>
+                <span className={cn("text-xs px-2 py-1 rounded-full shrink-0", isPast ? "bg-surface-3 text-ink-faint" : "bg-o2-green/10 text-o2-green")}>
+                  {isPast ? "Realizada" : "Agendada"}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

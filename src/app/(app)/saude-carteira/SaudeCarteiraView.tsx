@@ -3,8 +3,11 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, AlertTriangle, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "@/components/Toaster";
 import { Linkify } from "@/components/Linkify";
+import { MeetingReviewCard, type MeetingReviewField } from "@/components/MeetingReviewCard";
 import type { ClientGroup, PipefyMeeting, Temperatura, OnboardingOverviewRow, OnboardingMilestoneStatus } from "@/lib/pipefy";
+import type { MatchedCalendarEvent } from "./page";
 
 const TEMP_META: Record<string, { dot: string; label: string; chip: string }> = {
   "🔴": { dot: "bg-red-500", label: "Vermelho", chip: "bg-red-500/10 text-red-400" },
@@ -39,15 +42,74 @@ type Aba = "temperatura" | "jornada";
 export function SaudeCarteiraView({
   groups,
   onboardingRows,
+  calendarEventsByPipefyId,
   error,
 }: {
   groups: ClientGroup[];
   onboardingRows: OnboardingOverviewRow[];
+  calendarEventsByPipefyId: Record<string, MatchedCalendarEvent>;
   error: string | null;
 }) {
   const [aba, setAba] = useState<Aba>("temperatura");
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [aberto, setAberto] = useState<Set<string>>(new Set());
+  const [calendarEvents, setCalendarEvents] = useState(calendarEventsByPipefyId);
+
+  // edição de Temperatura/Próximos Passos/Presença/Registro/sugestão da IA, direto aqui —
+  // migrou da aba Reuniões do cliente (que virou só leitura, ver ClientTabs.tsx). Cada
+  // reunião do Pipefy já casada com um CalendarEvent (pipefyRecordId, mesmo match do sync
+  // diário) vira editável; sem match, continua só leitura (não tem o quê fazer PATCH).
+  async function updateMeeting(pipefyMeetingId: string, field: MeetingReviewField, value: string | boolean) {
+    const matched = calendarEvents[pipefyMeetingId];
+    if (!matched) return;
+    const prevEvents = calendarEvents;
+    const normalized = typeof value === "string" ? value || null : value;
+    setCalendarEvents((prev) => ({ ...prev, [pipefyMeetingId]: { ...prev[pipefyMeetingId], [field]: normalized } }));
+    const res = await fetch(`/api/calendar/${matched.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: normalized }),
+    });
+    if (!res.ok) {
+      setCalendarEvents(prevEvents);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function approveMeetingSuggestion(pipefyMeetingId: string) {
+    const matched = calendarEvents[pipefyMeetingId];
+    if (!matched) return;
+    const prevEvents = calendarEvents;
+    const { suggestedTemperature, suggestedNextSteps } = matched;
+    setCalendarEvents((prev) => ({
+      ...prev,
+      [pipefyMeetingId]: { ...prev[pipefyMeetingId], temperature: suggestedTemperature, nextSteps: suggestedNextSteps, suggestedTemperature: null, suggestedNextSteps: null },
+    }));
+    const res = await fetch(`/api/calendar/${matched.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temperature: suggestedTemperature, nextSteps: suggestedNextSteps }),
+    });
+    if (!res.ok) {
+      setCalendarEvents(prevEvents);
+      toast("Erro ao aprovar sugestão", "error");
+    } else {
+      toast("Temperatura aprovada — enviada pro Pipefy", "success");
+    }
+  }
+
+  async function dismissMeetingSuggestion(pipefyMeetingId: string) {
+    const matched = calendarEvents[pipefyMeetingId];
+    if (!matched) return;
+    const prevEvents = calendarEvents;
+    setCalendarEvents((prev) => ({ ...prev, [pipefyMeetingId]: { ...prev[pipefyMeetingId], suggestedTemperature: null, suggestedNextSteps: null } }));
+    const res = await fetch(`/api/calendar/${matched.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dismissSuggestion: true }),
+    });
+    if (!res.ok) setCalendarEvents(prevEvents);
+  }
 
   const contagem = useMemo(() => {
     const c = { "🔴": 0, "🟡": 0, "🟢": 0, pendentes: 0 };
@@ -145,7 +207,16 @@ export function SaudeCarteiraView({
           ) : (
             <div className="space-y-2">
               {visiveis.map((g) => (
-                <ClientRow key={g.client} g={g} aberto={aberto.has(g.client)} onToggle={() => toggle(g.client)} />
+                <ClientRow
+                  key={g.client}
+                  g={g}
+                  aberto={aberto.has(g.client)}
+                  onToggle={() => toggle(g.client)}
+                  calendarEvents={calendarEvents}
+                  onFieldChange={updateMeeting}
+                  onApproveSuggestion={approveMeetingSuggestion}
+                  onDismissSuggestion={dismissMeetingSuggestion}
+                />
               ))}
             </div>
           )}
@@ -157,6 +228,10 @@ export function SaudeCarteiraView({
 
 const MILESTONE_META: Record<OnboardingMilestoneStatus["status"], { icon: string; className: string; label: string }> = {
   concluido: { icon: "✅", className: "text-o2-green", label: "Concluído" },
+  // cliente já estabelecido (tem card em fase pós-onboarding) mas sem data exata registrada
+  // no Pipefy — achado real: clientes antigos (ex. D2M, Grupo Bairral) nunca tiveram um card
+  // específico de marco, só um card genérico de operação corrente/pausa
+  concluido_sem_data: { icon: "✅", className: "text-o2-green/70", label: "Concluído (data não registrada)" },
   em_andamento: { icon: "⏳", className: "text-amber-400", label: "Em andamento" },
   cancelado: { icon: "⛔", className: "text-ink-dim", label: "Cancelado" },
   nao_iniciado: { icon: "⬜", className: "text-ink-dim/60", label: "Não iniciado" },
@@ -218,7 +293,18 @@ function JornadaTable({ rows }: { rows: OnboardingOverviewRow[] }) {
   );
 }
 
-function ClientRow({ g, aberto, onToggle }: { g: ClientGroup; aberto: boolean; onToggle: () => void }) {
+type MeetingHandlers = {
+  calendarEvents: Record<string, MatchedCalendarEvent>;
+  onFieldChange: (pipefyMeetingId: string, field: MeetingReviewField, value: string | boolean) => void;
+  onApproveSuggestion: (pipefyMeetingId: string) => void;
+  onDismissSuggestion: (pipefyMeetingId: string) => void;
+};
+
+function ClientRow({ g, aberto, onToggle, calendarEvents, onFieldChange, onApproveSuggestion, onDismissSuggestion }: {
+  g: ClientGroup;
+  aberto: boolean;
+  onToggle: () => void;
+} & MeetingHandlers) {
   const meta = tempMeta(g.temperatura);
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
@@ -249,7 +335,14 @@ function ClientRow({ g, aberto, onToggle }: { g: ClientGroup; aberto: boolean; o
       {aberto && (
         <div className="px-4 pb-4 pt-1 space-y-3 border-t border-white/5">
           {g.meetings.map((m) => (
-            <MeetingCard key={m.id} m={m} />
+            <MeetingCard
+              key={m.id}
+              m={m}
+              matched={calendarEvents[m.id] ?? null}
+              onFieldChange={onFieldChange}
+              onApproveSuggestion={onApproveSuggestion}
+              onDismissSuggestion={onDismissSuggestion}
+            />
           ))}
         </div>
       )}
@@ -257,7 +350,66 @@ function ClientRow({ g, aberto, onToggle }: { g: ClientGroup; aberto: boolean; o
   );
 }
 
-function MeetingCard({ m }: { m: PipefyMeeting }) {
+function MeetingCard({ m, matched, onFieldChange, onApproveSuggestion, onDismissSuggestion }: {
+  m: PipefyMeeting;
+  matched: MatchedCalendarEvent | null;
+} & Omit<MeetingHandlers, "calendarEvents">) {
+  // reunião já casada com um CalendarEvent (pipefyRecordId) — Temperatura/Próximos Passos/
+  // Presença/Registro/sugestão da IA ficam editáveis aqui (migrou da tela de clientes).
+  // Observações do CFO e os links continuam só leitura — não existe campo equivalente na
+  // plataforma pra eles.
+  if (matched) {
+    return (
+      <div className="space-y-2">
+        <MeetingReviewCard
+          event={{
+            id: matched.id,
+            title: m.assunto,
+            startAt: matched.startAt,
+            endAt: matched.endAt,
+            meetingType: matched.meetingType,
+            temperature: matched.temperature,
+            nextSteps: matched.nextSteps,
+            suggestedTemperature: matched.suggestedTemperature,
+            suggestedNextSteps: matched.suggestedNextSteps,
+            attendanceConfirmed: matched.attendanceConfirmed,
+            registroConferido: matched.registroConferido,
+            pipefyResumo: m.resumo || null,
+            resumoEditado: matched.resumoEditado,
+          }}
+          onFieldChange={(field, value) => onFieldChange(m.id, field, value)}
+          onApproveSuggestion={() => onApproveSuggestion(m.id)}
+          onDismissSuggestion={() => onDismissSuggestion(m.id)}
+        />
+        {(m.observacoes || m.linkTranscricao || m.linkGravacao) && (
+          <div className="rounded-lg bg-white/[0.02] border border-white/5 p-3">
+            {m.observacoes && (
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-ink-dim mb-0.5">Observações do CFO (Pipefy)</div>
+                <p className="text-sm text-ink-mid whitespace-pre-wrap break-words"><Linkify text={m.observacoes} /></p>
+              </div>
+            )}
+            {(m.linkTranscricao || m.linkGravacao) && (
+              <div className={cn("flex gap-3 text-xs", m.observacoes && "mt-2")}>
+                {m.linkTranscricao && (
+                  <a href={m.linkTranscricao} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-o2-green hover:underline">
+                    <ExternalLink size={12} /> Transcrição
+                  </a>
+                )}
+                {m.linkGravacao && (
+                  <a href={m.linkGravacao} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-o2-green hover:underline">
+                    <ExternalLink size={12} /> Gravação
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // sem CalendarEvent casado ainda — continua só leitura, igual sempre foi
   const meta = tempMeta(m.temperatura);
   const passos = splitPassos(m.proximosPassos);
   return (

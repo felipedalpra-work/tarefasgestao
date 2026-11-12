@@ -316,7 +316,10 @@ export const getOnboardingCards = unstable_cache(loadOnboardingCards, ["pipefy-o
 });
 
 export type OnboardingMilestoneStatus = {
-  status: "concluido" | "em_andamento" | "cancelado" | "nao_iniciado";
+  // "concluido_sem_data": cliente já estabelecido (ver getClientesEstabelecidosPipefy) mas
+  // sem card específico desse marco — o Pipefy nunca registrou a data exata, mas o marco
+  // presumivelmente já passou (não é "não iniciado" de verdade)
+  status: "concluido" | "concluido_sem_data" | "em_andamento" | "cancelado" | "nao_iniciado";
   doneAt: string | null; // MM/DD/YYYY
   responsavel: string | null;
 };
@@ -333,11 +336,19 @@ function pickBestCard(cards: OnboardingCard[]): OnboardingCard | undefined {
   return cards.find((c) => c.phase === "concluido") ?? cards.find((c) => c.phase !== "cancelado") ?? cards[0];
 }
 
-export function onboardingSummaryForClient(cards: OnboardingCard[], platformName: string): ClientOnboardingSummary {
+export function onboardingSummaryForClient(
+  cards: OnboardingCard[],
+  platformName: string,
+  clientesEstabelecidos: string[] = []
+): ClientOnboardingSummary {
   const mine = cards.filter((c) => matchesClient(c.client, platformName));
+  const estabelecido = clientesEstabelecidos.some((nome) => matchesClient(nome, platformName));
   const build = (milestone: MilestoneKey): OnboardingMilestoneStatus => {
     const card = pickBestCard(mine.filter((c) => c.milestone === milestone));
-    if (!card) return { status: "nao_iniciado", doneAt: null, responsavel: null };
+    if (!card) {
+      if (estabelecido) return { status: "concluido_sem_data", doneAt: null, responsavel: null };
+      return { status: "nao_iniciado", doneAt: null, responsavel: null };
+    }
     const status = card.phase === "concluido" ? "concluido" : card.phase === "cancelado" ? "cancelado" : "em_andamento";
     return { status, doneAt: card.doneAt, responsavel: card.responsavel };
   };
@@ -467,6 +478,35 @@ async function loadStatusSugeridoPipefy(): Promise<StatusSugeridoPipefy[]> {
 
 // Cacheado 2h, mesma tag/motivo do resto da integração.
 export const getStatusSugeridoPipefy = unstable_cache(loadStatusSugeridoPipefy, ["pipefy-status-sugerido"], {
+  revalidate: 7200,
+  tags: ["pipefy"],
+});
+
+// Fases do pipe "3.00 Central de Projetos (CS)" que só existem DEPOIS do onboarding
+// completo — cliente que já chegou em qualquer uma delas necessariamente já passou por
+// Kick-off/Diagnóstico/Oxy em algum momento, mesmo que o pipe "3.02 Gestão de Rotinas"
+// nunca tenha registrado a data exata (achado real: clientes antigos como D2M e Grupo
+// Bairral só têm um card genérico de operação corrente/pausa, sem nenhum card datado de
+// marco — a granularidade por entrega com data é uma prática mais recente). Usado só pra
+// não mostrar "Não iniciado" indevido na Jornada de Onboarding — nunca pra inventar uma
+// data que não existe.
+const CLIENTE_ESTABELECIDO_PHASES = [
+  340754912, // Em Operação Recorrente
+  342996131, // Serviços Pontuais
+  344253090, // SaaS em Isenção de primeiro ano
+  342832516, // Pausados e Isentos
+  344247638, // Inadimplentes (Atendimento Pausado)
+  340754914, // Churn
+  340754913, // Em Tratativa
+];
+
+async function loadClientesEstabelecidosPipefy(): Promise<string[]> {
+  const perPhase = await Promise.all(CLIENTE_ESTABELECIDO_PHASES.map((id) => fetchCardTitlesInPhase(id)));
+  return perPhase.flat();
+}
+
+// Cacheado 2h, mesma tag/motivo do resto da integração.
+export const getClientesEstabelecidosPipefy = unstable_cache(loadClientesEstabelecidosPipefy, ["pipefy-clientes-estabelecidos"], {
   revalidate: 7200,
   tags: ["pipefy"],
 });

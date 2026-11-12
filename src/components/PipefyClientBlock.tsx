@@ -35,6 +35,7 @@ function fmt(d: string): string {
 
 const MILESTONE_STATUS_META: Record<OnboardingMilestoneStatus["status"], { icon: string; className: string }> = {
   concluido: { icon: "✅", className: "text-o2-green" },
+  concluido_sem_data: { icon: "✅", className: "text-o2-green/70" },
   em_andamento: { icon: "⏳", className: "text-amber-400" },
   cancelado: { icon: "⛔", className: "text-ink-dim" },
   nao_iniciado: { icon: "⬜", className: "text-ink-dim/60" },
