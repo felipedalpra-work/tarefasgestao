@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Clientes: fonte de cliente novo vira só Pipefy; aba Formulário Inicial; remove Onboarding)
+
+- Achado pelo usuário: `getClientsTable` unia clientes vindos de reunião/recap/tarefa (calendário) com os já cadastrados (`ClientNote`) pra decidir quais viram linha na tabela — uma reunião nova no Google Calendar já fazia o nome aparecer sozinho, sem "Adicionar Cliente" nem Pipefy. Corrigido pra só `ClientNote` — cliente novo agora só vem da sugestão do Pipefy (banner já existente, commit `ee8af22`) ou do clique manual.
+- Nova aba "Formulário Inicial" no cliente: contexto comercial (empresa, CNPJ, ERP, contato, produtos, anotações da qualificação) vindo do pipe "1.1 Funil de Vendas - CFOaaS" — só busca nas fases de negócio ganho ("Contrato assinado"/"Ganho"; as fases de lead/perdido somam quase 20 mil cards, inviável e irrelevante aqui). Só leitura, lazy.
+- Removida a aba Onboarding da UI (dados/arquivo ficam intactos, só sem entrada na navegação).
+
 ## 2026-11-12 (Revisão Semanal: botão "Nova tarefa" por cliente, mesmo NewTaskModal da plataforma)
 
 - Pedido do usuário: aproveitando a revisão semanal, poder criar tarefa direto ali pro cliente do slide atual, no mesmo padrão já usado em `/tasks` e `/kanban`.
