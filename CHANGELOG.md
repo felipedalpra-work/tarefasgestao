@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Clientes: sugere status Pausado/Encerrado quando diverge do Pipefy)
+
+- O status do cliente (ativo/pausado/encerrado) é 100% manual hoje, mas o CS já mantém esse controle de verdade no pipe "3.00 Central de Projetos (CS)" — fases Pausados e Isentos, Inadimplentes (Atendimento Pausado) e Churn (155 cards reais no momento).
+- `getStatusSugeridoPipefy()` (cacheado 2h) lê as 3 fases, mapeia pra "pausado"/"encerrado", só leitura. `getClientsTable` só sugere quando o status do Pipefy REALMENTE diverge do atual (senão continuaria aparecendo mesmo depois de aplicado). Link "Pipefy: Pausado ↻" abaixo do dropdown de Status na listagem de Clientes — um clique aplica.
+
 ## 2026-11-12 (Tratativas: traz detalhes do Pipefy no nudge, não só o nome do cliente)
 
 - Pedido do usuário: o nudge de "Em Tratativa" (commit `174f784`) só mostrava o nome, sem contexto nenhum.
