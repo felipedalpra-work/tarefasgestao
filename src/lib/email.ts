@@ -7,6 +7,19 @@ function getResend() {
 }
 const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
 
+// Achado real investigando por que o backup diário "sempre funcionava" (log de sucesso
+// todo dia) mas o squad nunca recebia: o SDK do Resend NÃO lança exceção quando a API
+// recusa o envio (domínio não verificado, from inválido, limite de taxa etc.) — devolve
+// { data: null, error: {...} } normalmente, com status 200. Todo `return
+// getResend().emails.send(...)` direto (sem checar `.error`) fazia o código seguir como se
+// tivesse dado certo. Esse wrapper fecha essa lacuna: lança de verdade quando a Resend
+// recusa, pra quem chama (e os logs) saberem a diferença entre "enviado" e "recusado".
+async function sendEmailOrThrow(payload: Parameters<Resend["emails"]["send"]>[0]) {
+  const { data, error } = await getResend().emails.send(payload);
+  if (error) throw new Error(`Resend recusou o envio (${error.name}): ${error.message}`);
+  return data;
+}
+
 function baseTemplate(content: string) {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -147,7 +160,7 @@ export async function sendNewTaskEmail({
     </table>
   `);
 
-  return getResend().emails.send({ from: FROM, to, subject: `[O2 Squad] Nova tarefa: ${taskTitle}`, html });
+  return sendEmailOrThrow({ from: FROM, to, subject: `[O2 Squad] Nova tarefa: ${taskTitle}`, html });
 }
 
 export async function sendDeadlineAlertEmail({
@@ -226,7 +239,7 @@ export async function sendDeadlineAlertEmail({
     </table>
   `);
 
-  return getResend().emails.send({ from: FROM, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
+  return sendEmailOrThrow({ from: FROM, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
 }
 
 export async function sendDailyBackupEmail({
@@ -289,7 +302,7 @@ export async function sendDailyBackupEmail({
     </table>
   `);
 
-  return getResend().emails.send({
+  return sendEmailOrThrow({
     from: FROM,
     to,
     subject: `[O2 Squad] Backup diário — ${squadName} — ${dateStr}`,
@@ -342,7 +355,7 @@ export async function sendJobFailureAlertEmail({
     </table>
   `);
 
-  return getResend().emails.send({
+  return sendEmailOrThrow({
     from: FROM,
     to,
     subject: `[O2 Squad] ⚠️ Job "${jobName}" falhou — ${squadName}`,
@@ -399,7 +412,7 @@ export async function sendPasswordResetEmail({
     </table>
   `);
 
-  return getResend().emails.send({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
+  return sendEmailOrThrow({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
 }
 
 // Monta (sem enviar) o conteúdo de um e-mail de cobrança de pendência do cliente —
