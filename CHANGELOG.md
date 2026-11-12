@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Tratativas: traz detalhes do Pipefy no nudge, não só o nome do cliente)
+
+- Pedido do usuário: o nudge de "Em Tratativa" (commit `174f784`) só mostrava o nome, sem contexto nenhum.
+- O Pipefy não tem um campo estruturado de "motivo da tratativa" nesse pipe, mas o card carrega contexto útil acumulado de fases anteriores (ex. "Em Operação Recorrente"): responsável, status do projeto (🟢🟡🔴), data da última interação e o feedback mais recente do cliente.
+- `getClientsEmTratativaPipefy()` agora devolve esses campos (não só o título). `TratativasBoard.tsx`: cada sugestão virou um card com esse contexto; "+ Abrir tratativa" já leva o feedback do cliente pro campo de descrição do form (editável/removível antes de salvar).
+
 ## 2026-11-12 (Corrige fonte da sugestão de cliente novo: CFO alocado, não funil de vendas)
 
 - Achado pelo usuário: a sugestão abaixo (commit `df8d56f`) mostrava negócios do funil de vendas "1.1 Funil de Vendas - CFOaaS", mas os responsáveis ali são o time comercial (SDR/Closer) — não indica qual CFO/squad vai atender. Um cliente recém-criado via sync do Google Calendar já aparecia certo na lista de clientes, mas a sugestão continuava trazendo negócios de outros CFOs/squads que não são do Gustavo.
