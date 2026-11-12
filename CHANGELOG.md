@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Corrige fonte da sugestão de cliente novo: CFO alocado, não funil de vendas)
+
+- Achado pelo usuário: a sugestão abaixo (commit `df8d56f`) mostrava negócios do funil de vendas "1.1 Funil de Vendas - CFOaaS", mas os responsáveis ali são o time comercial (SDR/Closer) — não indica qual CFO/squad vai atender. Um cliente recém-criado via sync do Google Calendar já aparecia certo na lista de clientes, mas a sugestão continuava trazendo negócios de outros CFOs/squads que não são do Gustavo.
+- Fonte corrigida pro próprio pipe "3.02 Gestão de Rotinas (CFO)" — o mesmo já lido pra jornada de onboarding: assim que um card aparece lá com "Líder Responsável" = Gustavo, é porque o CFO já foi alocado de verdade (marco D+2 do playbook). `getClientesNovosAlocadosGustavo()` reaproveita `getOnboardingCards()` já cacheado, nenhuma chamada nova à API. CNPJ saiu da sugestão (não existe nesse pipe); ERP continua.
+
 ## 2026-11-11 (Clientes: sugere cadastro a partir de contrato assinado no Pipefy)
 
 - Pedido do usuário: "cliente novo entra sozinho quando o negócio fecha no Pipefy [...] dá pra detectar e sugerir a criação (mesmo padrão de sugestão, nunca automático)".
