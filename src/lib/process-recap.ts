@@ -150,19 +150,43 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
 }`;
 
   const aiConfig = await getRecapAiConfig(recap.squadId);
+  const altConfig = await getAltRecapAiConfig(recap.squadId, aiConfig);
 
   try {
-    const { client, tasks } = await extractTasksWithProvider(aiConfig, prompt);
+    // tenta o provedor principal com 1 retry imediato — boa parte das falhas (503 "high
+    // demand" do Gemini, hiccup de rede) é transiente e já some numa segunda tentativa. Se
+    // ainda assim falhar e houver um provedor alternativo configurado, usa ELE pra extração
+    // de verdade (não só pra comparação) antes de desistir — é o que teria evitado recap
+    // ficando sem tarefa extraída até o próximo ciclo do cron (1x/dia) só porque um dos dois
+    // provedores estava fora do ar naquele momento.
+    let usedConfig = aiConfig;
+    let extraction: { client: string | null; tasks: SuggestedTask[] };
+    try {
+      extraction = await extractTasksWithProvider(aiConfig, prompt);
+    } catch {
+      try {
+        extraction = await extractTasksWithProvider(aiConfig, prompt);
+      } catch (secondErr) {
+        if (!altConfig) throw secondErr;
+        await log("ia-recap", `Provedor principal (${aiConfig.provider}) falhou 2x — tentando ${altConfig.provider} como alternativa`, {
+          detail: String(secondErr),
+          squadId: recap.squadId,
+        });
+        extraction = await extractTasksWithProvider(altConfig, prompt);
+        usedConfig = altConfig;
+      }
+    }
+    const { client, tasks } = extraction;
 
     await supersedePendingSuggestions(db, recapId);
 
-    // melhor-esforço: roda o OUTRO modelo disponível (se houver) com o mesmo prompt, só
-    // pra comparação lado a lado em /sugestoes-ia — nunca vira RecapSuggestion, nunca
-    // impede o processamento principal de concluir se falhar (quota, chave inválida etc.)
+    // melhor-esforço: roda o OUTRO modelo disponível (se houver E se ele não acabou de ser
+    // usado como fallback de verdade acima) com o mesmo prompt, só pra comparação lado a
+    // lado em /sugestoes-ia — nunca vira RecapSuggestion, nunca impede o processamento
+    // principal de concluir se falhar (quota, chave inválida etc.)
     let altProvider: string | null = null;
     let altSuggestedTasks: string | null = null;
-    const altConfig = await getAltRecapAiConfig(recap.squadId, aiConfig);
-    if (altConfig) {
+    if (altConfig && usedConfig.provider !== altConfig.provider) {
       try {
         const alt = await extractTasksWithProvider(altConfig, prompt);
         altProvider = altConfig.provider;
@@ -232,8 +256,8 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
       });
     }
 
-    console.log(`[process-recap] client="${client}", ${validTasks.length} sugestão(ões)`);
-    await log("ia-recap", `Meet Recap processado pela IA (${aiConfig.provider}) — ${validTasks.length} sugestão(ões) de tarefa identificada(s)`, {
+    console.log(`[process-recap] client="${client}", ${validTasks.length} sugestão(ões) (provedor: ${usedConfig.provider})`);
+    await log("ia-recap", `Meet Recap processado pela IA (${usedConfig.provider}) — ${validTasks.length} sugestão(ões) de tarefa identificada(s)`, {
       detail: client ? `Cliente: ${client}` : undefined,
       squadId: recap.squadId,
     });
@@ -260,12 +284,13 @@ Retorne APENAS JSON válido sem markdown, sem blocos de código, sem explicaçõ
 
     return { count: validTasks.length };
   } catch (err) {
-    // Falha do Gemini (chave inválida, quota) NÃO cai pro Groq silenciosamente — loga
-    // e esse ciclo falha, igual já acontecia quando a própria Groq falhava. Quem
-    // conectou a chave precisa saber que ela parou de funcionar, não ter o app
-    // mascarando isso trocando de provedor sem avisar.
+    // Chegou aqui depois de 2 tentativas no provedor principal E (se havia um provedor
+    // alternativo configurado) 1 tentativa nele também — não é mais um erro transiente,
+    // é falha de verdade (quota, chave inválida, os dois provedores fora do ar). Loga com
+    // o assunto do recap pra dar pra identificar qual ata ficou sem tarefa extraída na
+    // rotina da noite, sem precisar abrir o Meet Recap um por um.
     const message = err instanceof Error ? err.message : String(err);
-    await log("ia-recap", `Erro ao processar Meet Recap com IA (${aiConfig.provider})`, {
+    await log("ia-recap", `Erro ao processar Meet Recap "${recap.subject}" com IA (${aiConfig.provider}${altConfig ? ` + fallback ${altConfig.provider}` : ""})`, {
       level: "error",
       detail: message,
       squadId: recap.squadId,

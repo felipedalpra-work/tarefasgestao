@@ -102,11 +102,12 @@ function extractTextFromParts(parts: any[]): string {
 // isso) — sem exceção, sem log, só a linha do banco fica pela metade (foi o que aconteceu com
 // o recap da Zanotti em 10/11: sincronizado, mas processedAt nunca gravado, zero log de erro,
 // porque o ciclo tinha recap demais pra processar num dia só depois do cron virar diário).
-// Em vez de arriscar ser morto no meio de um processRecap (até 3 chamadas de IA, pode levar
-// dezenas de segundos), para graciosamente antes de estourar o orçamento — o(s) recap(s) que
-// sobrarem continuam com processedAt: null e são pegos no próximo ciclo, sem sumir de novo.
+// Em vez de arriscar ser morto no meio de um processRecap (até 4 chamadas de IA agora, com o
+// retry+fallback de 11/11 — pode levar dezenas de segundos), para graciosamente antes de
+// estourar o orçamento — o(s) recap(s) que sobrarem continuam com processedAt: null e são
+// pegos no próximo ciclo, sem sumir de novo.
 const GMAIL_SYNC_TIME_BUDGET_MS = 45_000;
-const PER_RECAP_SAFETY_MARGIN_MS = 20_000;
+const PER_RECAP_SAFETY_MARGIN_MS = 25_000;
 
 export async function syncUserGmail(
   userId: string,
@@ -216,7 +217,7 @@ export async function syncUserGmail(
     if (await isMeetRecapSuggestionsEnabled(user.squadId)) {
       const pending = await db.meetRecap.findMany({
         where: { processedAt: null },
-        select: { id: true },
+        select: { id: true, subject: true },
       });
       for (let i = 0; i < pending.length; i++) {
         if (Date.now() >= deadline - PER_RECAP_SAFETY_MARGIN_MS) {
@@ -226,8 +227,22 @@ export async function syncUserGmail(
           });
           break;
         }
-        const { count } = await processRecap(pending[i].id);
-        suggestionsExtracted += count;
+        // isola a falha desse recap específico — processRecap já loga e devolve o erro
+        // dentro de `error` pros casos esperados (IA fora do ar etc.), mas sem este
+        // try/catch aqui uma exceção genuinamente inesperada (ex.: erro ao buscar a config
+        // de IA do squad, antes mesmo de entrar no try de processRecap) derrubava o loop
+        // inteiro — o resto da fila daquela noite ficava sem processar, sem log nenhum
+        // apontando o motivo.
+        try {
+          const { count } = await processRecap(pending[i].id);
+          suggestionsExtracted += count;
+        } catch (err) {
+          await log("ia-recap", `Falha inesperada ao processar o Meet Recap "${pending[i].subject}" — pulado, o resto da fila continua`, {
+            level: "error",
+            detail: String(err),
+            squadId: user.squadId,
+          });
+        }
       }
     }
 

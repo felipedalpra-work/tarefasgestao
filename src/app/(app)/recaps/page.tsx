@@ -71,6 +71,8 @@ function RecapsPageInner() {
   const [deadlinePrompt, setDeadlinePrompt] = useState<{ recap: Recap; suggestion: Suggestion } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showByClient, setShowByClient] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessProgress, setReprocessProgress] = useState<{ done: number; total: number } | null>(null);
 
   async function load() {
     const [recapsRes, usersRes, accuracyRes] = await Promise.all([
@@ -113,6 +115,43 @@ function RecapsPageInner() {
     } finally {
       setSyncing(false);
     }
+  }
+
+  // botão "Reprocessar pendentes" — pedido do usuário: em vez de esperar o próximo ciclo
+  // do cron (1x/dia) pra tentar de novo um recap que falhou, dá pra forçar agora. Processa
+  // em sequência (não em paralelo) pra não estourar limite de taxa dos provedores de IA;
+  // cada chamada já tem seu próprio maxDuration=60 (ver /api/recaps/[id]/process), então um
+  // recap lento não derruba os outros nem precisa do orçamento de tempo do cron.
+  async function reprocessPending() {
+    const pendentes = recaps.filter((r) => !r.processedAt);
+    if (pendentes.length === 0) {
+      toast("Nenhum recap pendente de extração.", "info");
+      return;
+    }
+    setReprocessing(true);
+    setReprocessProgress({ done: 0, total: pendentes.length });
+    let okCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < pendentes.length; i++) {
+      try {
+        const res = await fetch(`/api/recaps/${pendentes[i].id}/process`, { method: "POST" });
+        const data = await res.json();
+        if (data.error) failCount++;
+        else okCount++;
+      } catch {
+        failCount++;
+      }
+      setReprocessProgress({ done: i + 1, total: pendentes.length });
+    }
+    setReprocessing(false);
+    setReprocessProgress(null);
+    await load();
+    toast(
+      failCount > 0
+        ? `${okCount} processado(s), ${failCount} ainda com erro — veja em Logs.`
+        : `${okCount} recap(s) processado(s) com sucesso.`,
+      failCount > 0 ? "error" : "success"
+    );
   }
 
   async function process(id: string) {
@@ -258,6 +297,15 @@ function RecapsPageInner() {
           >
             <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
             {syncing ? "Sincronizando..." : "Sincronizar Gmail"}
+          </button>
+          <button
+            onClick={reprocessPending}
+            disabled={reprocessing}
+            title="Tenta extrair tarefas de novo em todos os recaps ainda sem processar — não precisa esperar o próximo ciclo da rotina"
+            className="flex items-center gap-2 bg-surface border border-surface-3 text-ink px-4 py-2.5 rounded-xl font-medium text-sm hover:border-o2-green/50 transition-all disabled:opacity-50"
+          >
+            <Sparkles size={15} className={reprocessing ? "animate-pulse" : ""} />
+            {reprocessProgress ? `Reprocessando ${reprocessProgress.done}/${reprocessProgress.total}...` : "Reprocessar pendentes"}
           </button>
         </div>
       </div>
