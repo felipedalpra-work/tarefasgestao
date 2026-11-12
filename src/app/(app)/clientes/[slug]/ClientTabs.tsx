@@ -109,6 +109,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
   const [tratativas, setTratativas] = useState(initialTratativas);
   const [events, setEvents] = useState(initialEvents);
   const [resumoAbertoIds, setResumoAbertoIds] = useState<Set<string>>(new Set());
+  const [proximosPassosAbertoIds, setProximosPassosAbertoIds] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
   const [contacts, setContacts] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
@@ -244,6 +245,15 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     });
   }
 
+  function toggleProximosPassos(eventId: string) {
+    setProximosPassosAbertoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  }
+
   const tabs = [
     { key: "meetings", label: "Reuniões", icon: CalendarDays, count: events.length },
     { key: "recaps", label: "Meet Recaps", icon: FileText, count: recaps.length },
@@ -364,15 +374,23 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
                         <option value="critico" className="bg-panel text-ink">🔴 Crítico</option>
                       </select>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-faint w-28 shrink-0">Próximos passos:</span>
-                      <input
-                        type="text"
-                        defaultValue={e.nextSteps ?? ""}
-                        placeholder="Validados na reunião"
-                        onBlur={(ev) => ev.target.value !== (e.nextSteps ?? "") && updateEvent(e.id, "nextSteps", ev.target.value)}
-                        className="flex-1 bg-surface-2 border border-surface-3 rounded-lg px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                      />
+                    <div>
+                      <button
+                        onClick={() => toggleProximosPassos(e.id)}
+                        className="text-xs font-medium text-ink-dim hover:text-ink transition-colors"
+                      >
+                        {proximosPassosAbertoIds.has(e.id) ? "▾" : "▸"} Próximos passos
+                      </button>
+                      {proximosPassosAbertoIds.has(e.id) && (
+                        <AutoGrowTextarea
+                          defaultValue={e.nextSteps ?? ""}
+                          placeholder="Validados na reunião"
+                          onBlur={(ev) => {
+                            if (ev.target.value !== (e.nextSteps ?? "")) updateEvent(e.id, "nextSteps", ev.target.value);
+                          }}
+                          className="mt-1.5 w-full text-xs text-ink-soft placeholder:text-ink-ghost bg-surface-2 border border-surface-3 rounded-lg p-2.5 focus:outline-none focus:border-o2-green/50"
+                        />
+                      )}
                     </div>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-1.5 text-xs text-ink-dim cursor-pointer">
