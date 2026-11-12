@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { knownClientNames } from "@/lib/client-resolve";
 import { currentWeekKey, normalizeText } from "@/lib/utils";
+import { getGustavoMeetings } from "@/lib/pipefy";
 
 const WINDOW_DAYS = 7;
 
@@ -19,7 +20,21 @@ type ClientBucket = {
   name: string;
   health: string | null;
   oxyStage: string | null;
-  meetings: { id: string; title: string; startAt: string; meetingType: string | null; temperature: string | null }[];
+  meetings: {
+    id: string;
+    title: string;
+    startAt: string;
+    endAt: string;
+    meetingType: string | null;
+    temperature: string | null;
+    nextSteps: string | null;
+    suggestedTemperature: string | null;
+    suggestedNextSteps: string | null;
+    attendanceConfirmed: boolean;
+    registroConferido: boolean;
+    pipefyResumo: string | null;
+    resumoEditado: string | null;
+  }[];
   suggestions: {
     id: string;
     kind: "recap" | "external";
@@ -59,7 +74,11 @@ export async function GET() {
       db.clientNote.findMany({ select: { client: true, healthStatus: true, oxyStage: true } }),
       db.calendarEvent.findMany({
         where: { startAt: { gte: windowStart, lte: now } },
-        select: { id: true, title: true, client: true, startAt: true, meetingType: true, temperature: true },
+        select: {
+          id: true, title: true, client: true, startAt: true, endAt: true, meetingType: true, temperature: true,
+          nextSteps: true, suggestedTemperature: true, suggestedNextSteps: true, attendanceConfirmed: true,
+          registroConferido: true, resumoEditado: true, pipefyRecordId: true,
+        },
         orderBy: { startAt: "asc" },
       }),
       // RecapSuggestion não tem squadId próprio (herda do MeetRecap pai) — sem o filtro
@@ -101,6 +120,17 @@ export async function GET() {
       db.weeklyReviewDone.findMany({ where: { weekKey }, select: { client: true } }),
     ]);
 
+  // "Resumo" da reunião no Pipefy (campo distinto de Observações/Próximos passos), casado
+  // pelo mesmo pipefyRecordId que o sync diário já grava em CalendarEvent — mesmo padrão
+  // de src/app/(app)/clientes/[slug]/page.tsx. Best-effort: Pipefy fora do ar não pode
+  // impedir a revisão semanal de carregar.
+  const resumoByRecordId = new Map<string, string>();
+  try {
+    for (const m of await getGustavoMeetings()) {
+      if (m.resumo) resumoByRecordId.set(m.id, m.resumo);
+    }
+  } catch {}
+
   // mesmo espírito do matchesClient() em src/lib/pipefy.ts — tolera acento/caixa e
   // considera igual quando um nome é "extensão" do outro (ex.: "Etel | BPO" do n8n
   // contém "Etel"), evitando abrir aba nova pra toda variação de grafia do mesmo cliente
@@ -140,7 +170,23 @@ export async function GET() {
 
   for (const m of meetings) {
     const b = bucketFor(m.client);
-    if (b) b.meetings.push({ id: m.id, title: m.title, startAt: m.startAt.toISOString(), meetingType: m.meetingType, temperature: m.temperature });
+    if (b) {
+      b.meetings.push({
+        id: m.id,
+        title: m.title,
+        startAt: m.startAt.toISOString(),
+        endAt: m.endAt.toISOString(),
+        meetingType: m.meetingType,
+        temperature: m.temperature,
+        nextSteps: m.nextSteps,
+        suggestedTemperature: m.suggestedTemperature,
+        suggestedNextSteps: m.suggestedNextSteps,
+        attendanceConfirmed: m.attendanceConfirmed,
+        registroConferido: m.registroConferido,
+        resumoEditado: m.resumoEditado,
+        pipefyResumo: m.pipefyRecordId ? resumoByRecordId.get(m.pipefyRecordId) ?? null : null,
+      });
+    }
   }
 
   for (const s of recapSuggestions) {

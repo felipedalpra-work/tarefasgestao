@@ -15,6 +15,7 @@ import { LogoIcon } from "@/components/LogoIcon";
 import { toast } from "@/components/Toaster";
 import { AssigneePicker } from "@/components/AssigneePicker";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
+import { MeetingReviewCard, type MeetingReviewField } from "@/components/MeetingReviewCard";
 import { taskResponsibles, type AssigneeInput } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
@@ -33,11 +34,27 @@ type ReviewSuggestion = {
   meetingDate: string | null;
 };
 
+type ReviewMeeting = {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  meetingType: string | null;
+  temperature: string | null;
+  nextSteps: string | null;
+  suggestedTemperature: string | null;
+  suggestedNextSteps: string | null;
+  attendanceConfirmed: boolean;
+  registroConferido: boolean;
+  pipefyResumo: string | null;
+  resumoEditado: string | null;
+};
+
 type ReviewClient = {
   name: string;
   health: string | null;
   oxyStage: string | null;
-  meetings: { id: string; title: string; startAt: string; meetingType: string | null; temperature: string | null }[];
+  meetings: ReviewMeeting[];
   suggestions: ReviewSuggestion[];
   tasksCompleted: { id: string; title: string; updatedAt: string }[];
   tasksOpen: ReviewTask[];
@@ -118,6 +135,7 @@ export default function WeeklyReviewPage() {
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
+  const [clientTab, setClientTab] = useState<"geral" | "reunioes">("geral");
   const [acting, setActing] = useState<string | null>(null);
   const [doneNames, setDoneNames] = useState<Set<string>>(new Set());
   const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
@@ -162,8 +180,13 @@ export default function WeeklyReviewPage() {
 
   // navegar NÃO marca nada como revisado — só o botão "Marcar como concluída"
   // faz isso, de propósito (o squad não quer risco automático ao trocar de empresa)
+  // troca de empresa sempre volta pra aba "Geral" — "Reuniões" é uma decisão consciente
+  // por empresa, não queremos que a pessoa esqueça preenchendo a reunião errada
   const goTo = useCallback(
-    (i: number) => setIndex(Math.max(0, Math.min(i, total - 1))),
+    (i: number) => {
+      setIndex(Math.max(0, Math.min(i, total - 1)));
+      setClientTab("geral");
+    },
     [total]
   );
 
@@ -233,6 +256,65 @@ export default function WeeklyReviewPage() {
 
   function onTaskDeleted(clientName: string, id: string) {
     patchClient(clientName, (c) => ({ ...c, tasksOpen: c.tasksOpen.filter((t) => t.id !== id) }));
+  }
+
+  // aba Reuniões — mesmo PATCH /api/calendar/[id] e mesmo padrão otimista já usado na
+  // aba Reuniões do cliente (ClientTabs.tsx); só a forma de atualizar o estado local muda,
+  // porque aqui a reunião vive dentro de clients[].meetings, não numa lista solta.
+  async function updateMeeting(clientName: string, meetingId: string, field: MeetingReviewField, value: string | boolean) {
+    const prevData = data;
+    const normalized = typeof value === "string" ? value || null : value;
+    patchClient(clientName, (c) => ({
+      ...c,
+      meetings: c.meetings.map((m) => (m.id === meetingId ? { ...m, [field]: normalized } : m)),
+    }));
+    const res = await fetch(`/api/calendar/${meetingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: normalized }),
+    });
+    if (!res.ok) {
+      setData(prevData);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function approveMeetingSuggestion(clientName: string, m: ReviewMeeting) {
+    const prevData = data;
+    const { suggestedTemperature, suggestedNextSteps } = m;
+    patchClient(clientName, (c) => ({
+      ...c,
+      meetings: c.meetings.map((mm) =>
+        mm.id === m.id
+          ? { ...mm, temperature: suggestedTemperature, nextSteps: suggestedNextSteps, suggestedTemperature: null, suggestedNextSteps: null }
+          : mm
+      ),
+    }));
+    const res = await fetch(`/api/calendar/${m.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ temperature: suggestedTemperature, nextSteps: suggestedNextSteps }),
+    });
+    if (!res.ok) {
+      setData(prevData);
+      toast("Erro ao aprovar sugestão", "error");
+    } else {
+      toast("Temperatura aprovada — enviada pro Pipefy", "success");
+    }
+  }
+
+  async function dismissMeetingSuggestion(clientName: string, meetingId: string) {
+    const prevData = data;
+    patchClient(clientName, (c) => ({
+      ...c,
+      meetings: c.meetings.map((m) => (m.id === meetingId ? { ...m, suggestedTemperature: null, suggestedNextSteps: null } : m)),
+    }));
+    const res = await fetch(`/api/calendar/${meetingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dismissSuggestion: true }),
+    });
+    if (!res.ok) setData(prevData);
   }
 
   // painel de detalhe completo (mesmo do Kanban), aberto ao clicar no título de uma
@@ -508,6 +590,57 @@ export default function WeeklyReviewPage() {
               </button>
             </div>
 
+            {/* "Geral" é a revisão de sempre (sugestões/tarefas); "Reuniões" é nova — mesma
+                integração com o Pipefy (Temperatura/Próximos passos/Resumo) que já existe
+                na aba Reuniões do cliente, só que focada nas reuniões dessa semana, pra
+                Tainara preencher tudo sem sair do showroom de sexta */}
+            <div className="flex gap-1 mb-6 border-b border-surface-3/60">
+              <button
+                onClick={() => setClientTab("geral")}
+                className={cn(
+                  "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                  clientTab === "geral" ? "border-o2-green text-ink" : "border-transparent text-ink-mid hover:text-ink"
+                )}
+              >
+                Geral
+              </button>
+              <button
+                onClick={() => setClientTab("reunioes")}
+                className={cn(
+                  "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5",
+                  clientTab === "reunioes" ? "border-o2-green text-ink" : "border-transparent text-ink-mid hover:text-ink"
+                )}
+              >
+                <CalendarDays size={13} /> Reuniões
+                {current.meetings.length > 0 && (
+                  <span className="text-[10px] bg-surface-3 text-ink-faint rounded-full px-1.5 py-0.5">{current.meetings.length}</span>
+                )}
+              </button>
+            </div>
+
+            {clientTab === "reunioes" ? (
+              <section className="mb-8">
+                {current.meetings.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                    <CalendarDays size={28} className="text-border" />
+                    <p className="text-ink-mid text-sm">Nenhuma reunião registrada essa semana.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {current.meetings.map((m) => (
+                      <MeetingReviewCard
+                        key={m.id}
+                        event={m}
+                        onFieldChange={(field, value) => updateMeeting(current.name, m.id, field, value)}
+                        onApproveSuggestion={() => approveMeetingSuggestion(current.name, m)}
+                        onDismissSuggestion={() => dismissMeetingSuggestion(current.name, m.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : (
+            <>
             {/* resumo rápido — responde de cara "o que tem aqui" antes de descer pras listas */}
             {!quiet && (
               <div className="flex flex-wrap items-center gap-2 mb-8">
@@ -730,6 +863,8 @@ export default function WeeklyReviewPage() {
                   ))}
                 </ul>
               </details>
+            )}
+            </>
             )}
             </div>
           </div>
