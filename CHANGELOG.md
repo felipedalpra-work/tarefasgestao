@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Revisão Semanal: aba "Reuniões" com Temperatura/Próximos passos do Pipefy)
+
+- Pedido do usuário: toda sexta o squad revisa a semana, mas preencher Temperatura/Próximos passos das reuniões exigia sair da Revisão Semanal e entrar em cada cliente separadamente.
+- Nova aba por cliente dentro do showroom — "Geral" com a visão de sempre (sugestões/tarefas) e "Reuniões" com a jornada completa (sugestão da IA pra aprovar/editar, Temperatura, Próximos passos, Presença/Registro, Resumo do Pipefy), pra fazer tudo sem sair da tela de sexta-feira. Volta pra "Geral" ao trocar de empresa, de propósito.
+- `src/components/MeetingReviewCard.tsx` (novo): card de reunião extraído de `ClientTabs.tsx` — mesma UI/interação, agora compartilhada entre a aba Reuniões do cliente e a nova aba da Revisão Semanal, sem duplicar. `/api/weekly-review` ganhou os campos que faltavam + `pipefyResumo` (mesmo padrão de `clientes/[slug]/page.tsx`).
+
 ## 2026-11-12 (Próximos passos vira clique-pra-abrir, igual o Resumo (Pipefy))
 
 - Pedido do usuário, a partir de um print do card de reunião: "Próximos passos" era um `<input>` de uma linha só, cortando texto longo.
