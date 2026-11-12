@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Retry+fallback automático na extração de tarefas; botão de reprocessar pendentes)
+
+- Pedido do usuário: muitos casos de extração de tarefas falhando e só funcionando no ciclo seguinte da rotina (agora 1x/dia).
+- `process-recap.ts`: a extração tenta o provedor principal com 1 retry imediato e, se ainda falhar, usa o provedor alternativo configurado como fallback de verdade (antes só rodava pra comparação) — evita o incidente real desta sessão (Gemini fora do ar, Groq disponível, só funcionou via n8n).
+- `gmail-sync.ts`: isola a falha de cada recap no loop — antes, uma exceção inesperada num recap derrubava o resto da fila daquela noite sem log nenhum. Orçamento por recap subiu de 20s pra 25s.
+- `/recaps`: botão "Reprocessar pendentes" — tenta de novo, na hora, todos os recaps ainda sem processar.
+
 ## 2026-11-12 (Migra edição de Temperatura/Próximos Passos pra Saúde da Carteira; corrige Jornada de clientes antigos)
 
 - **Parte 1 — centraliza a edição:** Temperatura/Próximos Passos/Presença/Registro/sugestão da IA saem da aba Reuniões da tela do cliente (vira só leitura) e passam a viver na aba Temperatura da Saúde da Carteira. Cada reunião do Pipefy já casada com um `CalendarEvent` (`pipefyRecordId`) ganha o `MeetingReviewCard` completo ali; sem match, continua só leitura.
