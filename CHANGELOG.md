@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-12 (Migra edição de Temperatura/Próximos Passos pra Saúde da Carteira; corrige Jornada de clientes antigos)
+
+- **Parte 1 — centraliza a edição:** Temperatura/Próximos Passos/Presença/Registro/sugestão da IA saem da aba Reuniões da tela do cliente (vira só leitura) e passam a viver na aba Temperatura da Saúde da Carteira. Cada reunião do Pipefy já casada com um `CalendarEvent` (`pipefyRecordId`) ganha o `MeetingReviewCard` completo ali; sem match, continua só leitura.
+- **Parte 2 — Jornada de Onboarding:** investigado direto na API (pipe "3.02 Gestão de Rotinas" + "3.00 Central de Projetos" inteiros) que clientes antigos (D2M, Grupo Bairral) nunca tiveram um card específico de marco com data — só um card genérico de operação corrente/pausa. `onboardingSummaryForClient` ganha `clientesEstabelecidos` (de `getClientesEstabelecidosPipefy()`, fases que só existem pós-onboarding) pra marcar "✅ Concluído (data não registrada)" em vez de "⬜ Não iniciado" nesse caso.
+
 ## 2026-11-12 (Clientes: fonte de cliente novo vira só Pipefy; aba Formulário Inicial; remove Onboarding)
 
 - Achado pelo usuário: `getClientsTable` unia clientes vindos de reunião/recap/tarefa (calendário) com os já cadastrados (`ClientNote`) pra decidir quais viram linha na tabela — uma reunião nova no Google Calendar já fazia o nome aparecer sozinho, sem "Adicionar Cliente" nem Pipefy. Corrigido pra só `ClientNote` — cliente novo agora só vem da sugestão do Pipefy (banner já existente, commit `ee8af22`) ou do clique manual.
