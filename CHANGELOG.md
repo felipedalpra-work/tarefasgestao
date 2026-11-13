@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-13 (Aba "E-mail" na Revisão Semanal — envia pendências pro cliente de verdade)
+
+- Pedido do usuário: na Revisão Semanal, montar um rascunho de e-mail com as tarefas pendentes de cada cliente pra cobrança, com tarefas pré-selecionadas (dá pra desmarcar), corpo editável, e um botão que manda de verdade.
+- `ClientNote` ganha o campo `email` (cadastrado na aba Notas do cliente) — a plataforma não guardava e-mail de cliente em lugar nenhum até agora.
+- Nova aba "E-mail" na Revisão Semanal: checkbox por tarefa em aberto (todas marcadas por padrão), assunto e corpo editáveis (modelo padrão com o token `{{tarefas}}`, configurável em Configurações → "Modelo de e-mail para o cliente"), confirmação em dois passos antes de enviar.
+- Envio é de verdade (não é rascunho pra terminar manualmente): sai pelo Gmail de quem está logado, usando `gmail.users.messages.send` — o escopo já concedido hoje (`gmail.compose`) cobre isso, não precisa reconectar ninguém.
+
 ## 2026-11-13 (Nova tarefa: campo Cliente vira seleção, não mais texto livre)
 
 - Pedido do usuário: o campo Cliente ao criar tarefa manual era um input com sugestão (datalist), mas continuava aceitando qualquer texto digitado — um erro de digitação virava um "cliente novo" sem ninguém perceber.
