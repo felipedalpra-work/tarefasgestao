@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-13 (Nova tarefa: campo Cliente vira seleção, não mais texto livre)
+
+- Pedido do usuário: o campo Cliente ao criar tarefa manual era um input com sugestão (datalist), mas continuava aceitando qualquer texto digitado — um erro de digitação virava um "cliente novo" sem ninguém perceber.
+- `NewTaskModal.tsx`: campo vira `<select>` com só os clientes já cadastrados (mais "Nenhum, tarefa interna"). Não dá mais pra digitar um nome que não existe.
+
 ## 2026-11-13 (Formulário Inicial: busca no servidor em vez de toda vez que a aba monta)
 
 - Achado pelo usuário: a aba Formulário Inicial demorava e recarregava do zero toda vez que ele trocava de aba e voltava. Causa: buscava os dados do Pipefy via `fetch` no navegador dentro de um `useEffect`, e React desmonta/remonta o componente ao trocar de aba — cada entrada disparava uma consulta nova à API do Pipefy.
