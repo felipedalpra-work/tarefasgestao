@@ -6,6 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { Mail, RefreshCw, Send, AlertTriangle, Link as LinkIcon } from "lucide-react";
 import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import { parseEmailList } from "@/lib/utils";
 import type { TaskListItem } from "@/types/task";
 
 type EmailTask = TaskListItem & { isNew: boolean };
@@ -37,6 +38,7 @@ export function WeeklyEmailTab({
   tasksOpen: EmailTask[];
   emailTemplate: string;
 }) {
+  const clientEmails = parseEmailList(clientEmail);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(tasksOpen.map((t) => t.id)));
   const [subject, setSubject] = useState(`Pendências em aberto — ${clientName}`);
   const [bodyText, setBodyText] = useState(() => renderBody(emailTemplate, tasksOpen));
@@ -60,7 +62,7 @@ export function WeeklyEmailTab({
   }
 
   async function handleSend() {
-    if (!clientEmail) return;
+    if (clientEmails.length === 0) return;
     setSending(true);
     const res = await fetch(`/api/clients/${encodeURIComponent(clientName)}/send-weekly-email`, {
       method: "POST",
@@ -72,13 +74,13 @@ export function WeeklyEmailTab({
     setConfirming(false);
     if (res.ok) {
       setSent(true);
-      toast(`E-mail enviado para ${clientEmail}`, "success");
+      toast(`E-mail enviado para ${clientEmails.join(", ")}`, "success");
     } else {
       toast(data.error || "Erro ao enviar o e-mail", "error");
     }
   }
 
-  if (!clientEmail) {
+  if (clientEmails.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
         <Mail size={28} className="text-border" />
@@ -164,7 +166,9 @@ export function WeeklyEmailTab({
       ) : (
         <div className="flex items-center gap-3 bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3">
           <AlertTriangle size={16} className="text-amber-300 shrink-0" />
-          <p className="text-sm text-ink flex-1">Enviar de verdade para <strong>{clientEmail}</strong>?</p>
+          <p className="text-sm text-ink flex-1">
+            Enviar de verdade para <strong>{clientEmails.join(", ")}</strong> (com o squad em cópia)?
+          </p>
           <button
             onClick={() => setConfirming(false)}
             className="text-xs text-ink-mid hover:text-ink px-3 py-1.5"

@@ -93,7 +93,7 @@ export async function createClientTaskDraft(squadId: string, task: ClientTask): 
 // autenticada, não dá pra falsificar.
 export async function sendWeeklyClientEmail(
   userId: string,
-  { clientEmail, subject, bodyText }: { clientEmail: string; subject: string; bodyText: string }
+  { clientEmails, ccEmails, subject, bodyText }: { clientEmails: string[]; ccEmails: string[]; subject: string; bodyText: string }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const account = await prisma.account.findFirst({ where: { userId, provider: "google" } });
   if (!account?.access_token) {
@@ -112,7 +112,8 @@ export async function sendWeeklyClientEmail(
     const html = buildWeeklyClientEmailHtml({ bodyText });
 
     const mime = [
-      `To: ${clientEmail}`,
+      `To: ${clientEmails.join(", ")}`,
+      ...(ccEmails.length > 0 ? [`Cc: ${ccEmails.join(", ")}`] : []),
       `Subject: ${encodeSubject(subject)}`,
       `Content-Type: text/html; charset="UTF-8"`,
       "MIME-Version: 1.0",
@@ -125,7 +126,7 @@ export async function sendWeeklyClientEmail(
       requestBody: { raw: toBase64Url(mime) },
     });
 
-    await log("weekly-email", `E-mail enviado para ${clientEmail}: "${subject}"`);
+    await log("weekly-email", `E-mail enviado para ${clientEmails.join(", ")} (cc: ${ccEmails.join(", ") || "ninguém"}): "${subject}"`);
     return { ok: true };
   } catch (err) {
     await log("weekly-email", "Erro ao enviar e-mail pro cliente", { level: "error", detail: String(err) });

@@ -479,15 +479,18 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
           ) : (
             <>
               <div>
-                <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">E-mail do cliente</label>
+                <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">E-mail(s) do cliente</label>
                 <input
                   type="email"
+                  multiple
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="financeiro@cliente.com.br"
+                  placeholder="financeiro@cliente.com.br, joao@cliente.com.br"
                   className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
                 />
-                <p className="text-xs text-ink-faint mt-1">Usado no e-mail de pendências da Revisão Semanal.</p>
+                <p className="text-xs text-ink-faint mt-1">
+                  Separe vários e-mails por vírgula. Usado no e-mail de pendências da Revisão Semanal — o squad inteiro entra em cópia automaticamente.
+                </p>
               </div>
               <div>
                 <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Contatos</label>

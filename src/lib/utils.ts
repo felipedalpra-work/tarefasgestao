@@ -6,6 +6,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// ClientNote.email guarda 1+ endereços separados por vírgula ou quebra de linha (cliente
+// pode ter mais de um contato pra receber o e-mail de pendências da Revisão Semanal) — esse
+// parser é o único lugar que sabe esse formato, usado tanto na UI quanto na rota de envio.
+export function parseEmailList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  for (const part of raw.split(/[,\n]/)) {
+    const email = part.trim();
+    if (email) seen.add(email);
+  }
+  return [...seen];
+}
+
 // minúsculo + sem acento + só alfanumérico/espaço — pra comparar nomes (cliente, título)
 // sem exigir grafia idêntica. Postgres `contains`/`ILIKE` não ignora acento sozinho.
 export function normalizeText(value: string): string {
