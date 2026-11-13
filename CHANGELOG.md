@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-13 (Formulário Inicial: busca no servidor em vez de toda vez que a aba monta)
+
+- Achado pelo usuário: a aba Formulário Inicial demorava e recarregava do zero toda vez que ele trocava de aba e voltava. Causa: buscava os dados do Pipefy via `fetch` no navegador dentro de um `useEffect`, e React desmonta/remonta o componente ao trocar de aba — cada entrada disparava uma consulta nova à API do Pipefy.
+- Corrigido pro mesmo padrão usado pelo resto das integrações do Pipefy nesta tela: busca uma vez só em `page.tsx` (server component), reaproveitando o cache de 2h de `getFormularioInicialCardsPipefy()`, e passa pronto como prop — `FormularioInicialTab` virou componente só de apresentação (sem fetch/loading próprio). Removida a rota de API que só existia pra esse fetch do navegador.
+
 ## 2026-11-12 (Corrige backup diário "enviado com sucesso" sem ninguém receber)
 
 - Investigado: pedido do usuário pra conferir por que o backup automático não estava chegando — logs mostravam "Backup enviado — 3 destinatário(s)" com sucesso todo dia, sem erro, e os 3 membros do squad já são admin (recebem todos).
