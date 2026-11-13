@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-13 (E-mail de pendências: aceita vários e-mails por cliente e copia o squad)
+
+- Pedido do usuário: poder cadastrar mais de um e-mail por cliente e enviar pra todos de uma vez, e sempre deixar o squad inteiro em cópia.
+- Campo de e-mail do cliente (aba Notas) aceita vários endereços separados por vírgula — `parseEmailList` (novo, `src/lib/utils.ts`) é quem interpreta isso tanto na tela quanto no envio.
+- `POST /api/clients/[name]/send-weekly-email`: monta o "Para" com todos os e-mails do cliente e o "Cc" com todo mundo do squad (exceto quem está mandando) — resolvido no servidor, não depende do que a tela manda.
+
 ## 2026-11-13 (Revisão Semanal: aba Reuniões também traz pendentes de outras semanas)
 
 - Achado pelo usuário: a aba Reuniões da Revisão Semanal só mostrava os últimos 7 dias — uma reunião sem Temperatura/Próximos Passos preenchidos saía da tela assim que a semana virava, sem nenhum controle de que ficou sem revisar.
