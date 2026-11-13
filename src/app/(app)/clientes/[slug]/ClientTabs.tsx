@@ -6,7 +6,7 @@ import { CalendarDays, FileText, CheckSquare, Clock, CheckCircle2, Circle, Stick
 import { cn, dueDateOnly } from "@/lib/utils";
 import { toast } from "@/components/Toaster";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
-import { FormularioInicialTab } from "./FormularioInicialTab";
+import { FormularioInicialTab, type FormularioInicial } from "./FormularioInicialTab";
 import { FechamentoTab } from "./FechamentoTab";
 import { TratativaCard, type TratativaData } from "@/components/TratativaCard";
 import { NewTratativaForm } from "@/components/NewTratativaForm";
@@ -54,6 +54,7 @@ type Props = {
   users: UserOption[];
   currentUserId: string;
   client: string;
+  formularioInicial: FormularioInicial | null;
 };
 
 const STATUS_LABEL: Record<string, string> = { todo: "A fazer", in_progress: "Em progresso", done: "Concluída" };
@@ -88,7 +89,7 @@ const EMPTY_OXY: OxyFields = {
   pendencyWho: "",
 };
 
-export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client }: Props) {
+export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: initialTratativas, users, currentUserId, client, formularioInicial }: Props) {
   const [tab, setTab] = useState<"meetings" | "recaps" | "tasks" | "inicial" | "tratativas" | "fechamento" | "oxy" | "notes">("meetings");
   const [taskFilter, setTaskFilter] = useState<"mine" | "all">("mine");
   const [tratativas, setTratativas] = useState(initialTratativas);
@@ -337,7 +338,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
       )}
 
       {/* Formulário Inicial */}
-      {tab === "inicial" && <FormularioInicialTab client={client} />}
+      {tab === "inicial" && <FormularioInicialTab data={formularioInicial} />}
 
       {/* Tratativas */}
       {tab === "tratativas" && (

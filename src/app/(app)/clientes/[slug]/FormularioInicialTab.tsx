@@ -1,31 +1,8 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { Loader2, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { Linkify } from "@/components/Linkify";
+import type { FormularioInicialPipefy } from "@/lib/pipefy";
 
-type FormularioInicial = {
-  empresa: string;
-  razaoSocial: string | null;
-  cnpj: string | null;
-  setor: string | null;
-  uf: string | null;
-  municipio: string | null;
-  erp: string | null;
-  erpOutro: string | null;
-  faturamento: string | null;
-  contatoNome: string | null;
-  contatoEmail: string | null;
-  contatoTelefone: string | null;
-  financeiroNome: string | null;
-  financeiroEmail: string | null;
-  financeiroTelefone: string | null;
-  produtos: string[] | null;
-  regimeTributario: string | null;
-  dataAssinatura: string | null;
-  anotacoesQualificacao: string | null;
-  resumoVendaIA: string | null;
-};
+export type FormularioInicial = FormularioInicialPipefy;
 
 function Field({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
@@ -37,33 +14,13 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   );
 }
 
-// Contexto inicial do cliente vindo do Pipefy (pipe "1.1 Funil de Vendas - CFOaaS") —
-// mesmo espírito read-only do PipefyClientBlock, só que lazy (busca só quando a aba é
-// aberta, mesmo padrão já usado em OnboardingTab/notas/Oxy nesta mesma tela).
-export function FormularioInicialTab({ client }: { client: string }) {
-  const [data, setData] = useState<FormularioInicial | null | undefined>(undefined); // undefined = carregando
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`/api/clients/${encodeURIComponent(client)}/formulario-inicial`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json?.error) setError(json.error);
-        else setData(json);
-      })
-      .catch(() => setError("Erro ao buscar no Pipefy"));
-  }, [client]);
-
-  if (error) return <p className="text-sm text-red-400 py-10 text-center">{error}</p>;
-
-  if (data === undefined) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-16 text-ink-dim text-sm">
-        <Loader2 size={16} className="animate-spin" /> Buscando no Pipefy…
-      </div>
-    );
-  }
-
+// Contexto inicial do cliente vindo do Pipefy (pipe "1.1 Funil de Vendas - CFOaaS") — mesmo
+// espírito read-only do PipefyClientBlock. `data` já vem pronto de page.tsx (buscado uma
+// vez só no carregamento da página, reaproveitando o cache de 2h de
+// getFormularioInicialCardsPipefy) — achado pelo usuário: a versão anterior buscava via
+// fetch do navegador toda vez que a aba montava, então trocar de aba e voltar disparava uma
+// chamada nova à API do Pipefy de novo, deixando a aba lenta a cada entrada.
+export function FormularioInicialTab({ data }: { data: FormularioInicial | null }) {
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">

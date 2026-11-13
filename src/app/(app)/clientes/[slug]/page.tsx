@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { ClientTabs } from "./ClientTabs";
 import { PipefyClientBlock } from "@/components/PipefyClientBlock";
 import { DeleteClientButton } from "./DeleteClientButton";
+import { getFormularioInicialCardsPipefy, formularioInicialForClient } from "@/lib/pipefy";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -34,6 +35,17 @@ export default async function ClientePage({ params }: Props) {
   }
 
   const lastMeeting = events.length > 0 ? new Date(events[0].startAt) : null;
+
+  // contexto comercial do Pipefy (pipe "1.1 Funil de Vendas - CFOaaS") — buscado aqui, no
+  // carregamento da página (server component), e não mais dentro da aba, pra reaproveitar
+  // o mesmo cache de 2h de getFormularioInicialCardsPipefy() em vez de fazer uma chamada
+  // nova à API do Pipefy toda vez que a pessoa trocava de aba e voltava (achado pelo
+  // usuário: a aba demorava e recarregava de novo a cada entrada). Best-effort — Pipefy
+  // fora do ar não pode impedir a página de carregar.
+  let formularioInicial: ReturnType<typeof formularioInicialForClient> = null;
+  try {
+    formularioInicial = formularioInicialForClient(await getFormularioInicialCardsPipefy(), client);
+  } catch {}
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
@@ -79,6 +91,7 @@ export default async function ClientePage({ params }: Props) {
         users={users}
         currentUserId={session.user.id}
         client={client}
+        formularioInicial={formularioInicial}
       />
     </div>
   );
