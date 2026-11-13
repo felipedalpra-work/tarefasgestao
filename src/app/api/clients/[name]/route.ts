@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       client,
       notes: null,
       contacts: null,
+      email: null,
       status: "ativo",
       oxyStage: "nao_iniciado",
       importType: null,
@@ -62,8 +63,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
   const note = await db.clientNote.upsert({
     where: { squadId_client: { squadId: session.user.squadId, client } },
-    update: { notes: body.notes ?? null, contacts: body.contacts ?? null },
-    create: { squadId: session.user.squadId, client, notes: body.notes ?? null, contacts: body.contacts ?? null },
+    update: { notes: body.notes ?? null, contacts: body.contacts ?? null, email: body.email ?? null },
+    create: { squadId: session.user.squadId, client, notes: body.notes ?? null, contacts: body.contacts ?? null, email: body.email ?? null },
   });
 
   return NextResponse.json(note);

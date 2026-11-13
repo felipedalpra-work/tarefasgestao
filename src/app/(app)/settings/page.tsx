@@ -97,6 +97,10 @@ export default function SettingsPage() {
   const [temperaturePrompt, setTemperaturePrompt] = useState("");
   const [temperaturePromptSaving, setTemperaturePromptSaving] = useState(false);
 
+  // Modelo de e-mail pro cliente (Revisão Semanal) state
+  const [clientEmailTemplate, setClientEmailTemplate] = useState("");
+  const [clientEmailTemplateSaving, setClientEmailTemplateSaving] = useState(false);
+
   // Minuta de cobrança (rascunho no Gmail) state
   const [billingDraftOwnerId, setBillingDraftOwnerId] = useState<string | null>(null);
   const [billingDraftSaving, setBillingDraftSaving] = useState(false);
@@ -134,6 +138,10 @@ export default function SettingsPage() {
     fetch("/api/settings/pipefy-temperature")
       .then((r) => r.json())
       .then((d) => setTemperaturePrompt(d.prompt ?? ""));
+
+    fetch("/api/settings/client-email-template")
+      .then((r) => r.json())
+      .then((d) => setClientEmailTemplate(d.template ?? ""));
 
     // load squad users + slack settings in parallel
     Promise.all([
@@ -246,6 +254,17 @@ export default function SettingsPage() {
     });
     setTemperaturePromptSaving(false);
     toast(res.ok ? "Critério salvo" : "Erro ao salvar", res.ok ? "success" : "error");
+  }
+
+  async function saveClientEmailTemplate() {
+    setClientEmailTemplateSaving(true);
+    const res = await fetch("/api/settings/client-email-template", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: clientEmailTemplate }),
+    });
+    setClientEmailTemplateSaving(false);
+    toast(res.ok ? "Modelo salvo" : "Erro ao salvar", res.ok ? "success" : "error");
   }
 
   async function saveBillingDraftOwner(ownerUserId: string | null) {
@@ -798,6 +817,40 @@ export default function SettingsPage() {
               >
                 <Save size={13} />
                 {temperaturePromptSaving ? "Salvando…" : "Salvar"}
+              </button>
+            ) : (
+              <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>
+            )}
+          </div>
+
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2 flex items-center gap-2">
+              <Mail size={14} className="text-o2-green" />
+              Modelo de e-mail para o cliente (Revisão Semanal)
+            </h2>
+            <p className="text-xs text-ink-mid mb-4">
+              Usado como ponto de partida do e-mail de pendências na aba &quot;E-mail&quot; da
+              Revisão Semanal — <code>{"{{tarefas}}"}</code> vira a lista das tarefas marcadas
+              naquela tela.
+            </p>
+            <AutoGrowTextarea
+              value={clientEmailTemplate}
+              onChange={(e) => setClientEmailTemplate(e.target.value)}
+              disabled={!isAdmin}
+              rows={8}
+              maxHeight={400}
+              placeholder={"Olá, tudo bem?\n\nSegue abaixo o resumo das pendências em aberto...\n\n{{tarefas}}"}
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 font-mono disabled:opacity-70"
+            />
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={saveClientEmailTemplate}
+                disabled={clientEmailTemplateSaving}
+                className="mt-3 flex items-center gap-1.5 bg-o2-green text-bg px-4 py-2 rounded-lg font-bold text-xs hover:bg-o2-green-bright transition-all disabled:opacity-50"
+              >
+                <Save size={13} />
+                {clientEmailTemplateSaving ? "Salvando…" : "Salvar"}
               </button>
             ) : (
               <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>

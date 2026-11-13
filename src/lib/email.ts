@@ -488,3 +488,56 @@ export function buildClientTaskDraftHtml({
 
   return { subject: `Follow-up: ${taskTitle}`, html };
 }
+
+// Modelo padrão do e-mail de pendências mandado pro cliente na aba "E-mail" da Revisão
+// Semanal, usado quando o squad ainda não configurou o próprio em Configurações (ver
+// getClientEmailTemplate/setClientEmailTemplate em settings.ts). O token {{tarefas}} vira a
+// lista das tarefas marcadas (ver renderBody em revisao-semanal/page.tsx).
+export const DEFAULT_CLIENT_EMAIL_TEMPLATE = `Olá, tudo bem?
+
+Segue abaixo o resumo das pendências em aberto para acompanhamento:
+
+{{tarefas}}
+
+Qualquer dúvida, estamos à disposição.
+
+Abraços,
+Equipe O2`;
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Converte o texto puro já editado na tela (com {{tarefas}} já substituído por uma lista de
+// linhas "• título — prazo: dd/mm/aaaa") num HTML limpo pra virar o corpo do e-mail de
+// verdade — SEM o baseTemplate() (rodapé diz "Sistema interno do squad", errado pra algo que
+// vai pro cliente) e sem o aviso de rascunho que buildClientTaskDraftHtml usa (aqui o texto já
+// foi revisado na tela antes de disparar, não precisa de aviso dentro do próprio corpo).
+export function buildWeeklyClientEmailHtml({ bodyText }: { bodyText: string }): string {
+  const blocks = bodyText.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+
+  const html = blocks
+    .map((block) => {
+      const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+      const isList = lines.every((l) => l.startsWith("• "));
+      if (isList) {
+        const items = lines.map((l) => `<li style="margin-bottom:6px;">${escapeHtml(l.slice(2))}</li>`).join("");
+        return `<ul style="margin:0 0 16px;padding-left:20px;">${items}</ul>`;
+      }
+      return `<p style="margin:0 0 16px;">${lines.map(escapeHtml).join("<br/>")}</p>`;
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+</head>
+<body style="margin:0;padding:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:16px;font-size:14px;line-height:1.7;color:#1a1a1a;">
+    ${html}
+  </div>
+</body>
+</html>`;
+}

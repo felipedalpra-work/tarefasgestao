@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   X, ChevronLeft, ChevronRight, Sparkles, CalendarDays, CheckCircle2,
-  PartyPopper, Check, Trash2, Loader2, Play, AlertTriangle, Pencil, Plus, CheckCheck,
+  PartyPopper, Check, Trash2, Loader2, Play, AlertTriangle, Pencil, Plus, CheckCheck, Mail,
 } from "lucide-react";
 import { cn, priorityLabel, priorityColor } from "@/lib/utils";
 import { WeeklyReviewTaskRow } from "@/components/WeeklyReviewTaskRow";
@@ -18,6 +18,7 @@ import { AssigneePicker } from "@/components/AssigneePicker";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { MeetingReviewCard, type MeetingReviewField } from "@/components/MeetingReviewCard";
 import { NewTaskModal } from "@/components/NewTaskModal";
+import { WeeklyEmailTab } from "@/components/WeeklyEmailTab";
 import { taskResponsibles, type AssigneeInput } from "@/lib/task-assignees";
 import type { TaskListItem, UserOption } from "@/types/task";
 
@@ -56,6 +57,7 @@ type ReviewClient = {
   name: string;
   health: string | null;
   oxyStage: string | null;
+  email: string | null;
   meetings: ReviewMeeting[];
   suggestions: ReviewSuggestion[];
   tasksCompleted: { id: string; title: string; updatedAt: string }[];
@@ -138,7 +140,8 @@ export default function WeeklyReviewPage() {
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
-  const [clientTab, setClientTab] = useState<"geral" | "reunioes">("geral");
+  const [clientTab, setClientTab] = useState<"geral" | "reunioes" | "email">("geral");
+  const [emailTemplate, setEmailTemplate] = useState("");
   const [acting, setActing] = useState<string | null>(null);
   const [doneNames, setDoneNames] = useState<Set<string>>(new Set());
   const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
@@ -165,6 +168,10 @@ export default function WeeklyReviewPage() {
 
   useEffect(() => {
     loadReview();
+    fetch("/api/settings/client-email-template")
+      .then((r) => r.json())
+      .then((json) => setEmailTemplate(json.template ?? ""))
+      .catch(() => {});
   }, []);
 
   const clients = useMemo(() => data?.clients ?? [], [data]);
@@ -639,9 +646,26 @@ export default function WeeklyReviewPage() {
                   <span className="text-[10px] bg-surface-3 text-ink-faint rounded-full px-1.5 py-0.5">{current.meetings.length}</span>
                 )}
               </button>
+              <button
+                onClick={() => setClientTab("email")}
+                className={cn(
+                  "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5",
+                  clientTab === "email" ? "border-o2-green text-ink" : "border-transparent text-ink-mid hover:text-ink"
+                )}
+              >
+                <Mail size={13} /> E-mail
+              </button>
             </div>
 
-            {clientTab === "reunioes" ? (
+            {clientTab === "email" ? (
+              <WeeklyEmailTab
+                key={current.name}
+                clientName={current.name}
+                clientEmail={current.email}
+                tasksOpen={current.tasksOpen}
+                emailTemplate={emailTemplate}
+              />
+            ) : clientTab === "reunioes" ? (
               <section className="mb-8">
                 {current.meetings.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">

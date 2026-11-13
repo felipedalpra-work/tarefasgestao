@@ -8,6 +8,7 @@ const N8N_WEBHOOK_SECRET_KEY = "n8n_webhook_secret";
 const BILLING_DRAFT_OWNER_KEY = "billing_draft_owner_user_id";
 const TEMPERATURE_PROMPT_KEY = "pipefy_temperature_prompt";
 const TEMPERATURE_PROMPT_DISMISSED_KEY = "pipefy_temperature_prompt_dismissed";
+const CLIENT_EMAIL_TEMPLATE_KEY = "weekly_client_email_template";
 
 // Sem linha na tabela Setting = ligado (comportamento histórico, antes de existir esse flag)
 export async function isMeetRecapSuggestionsEnabled(squadId: string): Promise<boolean> {
@@ -124,6 +125,22 @@ export async function dismissTemperaturePrompt(squadId: string): Promise<void> {
     where: { squadId_key: { squadId, key: TEMPERATURE_PROMPT_DISMISSED_KEY } },
     update: { value: "true" },
     create: { squadId, key: TEMPERATURE_PROMPT_DISMISSED_KEY, value: "true" },
+  });
+}
+
+// Modelo padrão do corpo do e-mail de pendências mandado pro cliente na Revisão Semanal
+// (ver src/lib/email.ts e a aba "E-mail" de src/app/(app)/revisao-semanal/page.tsx). null/sem
+// linha = ninguém configurou ainda; quem usa cai no DEFAULT_CLIENT_EMAIL_TEMPLATE de lá.
+export async function getClientEmailTemplate(squadId: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: CLIENT_EMAIL_TEMPLATE_KEY } } });
+  return row?.value || null;
+}
+
+export async function setClientEmailTemplate(squadId: string, template: string): Promise<void> {
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: CLIENT_EMAIL_TEMPLATE_KEY } },
+    update: { value: template },
+    create: { squadId, key: CLIENT_EMAIL_TEMPLATE_KEY, value: template },
   });
 }
 

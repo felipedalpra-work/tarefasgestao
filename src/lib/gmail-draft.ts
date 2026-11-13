@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { log } from "./logger";
-import { buildClientTaskDraftHtml } from "./email";
+import { buildClientTaskDraftHtml, buildWeeklyClientEmailHtml } from "./email";
 import { getBillingDraftOwnerUserId } from "./settings";
 import { google } from "googleapis";
 
@@ -81,5 +81,55 @@ export async function createClientTaskDraft(squadId: string, task: ClientTask): 
     await log("gmail-draft", "Erro ao criar rascunho no Gmail", { level: "error", detail: String(err) });
     console.error("[gmail-draft] erro:", err);
     return false;
+  }
+}
+
+// Envia DE VERDADE (não é rascunho) o e-mail de pendências da aba "E-mail" da Revisão
+// Semanal — pelo Gmail de quem clicou em Enviar (não pelo dono fixo configurado em
+// getBillingDraftOwnerUserId, que é só pro fluxo automático de cobrança de tarefa vencida).
+// O escopo já concedido hoje (gmail.compose) cobre tanto rascunho quanto envio de verdade
+// (users.messages.send), então não precisa de reconexão/consentimento novo. "De" fica a
+// cargo do próprio Gmail — a API sempre envia como o endereço principal da conta
+// autenticada, não dá pra falsificar.
+export async function sendWeeklyClientEmail(
+  userId: string,
+  { clientEmail, subject, bodyText }: { clientEmail: string; subject: string; bodyText: string }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const account = await prisma.account.findFirst({ where: { userId, provider: "google" } });
+  if (!account?.access_token) {
+    return { ok: false, error: "Conecte sua conta Google em Configurações antes de enviar." };
+  }
+
+  try {
+    const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+    oauth2.setCredentials({
+      access_token: account.access_token,
+      refresh_token: account.refresh_token ?? undefined,
+    });
+
+    const gmail = google.gmail({ version: "v1", auth: oauth2 });
+
+    const html = buildWeeklyClientEmailHtml({ bodyText });
+
+    const mime = [
+      `To: ${clientEmail}`,
+      `Subject: ${encodeSubject(subject)}`,
+      `Content-Type: text/html; charset="UTF-8"`,
+      "MIME-Version: 1.0",
+      "",
+      html,
+    ].join("\r\n");
+
+    await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw: toBase64Url(mime) },
+    });
+
+    await log("weekly-email", `E-mail enviado para ${clientEmail}: "${subject}"`);
+    return { ok: true };
+  } catch (err) {
+    await log("weekly-email", "Erro ao enviar e-mail pro cliente", { level: "error", detail: String(err) });
+    console.error("[weekly-email] erro:", err);
+    return { ok: false, error: "Erro ao enviar pelo Gmail — confira se a conexão com o Google ainda é válida." };
   }
 }

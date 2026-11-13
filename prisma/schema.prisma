@@ -258,6 +258,7 @@ model ClientNote {
   client                    String
   notes                     String?
   contacts                  String?
+  email                     String? // e-mail do cliente, usado no e-mail de pendências da Revisão Semanal
   status                    String    @default("ativo") // "ativo" | "pausado" | "encerrado"
   oxyStage                  String    @default("nao_iniciado") // "nao_iniciado" | "em_validacao" | "em_implantacao" | "implantacao_interrompida" | "ativo"
   importType                String? // "manual" | "automatica" | "automatica_manual"

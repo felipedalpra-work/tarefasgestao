@@ -96,6 +96,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
   const events = initialEvents; // só leitura agora — ver aba Reuniões abaixo
   const [notes, setNotes] = useState("");
   const [contacts, setContacts] = useState("");
+  const [email, setEmail] = useState("");
   const [notesLoaded, setNotesLoaded] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [oxy, setOxy] = useState<OxyFields>(EMPTY_OXY);
@@ -112,6 +113,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
         .then((data) => {
           setNotes(data.notes ?? "");
           setContacts(data.contacts ?? "");
+          setEmail(data.email ?? "");
           setNotesLoaded(true);
         })
         .catch(() => setNotesLoaded(true));
@@ -140,7 +142,7 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
     const res = await fetch(`/api/clients/${encodeURIComponent(client)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: notes || null, contacts: contacts || null }),
+      body: JSON.stringify({ notes: notes || null, contacts: contacts || null, email: email || null }),
     });
     setSavingNotes(false);
     if (res.ok) toast("Notas salvas", "success");
@@ -476,6 +478,17 @@ export function ClientTabs({ events: initialEvents, recaps, tasks, tratativas: i
             <p className="text-xs text-ink-faint text-center py-8">Carregando…</p>
           ) : (
             <>
+              <div>
+                <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">E-mail do cliente</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="financeiro@cliente.com.br"
+                  className="w-full bg-surface border border-surface-3 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+                />
+                <p className="text-xs text-ink-faint mt-1">Usado no e-mail de pendências da Revisão Semanal.</p>
+              </div>
               <div>
                 <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Contatos</label>
                 <AutoGrowTextarea
