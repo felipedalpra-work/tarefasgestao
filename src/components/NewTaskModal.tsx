@@ -143,16 +143,16 @@ export function NewTaskModal({
 
             <div>
               <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Cliente</label>
-              <input
-                list="client-options"
+              <select
                 value={client}
                 onChange={(e) => updateClient(e.target.value)}
-                placeholder="Opcional"
-                className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder-ink-faint focus:outline-none focus:border-o2-green transition-colors"
-              />
-              <datalist id="client-options">
-                {clientOptions.map((c) => <option key={c} value={c} />)}
-              </datalist>
+                className="mt-1.5 w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green transition-colors"
+              >
+                <option value="">Nenhum (tarefa interna)</option>
+                {(client && !clientOptions.includes(client) ? [client, ...clientOptions] : clientOptions).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
           </div>
 
