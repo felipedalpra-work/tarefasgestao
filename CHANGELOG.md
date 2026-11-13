@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-13 (Revisão Semanal: aba Reuniões também traz pendentes de outras semanas)
+
+- Achado pelo usuário: a aba Reuniões da Revisão Semanal só mostrava os últimos 7 dias — uma reunião sem Temperatura/Próximos Passos preenchidos saía da tela assim que a semana virava, sem nenhum controle de que ficou sem revisar.
+- `GET /api/weekly-review` passa a buscar também (sem corte de tempo) reuniões mais antigas ainda sem Temperatura nem Próximos Passos preenchidos, marcadas como "fora da janela".
+- A aba Reuniões agora mostra essas pendências numa seção própria "Pendentes de outras semanas", acima da seção da semana atual, com o mesmo card/estilo de sempre.
+
 ## 2026-11-13 (Aba "E-mail" na Revisão Semanal — envia pendências pro cliente de verdade)
 
 - Pedido do usuário: na Revisão Semanal, montar um rascunho de e-mail com as tarefas pendentes de cada cliente pra cobrança, com tarefas pré-selecionadas (dá pra desmarcar), corpo editável, e um botão que manda de verdade.
