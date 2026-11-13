@@ -51,6 +51,7 @@ type ReviewMeeting = {
   registroConferido: boolean;
   pipefyResumo: string | null;
   resumoEditado: string | null;
+  outsideWindow: boolean;
 };
 
 type ReviewClient = {
@@ -673,17 +674,47 @@ export default function WeeklyReviewPage() {
                     <p className="text-ink-mid text-sm">Nenhuma reunião registrada essa semana.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {current.meetings.map((m) => (
-                      <MeetingReviewCard
-                        key={m.id}
-                        event={m}
-                        onFieldChange={(field, value) => updateMeeting(current.name, m.id, field, value)}
-                        onApproveSuggestion={() => approveMeetingSuggestion(current.name, m)}
-                        onDismissSuggestion={() => dismissMeetingSuggestion(current.name, m.id)}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    {/* reuniões de outras semanas sem Temperatura/Próximos Passos preenchidos —
+                        antes ficavam invisíveis assim que saíam da janela de 7 dias; agora
+                        continuam aparecendo aqui (sem corte de tempo) até alguém preencher */}
+                    {current.meetings.some((m) => m.outsideWindow) && (
+                      <div className="mb-5">
+                        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-300 mb-2">
+                          <AlertTriangle size={12} /> Pendentes de outras semanas
+                        </h3>
+                        <div className="space-y-3">
+                          {current.meetings.filter((m) => m.outsideWindow).map((m) => (
+                            <MeetingReviewCard
+                              key={m.id}
+                              event={m}
+                              onFieldChange={(field, value) => updateMeeting(current.name, m.id, field, value)}
+                              onApproveSuggestion={() => approveMeetingSuggestion(current.name, m)}
+                              onDismissSuggestion={() => dismissMeetingSuggestion(current.name, m.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {current.meetings.some((m) => !m.outsideWindow) && (
+                      <div>
+                        {current.meetings.some((m) => m.outsideWindow) && (
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint mb-2">Essa semana</h3>
+                        )}
+                        <div className="space-y-3">
+                          {current.meetings.filter((m) => !m.outsideWindow).map((m) => (
+                            <MeetingReviewCard
+                              key={m.id}
+                              event={m}
+                              onFieldChange={(field, value) => updateMeeting(current.name, m.id, field, value)}
+                              onApproveSuggestion={() => approveMeetingSuggestion(current.name, m)}
+                              onDismissSuggestion={() => dismissMeetingSuggestion(current.name, m.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
             ) : (

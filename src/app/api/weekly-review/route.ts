@@ -35,6 +35,7 @@ type ClientBucket = {
     registroConferido: boolean;
     pipefyResumo: string | null;
     resumoEditado: string | null;
+    outsideWindow: boolean; // pendente de semana anterior — ver query de oldPendingMeetings
   }[];
   suggestions: {
     id: string;
@@ -69,17 +70,29 @@ export async function GET() {
 
   const weekKey = currentWeekKey();
 
-  const [names, notes, meetings, recapSuggestions, externalSuggestions, completedActivity, tasksOpen, users, doneRows] =
+  const MEETING_SELECT = {
+    id: true, title: true, client: true, startAt: true, endAt: true, meetingType: true, temperature: true,
+    nextSteps: true, suggestedTemperature: true, suggestedNextSteps: true, attendanceConfirmed: true,
+    registroConferido: true, resumoEditado: true, pipefyRecordId: true,
+  } as const;
+
+  const [names, notes, meetingsThisWeek, oldPendingMeetings, recapSuggestions, externalSuggestions, completedActivity, tasksOpen, users, doneRows] =
     await Promise.all([
       knownClientNames(db, session.user.squadId),
       db.clientNote.findMany({ select: { client: true, healthStatus: true, oxyStage: true, email: true } }),
       db.calendarEvent.findMany({
         where: { startAt: { gte: windowStart, lte: now } },
-        select: {
-          id: true, title: true, client: true, startAt: true, endAt: true, meetingType: true, temperature: true,
-          nextSteps: true, suggestedTemperature: true, suggestedNextSteps: true, attendanceConfirmed: true,
-          registroConferido: true, resumoEditado: true, pipefyRecordId: true,
-        },
+        select: MEETING_SELECT,
+        orderBy: { startAt: "asc" },
+      }),
+      // Reuniões de semanas anteriores que ninguém preencheu ainda (sem Temperatura NEM
+      // Próximos Passos — mesmo critério de "pendente" já usado em groupByClient/pipefy.ts,
+      // só que aqui pro histórico de CalendarEvent em vez do Pipefy). Pedido do usuário:
+      // antes só mostrava a semana corrente e reunião atrasada ficava invisível pra sempre;
+      // agora ela aparece aqui até alguém preencher, não tem corte de tempo.
+      db.calendarEvent.findMany({
+        where: { startAt: { lt: windowStart }, temperature: null, nextSteps: null },
+        select: MEETING_SELECT,
         orderBy: { startAt: "asc" },
       }),
       // RecapSuggestion não tem squadId próprio (herda do MeetRecap pai) — sem o filtro
@@ -169,7 +182,7 @@ export async function GET() {
     if (b) { b.health = note.healthStatus; b.oxyStage = note.oxyStage; b.email = note.email; }
   }
 
-  for (const m of meetings) {
+  for (const m of [...oldPendingMeetings, ...meetingsThisWeek]) {
     const b = bucketFor(m.client);
     if (b) {
       b.meetings.push({
@@ -186,6 +199,7 @@ export async function GET() {
         registroConferido: m.registroConferido,
         resumoEditado: m.resumoEditado,
         pipefyResumo: m.pipefyRecordId ? resumoByRecordId.get(m.pipefyRecordId) ?? null : null,
+        outsideWindow: m.startAt < windowStart,
       });
     }
   }
