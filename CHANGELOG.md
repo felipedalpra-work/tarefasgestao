@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Resumo da reunião passa a sincronizar nos dois sentidos com o Pipefy)
+
+- Achado pelo usuário: o campo "Resumo (Pipefy)" na aba Temperatura (Saúde da Carteira) só lia do Pipefy — editar ali nunca escrevia de volta, e depois de uma edição local o campo ficava travado nesse valor, ignorando qualquer atualização futura feita direto no Pipefy.
+- `pushFieldsToPipefy`/`pushCalendarEventToPipefy` ganham o campo `resumo` — editar na plataforma agora escreve de volta no Pipefy, mesmo padrão já usado por Temperatura e Próximos Passos.
+- `syncPipefyMeetingsForSquad` (cron diário) passa a trazer o Resumo do Pipefy pra `CalendarEvent.resumoEditado` também — antes só trazia Temperatura/Próximos Passos; Pipefy sempre vence quando os dois têm valor, mesma regra já usada pros outros dois campos.
+
 ## 2026-11-13 (E-mail de pendências: aceita vários e-mails por cliente e copia o squad)
 
 - Pedido do usuário: poder cadastrar mais de um e-mail por cliente e enviar pra todos de uma vez, e sempre deixar o squad inteiro em cópia.
