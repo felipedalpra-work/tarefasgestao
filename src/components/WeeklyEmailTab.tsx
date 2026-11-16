@@ -1,20 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { Mail, RefreshCw, Send, AlertTriangle, Link as LinkIcon, Eye, EyeOff, Settings2 } from "lucide-react";
 import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { parseEmailList } from "@/lib/utils";
 import { buildWeeklyClientEmailHtml } from "@/lib/email-templates";
+import { taskResponsibles } from "@/lib/task-assignees";
 import type { TaskListItem } from "@/types/task";
 
 type EmailTask = TaskListItem & { isNew: boolean };
 
+// Mesmo resolvedor de responsável já usado no resto da plataforma (Kanban, Tarefas, Semana)
+// — cobre tarefa em conjunto, responsável = cliente, e colaborador externo, não só
+// assigneeId direto.
+function responsibleLabel(t: EmailTask): string | null {
+  const names = taskResponsibles(t)
+    .map((r) => r.name)
+    .filter((n): n is string => !!n);
+  return names.length > 0 ? names.join(", ") : null;
+}
+
 function taskLine(t: EmailTask): string {
-  const due = t.dueDate ? format(new Date(t.dueDate), "dd/MM/yyyy", { locale: ptBR }) : null;
-  return `• ${t.title}${due ? ` — prazo: ${due}` : ""}`;
+  const responsavel = responsibleLabel(t);
+  return `• ${t.title}${responsavel ? ` — responsável: ${responsavel}` : ""}`;
 }
 
 function renderBody(template: string, tasks: EmailTask[]): string {
@@ -154,7 +163,7 @@ export function WeeklyEmailTab({
           </label>
           <div className="space-y-1.5 max-h-64 overflow-y-auto">
             {tasksOpen.map((t) => {
-              const due = t.dueDate ? format(new Date(t.dueDate), "dd/MM/yyyy", { locale: ptBR }) : null;
+              const responsavel = responsibleLabel(t);
               return (
                 <label
                   key={t.id}
@@ -167,7 +176,7 @@ export function WeeklyEmailTab({
                     className="accent-o2-green"
                   />
                   <span className="text-sm text-ink flex-1">{t.title}</span>
-                  {due && <span className="text-xs text-ink-faint shrink-0">{due}</span>}
+                  {responsavel && <span className="text-xs text-ink-faint shrink-0">{responsavel}</span>}
                 </label>
               );
             })}
