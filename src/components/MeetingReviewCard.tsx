@@ -20,7 +20,9 @@ export type MeetingReviewEvent = {
   attendanceConfirmed: boolean;
   registroConferido: boolean;
   pipefyResumo: string | null; // "Resumo" da reunião no Pipefy, ao vivo — null quando não casou com nenhum registro
-  resumoEditado: string | null; // cópia editável na plataforma — tem prioridade sobre pipefyResumo na exibição, nunca escrita de volta no Pipefy
+  // cópia sincronizada nos dois sentidos com o Pipefy (campo "resumo") — tem prioridade
+  // sobre pipefyResumo na exibição; serve de fallback só antes do primeiro sync diário
+  resumoEditado: string | null;
 };
 
 export type MeetingReviewField = "temperature" | "nextSteps" | "attendanceConfirmed" | "registroConferido" | "resumoEditado";

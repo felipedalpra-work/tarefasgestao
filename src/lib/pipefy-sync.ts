@@ -1,11 +1,8 @@
-// Sincroniza Temperatura/Próximos Passos do Pipefy (Squad Gustavo) pra dentro
+// Sincroniza Temperatura/Próximos Passos/Resumo do Pipefy (Squad Gustavo) pra dentro
 // de CalendarEvent — a página de reuniões do cliente lê/escreve esses mesmos
-// campos manualmente, então sem isso a mesma reunião podia ter temperatura
-// diferente em cada lugar. Pipefy sempre vence quando os dois têm valor nessa
+// campos manualmente, então sem isso a mesma reunião podia ter valores
+// diferentes em cada lugar. Pipefy sempre vence quando os dois têm valor nessa
 // direção (decisão do usuário — é o processo oficial do squad pra isso).
-// Observações/Resumo do Pipefy não entram aqui, de propósito — não existe
-// campo equivalente em CalendarEvent (só `nextSteps`), continuam só no painel
-// de leitura (/saude-carteira, PipefyClientBlock).
 //
 // Também tem o caminho contrário (pushCalendarEventToPipefy, chamado por
 // PATCH /api/calendar/[id]): quando alguém preenche pela plataforma em vez de
@@ -40,16 +37,17 @@ const REVERSE_TEMP_MAP: Record<string, Temperatura> = {
 export async function pushCalendarEventToPipefy(
   squadId: string,
   pipefyRecordId: string | null,
-  fields: { temperature?: string | null; nextSteps?: string | null }
+  fields: { temperature?: string | null; nextSteps?: string | null; resumo?: string | null }
 ): Promise<void> {
   if (!pipefyRecordId) return;
 
-  const push: { temperatura?: string; proximosPassos?: string } = {};
+  const push: { temperatura?: string; proximosPassos?: string; resumo?: string } = {};
   if (fields.temperature) {
     const mapped = REVERSE_TEMP_MAP[fields.temperature];
     if (mapped) push.temperatura = mapped;
   }
   if (fields.nextSteps) push.proximosPassos = fields.nextSteps;
+  if (fields.resumo) push.resumo = fields.resumo;
   if (Object.keys(push).length === 0) return;
 
   try {
@@ -87,15 +85,16 @@ export async function syncPipefyMeetingsForSquad(squadId: string): Promise<{ mat
       const range = parsePipefyDate(meeting.data);
       if (!range) continue;
 
-      // pipefyRecordId sempre grava (mesmo sem temperatura/próximos passos ainda) — é o
-      // que permite escrever de volta assim que alguém editar pela plataforma, mesmo que
-      // o Pipefy ainda não tenha nada preenchido pra esse encontro
-      const data: { temperature?: string; nextSteps?: string; pipefyRecordId: string } = {
+      // pipefyRecordId sempre grava (mesmo sem temperatura/próximos passos/resumo ainda) —
+      // é o que permite escrever de volta assim que alguém editar pela plataforma, mesmo
+      // que o Pipefy ainda não tenha nada preenchido pra esse encontro
+      const data: { temperature?: string; nextSteps?: string; resumoEditado?: string; pipefyRecordId: string } = {
         pipefyRecordId: meeting.id,
       };
       const mappedTemp = TEMP_MAP[meeting.temperatura];
       if (mappedTemp) data.temperature = mappedTemp;
       if (meeting.proximosPassos.trim()) data.nextSteps = meeting.proximosPassos.trim();
+      if (meeting.resumo.trim()) data.resumoEditado = meeting.resumo.trim();
 
       matched++;
       const { count } = await db.calendarEvent.updateMany({

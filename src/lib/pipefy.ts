@@ -43,12 +43,15 @@ function gqlString(value: string): string {
 // chama decide se trata como best-effort (ver src/lib/pipefy-sync.ts).
 export async function pushFieldsToPipefy(
   tableRecordId: string,
-  fields: { temperatura?: string; proximosPassos?: string }
+  fields: { temperatura?: string; proximosPassos?: string; resumo?: string }
 ): Promise<void> {
   const values: string[] = [];
   if (fields.temperatura) values.push(`{ fieldId: "temperatura", value: ${gqlString(fields.temperatura)} }`);
   if (fields.proximosPassos !== undefined) {
     values.push(`{ fieldId: "pr_ximos_passos", value: ${gqlString(fields.proximosPassos)} }`);
+  }
+  if (fields.resumo !== undefined) {
+    values.push(`{ fieldId: "resumo", value: ${gqlString(fields.resumo)} }`);
   }
   if (values.length === 0) return;
 

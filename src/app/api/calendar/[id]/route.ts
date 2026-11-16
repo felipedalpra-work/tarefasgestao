@@ -34,8 +34,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data.meetingType = body.meetingType;
   }
   if (body.nextSteps !== undefined) data.nextSteps = body.nextSteps || null;
-  // cópia editável do Resumo do Pipefy — nunca entra no gate de push abaixo, de propósito
-  // (pedido do usuário: editável só na plataforma, nunca escrito de volta no Pipefy)
+  // cópia do Resumo do Pipefy, editável nos dois sentidos — editar aqui escreve de volta
+  // no Pipefy (ver push abaixo) e o sync diário Pipefy→plataforma sobrescreve daqui a
+  // pouco se o Pipefy também mudar (Pipefy sempre vence nessa direção, mesma regra de
+  // Temperatura/Próximos Passos — ver pipefy-sync.ts)
   if (body.resumoEditado !== undefined) data.resumoEditado = body.resumoEditado || null;
   if (body.attendanceConfirmed !== undefined) data.attendanceConfirmed = !!body.attendanceConfirmed;
   if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
@@ -57,10 +59,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const event = await db.calendarEvent.update({ where: { id }, data });
 
   // best-effort, nunca derruba essa resposta — ver pushCalendarEventToPipefy
-  if (body.temperature !== undefined || body.nextSteps !== undefined) {
+  if (body.temperature !== undefined || body.nextSteps !== undefined || body.resumoEditado !== undefined) {
     await pushCalendarEventToPipefy(session.user.squadId, event.pipefyRecordId, {
       temperature: event.temperature,
       nextSteps: event.nextSteps,
+      resumo: event.resumoEditado,
     });
   }
 
