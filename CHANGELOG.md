@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Formulário Inicial: captura uma vez e para de consultar o Pipefy ao vivo)
+
+- Achado pelo usuário: a tela do cliente continuava lenta mesmo com o fix de paralelização — o Formulário Inicial (card de venda ganho no Pipefy) nunca muda depois que o negócio fecha, então buscar de novo toda vez era desperdício puro, competindo pela mesma API junto com reunião/jornada de onboarding.
+- Novo campo `ClientNote.formularioInicial` (JSON) — capturado uma vez por dia pelo sync (`syncFormularioInicialForSquad`, novo em `pipefy-sync.ts`), a tela do cliente só lê daqui pra frente, zero chamada ao Pipefy nesse ponto.
+
 ## 2026-11-16 (Corrige lentidão/travamento ao abrir a tela do cliente)
 
 - Achado pelo usuário: a tela do cliente demorava muito pra carregar e às vezes travava carregando pra sempre.
