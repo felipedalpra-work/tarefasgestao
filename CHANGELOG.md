@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Corrige duplicidade de cliente na Jornada e marco concluído sem data)
+
+- Achado pelo usuário: "Blomix" aparecia como duas linhas na Jornada de Onboarding (Saúde da Carteira) — "Blomix" e "Blomix Serviços de Engenharia". Investigado: `knownClientNames()` juntava o nome oficial do `ClientNote` com toda variante solta vinda de Calendar/Recap/Task sem checar se já era a mesma empresa — um evento do Google Calendar com `client: "Blomix"` virava uma segunda entrada. Corrigido pra só virar linha nova quando a string não é variante de um nome já conhecido (mesmo critério de fuzzy-match já usado no resto da integração com Pipefy). Afeta toda tela que usa essa lista: Jornada de Onboarding, Revisão Semanal, seleção de cliente em Nova Tarefa/e-mail da Revisão Semanal.
+- Também investigado o pedido de "muitas empresas sem data no marco": conferido direto na API do Pipefy — na maioria dos casos (Captable, Filmstar, Grupo Bairral, Sciensa, Zanotti...) o card do marco realmente existe e está na fase concluída, mas o campo de data em si nunca foi preenchido no Pipefy. Antes isso aparecia como um "concluído" mudo, sem nenhuma explicação; agora usa o mesmo rótulo "Concluído (data não registrada)" já usado quando nem card existe — deixa claro que é uma lacuna de dado no Pipefy, não um bug de exibição.
+
 ## 2026-11-16 (Marcar reunião como "não ocorreu" — some do backlog de pendentes)
 
 - Achado pelo usuário: a reunião do Zanotti de 22/10, marcada "Não ocorreu" no Pipefy (sem Temperatura/Próximos Passos — nunca teria mesmo, já que não aconteceu), continuava contando como "pendente" tanto no contador da Saúde da Carteira quanto na nova lista de "Pendentes de outras semanas" da Revisão Semanal.
