@@ -260,6 +260,11 @@ model ClientNote {
   contacts                  String?
   email                     String? // e-mail(s) do cliente (1+, separados por vírgula/quebra de linha —
   // ver parseEmailList em utils.ts), usado no e-mail de pendências da Revisão Semanal
+  formularioInicial         Json? // snapshot do card de venda ganho no Pipefy (pipe "1.1 Funil de
+  // Vendas - CFOaaS") — formato FormularioInicialPipefy (lib/pipefy.ts). Capturado uma vez pelo
+  // sync diário (pipefy-sync.ts) e só lido daqui pra frente — não existe mais busca ao vivo no
+  // Pipefy no carregamento da tela do cliente; achado pelo usuário: esse dado nunca muda depois
+  // que o negócio fecha, então reconsultar a cada entrada só deixava a tela mais lenta à toa.
   status                    String    @default("ativo") // "ativo" | "pausado" | "encerrado"
   oxyStage                  String    @default("nao_iniciado") // "nao_iniciado" | "em_validacao" | "em_implantacao" | "implantacao_interrompida" | "ativo"
   importType                String? // "manual" | "automatica" | "automatica_manual"

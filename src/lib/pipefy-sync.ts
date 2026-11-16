@@ -12,7 +12,14 @@
 import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
 import { knownClientNames } from "./client-resolve";
-import { getGustavoMeetings, meetingsForClient, pushFieldsToPipefy, type Temperatura } from "./pipefy";
+import {
+  getGustavoMeetings,
+  meetingsForClient,
+  pushFieldsToPipefy,
+  getFormularioInicialCardsPipefy,
+  formularioInicialForClient,
+  type Temperatura,
+} from "./pipefy";
 import { log } from "./logger";
 
 const TEMP_MAP: Partial<Record<Temperatura, string>> = {
@@ -114,6 +121,28 @@ export async function syncPipefyMeetingsForSquad(squadId: string): Promise<{ mat
   return { matched, updated };
 }
 
+// Captura uma vez o "Formulário Inicial" (card de venda ganho, pipe "1.1 Funil de Vendas -
+// CFOaaS") e grava em ClientNote.formularioInicial — esse dado nunca muda depois que o
+// negócio fecha, então a tela do cliente só LÊ daqui a partir de agora, sem consultar o
+// Pipefy ao vivo a cada entrada (achado pelo usuário: isso deixava a tela lenta). Sobrescreve
+// todo dia (idempotente, barato — ~1 fetch do Pipefy + N updates baratos) em vez de só
+// preencher quando vazio, pra se autocorrigir sozinho se o backfill inicial errou algo.
+export async function syncFormularioInicialForSquad(squadId: string): Promise<{ matched: number }> {
+  const db = forSquad(squadId);
+  const cards = await getFormularioInicialCardsPipefy();
+  const names = [...(await knownClientNames(db, squadId))];
+
+  let matched = 0;
+  for (const name of names) {
+    const formularioInicial = formularioInicialForClient(cards, name);
+    if (!formularioInicial) continue;
+    matched++;
+    await db.clientNote.updateMany({ where: { client: name }, data: { formularioInicial } });
+  }
+
+  return { matched };
+}
+
 // Roda 1x/dia via cron (ver /api/cron/[job] e .github/workflows/cron.yml, job
 // "pipefy-sync") — um squad falhando (token ruim, Pipefy fora do ar) não trava
 // os outros, só loga; diferente do backup diário, não alerta os owners por
@@ -132,6 +161,17 @@ export async function syncAllSquadsPipefy(): Promise<void> {
       }
     } catch (err) {
       await log("pipefy-sync", `Erro ao sincronizar Pipefy do squad ${squad.name}`, {
+        level: "error",
+        detail: String(err),
+        squadId: squad.id,
+      });
+    }
+
+    // independente do sync de reuniões acima — um falhando não deve impedir o outro
+    try {
+      await syncFormularioInicialForSquad(squad.id);
+    } catch (err) {
+      await log("pipefy-sync", `Erro ao sincronizar Formulário Inicial do squad ${squad.name}`, {
         level: "error",
         detail: String(err),
         squadId: squad.id,
