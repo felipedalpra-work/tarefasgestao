@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (E-mail de pendências: mostra responsável em vez de prazo por tarefa)
+
+- Pedido do usuário: trocar o prazo exibido por tarefa (no checklist e no texto do corpo) pelo responsável da tarefa.
+- Reaproveita `taskResponsibles()` (`src/lib/task-assignees.ts`), o mesmo resolvedor já usado no Kanban/Tarefas/Semana — cobre tarefa em conjunto, responsável = cliente, e colaborador externo, não só o assignee direto.
+
 ## 2026-11-16 (E-mail de pendências: visual da marca O2, modelo por cliente, preview)
 
 - Pedido do usuário: o e-mail de pendências (Revisão Semanal → E-mail) saía com HTML simples, sem identidade visual, e só tinha um modelo único pro squad inteiro.
