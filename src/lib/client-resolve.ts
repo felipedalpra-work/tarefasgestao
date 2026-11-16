@@ -2,24 +2,6 @@ import type { SquadPrisma } from "./tenant-prisma";
 import { getIgnoredClients, matchesIgnoredClient } from "./settings";
 import { normalizeText } from "./utils";
 
-// Resolve o nome "oficial" do cliente (como está gravado no banco) a partir de texto
-// livre — tolera acento/caixa diferente (Postgres `contains` sozinho não ignora acento,
-// então "cafe" não bate com "Café" de outro jeito), comparando contra a carteira em
-// ClientNote. Retorna null se não achar nenhum parecido.
-//
-// Extraído de src/lib/assistant-tools.ts porque passou a ser usado também pelas
-// ferramentas de criar/editar cliente e tratativa — um só lugar evita a mesma regra de
-// match divergir entre elas.
-export async function resolveClientName(db: SquadPrisma, input: string): Promise<string | null> {
-  const target = normalizeText(input);
-  if (!target) return null;
-  const notes = await db.clientNote.findMany({ select: { client: true } });
-  const exact = notes.find((c) => normalizeText(c.client) === target);
-  if (exact) return exact.client;
-  const partial = notes.find((c) => normalizeText(c.client).includes(target) || target.includes(normalizeText(c.client)));
-  return partial?.client ?? null;
-}
-
 // Mesmo espírito do matchesClient em src/lib/pipefy.ts — tolera acento/caixa e considera
 // igual quando um nome é "variante curta" do outro (ex.: "Blomix" extraído de um título de
 // evento do Google Calendar vs. "Blomix Serviços de Engenharia" cadastrado em ClientNote).
@@ -31,6 +13,32 @@ function namesLikelySame(a: string, b: string): boolean {
   const shorter = na.length <= nb.length ? na : nb;
   const longer = na.length <= nb.length ? nb : na;
   return shorter.length >= 3 && longer.includes(shorter);
+}
+
+// Núcleo do match (sem ir ao banco) — recebe a lista de ClientNote já carregada, pra quem
+// precisa resolver vários nomes em sequência (ex.: calendar-sync.ts, uma reunião por vez)
+// sem repetir a mesma query a cada chamada.
+export function findMatchingClient(notes: { client: string }[], input: string): string | null {
+  const target = normalizeText(input);
+  if (!target) return null;
+  const exact = notes.find((c) => normalizeText(c.client) === target);
+  if (exact) return exact.client;
+  const partial = notes.find((c) => namesLikelySame(c.client, input));
+  return partial?.client ?? null;
+}
+
+// Resolve o nome "oficial" do cliente (como está gravado no banco) a partir de texto
+// livre — tolera acento/caixa diferente (Postgres `contains` sozinho não ignora acento,
+// então "cafe" não bate com "Café" de outro jeito), comparando contra a carteira em
+// ClientNote. Retorna null se não achar nenhum parecido.
+//
+// Extraído de src/lib/assistant-tools.ts porque passou a ser usado também pelas
+// ferramentas de criar/editar cliente e tratativa — um só lugar evita a mesma regra de
+// match divergir entre elas.
+export async function resolveClientName(db: SquadPrisma, input: string): Promise<string | null> {
+  if (!normalizeText(input)) return null;
+  const notes = await db.clientNote.findMany({ select: { client: true } });
+  return findMatchingClient(notes, input);
 }
 
 // Todo nome de cliente conhecido pelo squad — ClientNote é a fonte de verdade de quem

@@ -3,6 +3,7 @@ import { forSquad } from "./tenant-prisma";
 import { google } from "googleapis";
 import { log } from "./logger";
 import { getIgnoredClients, matchesIgnoredClient } from "./settings";
+import { findMatchingClient } from "./client-resolve";
 
 // extrai o nome do cliente do título: "O2 Inc. & Zé do Flor | Semanal" → "Zé do Flor"
 // exige o "|" — sem ele não dá pra distinguir reunião de cliente de reunião pessoal
@@ -49,6 +50,7 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
   // do laço abaixo, porque a busca no Google cobre só os próximos 30 dias — evento passado
   // já espelhado nunca mais seria revisitado e ficaria pra sempre segurando o nome na carteira.
   const ignoredClients = await getIgnoredClients(user.squadId);
+  const clientNotes = await db.clientNote.findMany({ select: { client: true } });
   if (ignoredClients.length > 0) {
     const mirrored = await db.calendarEvent.findMany({ select: { client: true }, distinct: ["client"] });
     const toRemove = mirrored.map((e) => e.client).filter((c) => matchesIgnoredClient(ignoredClients, c));
@@ -91,9 +93,14 @@ export async function syncCalendarForUser(userId: string, emailToUserId?: Map<st
 
     for (const event of events) {
       const title = event.summary || "";
-      const client = extractClientFromTitle(title);
-      if (!client) continue;
-      if (matchesIgnoredClient(ignoredClients, client)) continue;
+      const rawClient = extractClientFromTitle(title);
+      if (!rawClient) continue;
+      if (matchesIgnoredClient(ignoredClients, rawClient)) continue;
+      // casa com o nome oficial já cadastrado (ClientNote) sempre que possível — sem isso,
+      // um título digitado como "O2 Inc & Blomix | ..." gravava "Blomix" cru, uma string
+      // diferente de "Blomix Serviços de Engenharia" (achado real: cliente duplicado na
+      // Jornada de Onboarding). Empresa ainda não cadastrada mantém o nome cru do título.
+      const client = findMatchingClient(clientNotes, rawClient) ?? rawClient;
 
       const startAt = new Date(event.start?.dateTime || event.start?.date || "");
       const endAt = new Date(event.end?.dateTime || event.end?.date || "");
