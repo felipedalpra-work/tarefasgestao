@@ -12,13 +12,15 @@ import type { TaskListItem } from "@/types/task";
 type EmailTask = TaskListItem & { isNew: boolean };
 
 // Mesmo resolvedor de responsável já usado no resto da plataforma (Kanban, Tarefas, Semana)
-// — cobre tarefa em conjunto, responsável = cliente, e colaborador externo, não só
-// assigneeId direto.
+// — cobre tarefa em conjunto e responsável = cliente. Responsável que é alguém do squad
+// (não é o cliente) vira só "O2" — e-mail vai pro cliente, não faz sentido expor nome de
+// quem da O2 ficou com a tarefa.
 function responsibleLabel(t: EmailTask): string | null {
-  const names = taskResponsibles(t)
-    .map((r) => r.name)
+  const labels = taskResponsibles(t)
+    .map((r) => (r.isClient ? r.name : "O2"))
     .filter((n): n is string => !!n);
-  return names.length > 0 ? names.join(", ") : null;
+  const unique = [...new Set(labels)];
+  return unique.length > 0 ? unique.join(", ") : null;
 }
 
 function taskLine(t: EmailTask): string {
