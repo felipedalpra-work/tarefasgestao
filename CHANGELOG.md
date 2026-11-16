@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Acessos de cliente ganham campo de link direto pro ERP)
+
+- Pedido do usuário: adicionar link de acesso direto ao ERP em cada acesso cadastrado na aba Oxy do cliente.
+- Novo campo `ClientLogin.accessUrl` — campo de URL + botão de abrir direto, ao lado do login/senha já existentes.
+- Auditados os 18 clientes cadastrados: nenhum acesso tem o link preenchido ainda (campo novo); 9 clientes não têm nenhum acesso cadastrado (Blomix Serviços de Engenharia, Bracci Metais, Captable, Dom Duan, Fast, Grupo Lidon, Rio-Piranema, Sciensa, Zanotti).
+
 ## 2026-11-16 (Calendar-sync resolve nome do cliente contra o cadastro oficial)
 
 - Causa raiz real do "Blomix" duplicado (além do dedup já feito antes): `calendar-sync.ts` extraía o nome direto do título da reunião no Google Calendar ("O2 Inc & Blomix | ...") e gravava esse texto cru em `CalendarEvent.client`, sem comparar com o nome oficial já cadastrado em `ClientNote` ("Blomix Serviços de Engenharia") — podendo inclusive sumir a reunião da própria tela do cliente, já que ela casa por igualdade exata de string.
