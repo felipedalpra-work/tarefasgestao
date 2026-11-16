@@ -31,6 +31,7 @@ export type MatchedCalendarEvent = {
   attendanceConfirmed: boolean;
   registroConferido: boolean;
   resumoEditado: string | null;
+  meetingOccurred: boolean | null;
 };
 
 export default async function SaudeCarteiraPage() {
@@ -56,7 +57,7 @@ export default async function SaudeCarteiraPage() {
       select: {
         id: true, startAt: true, endAt: true, meetingType: true, temperature: true, nextSteps: true,
         suggestedTemperature: true, suggestedNextSteps: true, attendanceConfirmed: true,
-        registroConferido: true, resumoEditado: true, pipefyRecordId: true,
+        registroConferido: true, resumoEditado: true, meetingOccurred: true, pipefyRecordId: true,
       },
     });
     for (const e of matchedEvents) {
@@ -72,6 +73,7 @@ export default async function SaudeCarteiraPage() {
         attendanceConfirmed: e.attendanceConfirmed,
         registroConferido: e.registroConferido,
         resumoEditado: e.resumoEditado,
+        meetingOccurred: e.meetingOccurred,
       };
     }
 

@@ -43,7 +43,7 @@ function gqlString(value: string): string {
 // chama decide se trata como best-effort (ver src/lib/pipefy-sync.ts).
 export async function pushFieldsToPipefy(
   tableRecordId: string,
-  fields: { temperatura?: string; proximosPassos?: string; resumo?: string }
+  fields: { temperatura?: string; proximosPassos?: string; resumo?: string; statusReuniao?: string }
 ): Promise<void> {
   const values: string[] = [];
   if (fields.temperatura) values.push(`{ fieldId: "temperatura", value: ${gqlString(fields.temperatura)} }`);
@@ -52,6 +52,10 @@ export async function pushFieldsToPipefy(
   }
   if (fields.resumo !== undefined) {
     values.push(`{ fieldId: "resumo", value: ${gqlString(fields.resumo)} }`);
+  }
+  // "Realizada" | "Não ocorreu" — mesmas 2 opções do campo "Status da Reunião" no Pipefy
+  if (fields.statusReuniao) {
+    values.push(`{ fieldId: "status_da_reuni_o", value: ${gqlString(fields.statusReuniao)} }`);
   }
   if (values.length === 0) return;
 
@@ -157,6 +161,7 @@ function buildMeeting(id: string, f: Record<string, string>, createdAt: string):
   const assunto = f["assunto"] || "";
   const temperatura = (f["temperatura"] || "").trim() as Temperatura;
   const observacoes = (f["observa_es_cfo"] || "").trim();
+  const status = f["status_da_reuni_o"] || "";
   return {
     id,
     assunto,
@@ -164,7 +169,7 @@ function buildMeeting(id: string, f: Record<string, string>, createdAt: string):
     data: f["data"] || "",
     tipo: f["tipo"] || "",
     clientePresente: f["cliente_presente"] || "",
-    status: f["status_da_reuni_o"] || "",
+    status,
     temperatura,
     observacoes,
     resumo: f["resumo"] || "",
@@ -172,7 +177,11 @@ function buildMeeting(id: string, f: Record<string, string>, createdAt: string):
     linkTranscricao: f["link_da_transcri_o"] || "",
     linkGravacao: f["link_da_grava_o"] || "",
     createdAt,
-    preenchida: Boolean(temperatura) || Boolean(observacoes),
+    // "Não ocorreu" também conta como preenchida/resolvida — não tem temperatura/observação
+    // pra preencher numa reunião que nunca aconteceu, e sem isso ela ficava pra sempre
+    // contada como "pendente" nos contadores de /saude-carteira (achado real: reunião do
+    // Zanotti em 22/10 marcada "Não ocorreu" no Pipefy continuava pendente na plataforma).
+    preenchida: Boolean(temperatura) || Boolean(observacoes) || status.trim() === "Não ocorreu",
   };
 }
 

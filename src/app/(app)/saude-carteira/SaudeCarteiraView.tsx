@@ -376,6 +376,7 @@ function MeetingCard({ m, matched, onFieldChange, onApproveSuggestion, onDismiss
             registroConferido: matched.registroConferido,
             pipefyResumo: m.resumo || null,
             resumoEditado: matched.resumoEditado,
+            meetingOccurred: matched.meetingOccurred,
           }}
           onFieldChange={(field, value) => onFieldChange(m.id, field, value)}
           onApproveSuggestion={() => onApproveSuggestion(m.id)}

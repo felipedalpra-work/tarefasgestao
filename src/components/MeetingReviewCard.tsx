@@ -23,9 +23,12 @@ export type MeetingReviewEvent = {
   // cópia sincronizada nos dois sentidos com o Pipefy (campo "resumo") — tem prioridade
   // sobre pipefyResumo na exibição; serve de fallback só antes do primeiro sync diário
   resumoEditado: string | null;
+  // null = desconhecido/não sincronizado; true = aconteceu; false = não ocorreu — Pipefy
+  // ("Status da Reunião") ou marcado manualmente aqui, sincronizado nos dois sentidos
+  meetingOccurred: boolean | null;
 };
 
-export type MeetingReviewField = "temperature" | "nextSteps" | "attendanceConfirmed" | "registroConferido" | "resumoEditado";
+export type MeetingReviewField = "temperature" | "nextSteps" | "attendanceConfirmed" | "registroConferido" | "resumoEditado" | "meetingOccurred";
 
 const MEETING_TYPE_INFO: Record<string, { label: string; className: string }> = {
   semanal: { label: "Semanal", className: "bg-surface-3 text-ink-soft" },
@@ -83,12 +86,26 @@ export function MeetingReviewCard({
             {start.toLocaleDateString("pt-BR", { weekday: "long" })}
           </p>
         </div>
-        <span className={cn("text-xs px-2 py-1 rounded-full shrink-0", isPast ? "bg-surface-3 text-ink-faint" : "bg-o2-green/10 text-o2-green")}>
-          {isPast ? "Realizada" : "Agendada"}
+        <span
+          className={cn(
+            "text-xs px-2 py-1 rounded-full shrink-0",
+            isPast && e.meetingOccurred === false ? "bg-amber-400/10 text-amber-300" : isPast ? "bg-surface-3 text-ink-faint" : "bg-o2-green/10 text-o2-green"
+          )}
+        >
+          {isPast ? (e.meetingOccurred === false ? "⚠️ Não ocorreu" : "Realizada") : "Agendada"}
         </span>
       </div>
       {isPast && (
         <div className="mt-3 pt-3 border-t border-surface-3 space-y-2.5">
+          <label className="flex items-center gap-1.5 text-xs text-ink-dim cursor-pointer">
+            <input
+              type="checkbox"
+              checked={e.meetingOccurred === false}
+              onChange={(ev) => onFieldChange("meetingOccurred", !ev.target.checked)}
+              className="accent-amber-400"
+            />
+            Essa reunião não ocorreu
+          </label>
           {e.suggestedTemperature && (
             <div className="bg-o2-green/5 border border-o2-green/20 rounded-lg px-3 py-2.5 space-y-1.5">
               <p className="text-xs text-ink-dim">

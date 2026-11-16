@@ -37,17 +37,20 @@ const REVERSE_TEMP_MAP: Record<string, Temperatura> = {
 export async function pushCalendarEventToPipefy(
   squadId: string,
   pipefyRecordId: string | null,
-  fields: { temperature?: string | null; nextSteps?: string | null; resumo?: string | null }
+  fields: { temperature?: string | null; nextSteps?: string | null; resumo?: string | null; meetingOccurred?: boolean | null }
 ): Promise<void> {
   if (!pipefyRecordId) return;
 
-  const push: { temperatura?: string; proximosPassos?: string; resumo?: string } = {};
+  const push: { temperatura?: string; proximosPassos?: string; resumo?: string; statusReuniao?: string } = {};
   if (fields.temperature) {
     const mapped = REVERSE_TEMP_MAP[fields.temperature];
     if (mapped) push.temperatura = mapped;
   }
   if (fields.nextSteps) push.proximosPassos = fields.nextSteps;
   if (fields.resumo) push.resumo = fields.resumo;
+  if (fields.meetingOccurred !== undefined && fields.meetingOccurred !== null) {
+    push.statusReuniao = fields.meetingOccurred ? "Realizada" : "Não ocorreu";
+  }
   if (Object.keys(push).length === 0) return;
 
   try {
@@ -88,13 +91,16 @@ export async function syncPipefyMeetingsForSquad(squadId: string): Promise<{ mat
       // pipefyRecordId sempre grava (mesmo sem temperatura/próximos passos/resumo ainda) —
       // é o que permite escrever de volta assim que alguém editar pela plataforma, mesmo
       // que o Pipefy ainda não tenha nada preenchido pra esse encontro
-      const data: { temperature?: string; nextSteps?: string; resumoEditado?: string; pipefyRecordId: string } = {
-        pipefyRecordId: meeting.id,
-      };
+      const data: {
+        temperature?: string; nextSteps?: string; resumoEditado?: string; meetingOccurred?: boolean; pipefyRecordId: string;
+      } = { pipefyRecordId: meeting.id };
       const mappedTemp = TEMP_MAP[meeting.temperatura];
       if (mappedTemp) data.temperature = mappedTemp;
       if (meeting.proximosPassos.trim()) data.nextSteps = meeting.proximosPassos.trim();
       if (meeting.resumo.trim()) data.resumoEditado = meeting.resumo.trim();
+      const status = meeting.status.trim();
+      if (status === "Realizada") data.meetingOccurred = true;
+      else if (status === "Não ocorreu") data.meetingOccurred = false;
 
       matched++;
       const { count } = await db.calendarEvent.updateMany({

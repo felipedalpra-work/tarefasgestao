@@ -51,6 +51,7 @@ type ReviewMeeting = {
   registroConferido: boolean;
   pipefyResumo: string | null;
   resumoEditado: string | null;
+  meetingOccurred: boolean | null;
   outsideWindow: boolean;
 };
 

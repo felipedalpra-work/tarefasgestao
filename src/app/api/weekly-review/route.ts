@@ -35,6 +35,7 @@ type ClientBucket = {
     registroConferido: boolean;
     pipefyResumo: string | null;
     resumoEditado: string | null;
+    meetingOccurred: boolean | null;
     outsideWindow: boolean; // pendente de semana anterior — ver query de oldPendingMeetings
   }[];
   suggestions: {
@@ -73,7 +74,7 @@ export async function GET() {
   const MEETING_SELECT = {
     id: true, title: true, client: true, startAt: true, endAt: true, meetingType: true, temperature: true,
     nextSteps: true, suggestedTemperature: true, suggestedNextSteps: true, attendanceConfirmed: true,
-    registroConferido: true, resumoEditado: true, pipefyRecordId: true,
+    registroConferido: true, resumoEditado: true, meetingOccurred: true, pipefyRecordId: true,
   } as const;
 
   const [names, notes, meetingsThisWeek, oldPendingMeetings, recapSuggestions, externalSuggestions, completedActivity, tasksOpen, users, doneRows] =
@@ -89,9 +90,10 @@ export async function GET() {
       // Próximos Passos — mesmo critério de "pendente" já usado em groupByClient/pipefy.ts,
       // só que aqui pro histórico de CalendarEvent em vez do Pipefy). Pedido do usuário:
       // antes só mostrava a semana corrente e reunião atrasada ficava invisível pra sempre;
-      // agora ela aparece aqui até alguém preencher, não tem corte de tempo.
+      // agora ela aparece aqui até alguém preencher, não tem corte de tempo. Exclui quem já
+      // foi marcado como "não ocorreu" — não tem o que revisar numa reunião que não aconteceu.
       db.calendarEvent.findMany({
-        where: { startAt: { lt: windowStart }, temperature: null, nextSteps: null },
+        where: { startAt: { lt: windowStart }, temperature: null, nextSteps: null, meetingOccurred: { not: false } },
         select: MEETING_SELECT,
         orderBy: { startAt: "asc" },
       }),
@@ -199,6 +201,7 @@ export async function GET() {
         registroConferido: m.registroConferido,
         resumoEditado: m.resumoEditado,
         pipefyResumo: m.pipefyRecordId ? resumoByRecordId.get(m.pipefyRecordId) ?? null : null,
+        meetingOccurred: m.meetingOccurred,
         outsideWindow: m.startAt < windowStart,
       });
     }

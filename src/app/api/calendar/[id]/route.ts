@@ -41,6 +41,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (body.resumoEditado !== undefined) data.resumoEditado = body.resumoEditado || null;
   if (body.attendanceConfirmed !== undefined) data.attendanceConfirmed = !!body.attendanceConfirmed;
   if (body.registroConferido !== undefined) data.registroConferido = !!body.registroConferido;
+  // marca manual de reunião que não ocorreu (ou corrige de volta pra "ocorreu") — mesma
+  // regra bidirecional de resumoEditado, pra não ficar pendurada como pendente pra sempre
+  if (body.meetingOccurred !== undefined) data.meetingOccurred = body.meetingOccurred;
 
   // resolveu a sugestão da IA (seja aprovando — manda temperature/nextSteps iguais à
   // sugestão — seja editando manualmente) — limpa o banner. temperatureSuggestedAt fica,
@@ -59,11 +62,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const event = await db.calendarEvent.update({ where: { id }, data });
 
   // best-effort, nunca derruba essa resposta — ver pushCalendarEventToPipefy
-  if (body.temperature !== undefined || body.nextSteps !== undefined || body.resumoEditado !== undefined) {
+  if (body.temperature !== undefined || body.nextSteps !== undefined || body.resumoEditado !== undefined || body.meetingOccurred !== undefined) {
     await pushCalendarEventToPipefy(session.user.squadId, event.pipefyRecordId, {
       temperature: event.temperature,
       nextSteps: event.nextSteps,
       resumo: event.resumoEditado,
+      meetingOccurred: event.meetingOccurred,
     });
   }
 
