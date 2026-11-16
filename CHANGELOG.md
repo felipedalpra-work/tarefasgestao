@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Calendar-sync resolve nome do cliente contra o cadastro oficial)
+
+- Causa raiz real do "Blomix" duplicado (além do dedup já feito antes): `calendar-sync.ts` extraía o nome direto do título da reunião no Google Calendar ("O2 Inc & Blomix | ...") e gravava esse texto cru em `CalendarEvent.client`, sem comparar com o nome oficial já cadastrado em `ClientNote` ("Blomix Serviços de Engenharia") — podendo inclusive sumir a reunião da própria tela do cliente, já que ela casa por igualdade exata de string.
+- Agora o sync resolve o nome contra o cadastro antes de gravar — nome já conhecido sempre vence; empresa ainda não cadastrada mantém o nome cru do título (decisão do usuário — preserva visibilidade de reunião com prospect recente).
+- Rodado backfill único nos registros já existentes no banco: 5 reuniões do "Blomix" cru corrigidas pro nome oficial.
+- Verificado também se "Clientes ignorados" (Configurações) ainda tem motivo de existir, já que o cadastro de cliente novo é só via Pipefy hoje — continua necessário: é o que impede um cliente excluído de reaparecer quando o Google Calendar ainda tem reunião apontando pro nome dele. Não foi removido.
+
 ## 2026-11-16 (Corrige duplicidade de cliente na Jornada e marco concluído sem data)
 
 - Achado pelo usuário: "Blomix" aparecia como duas linhas na Jornada de Onboarding (Saúde da Carteira) — "Blomix" e "Blomix Serviços de Engenharia". Investigado: `knownClientNames()` juntava o nome oficial do `ClientNote` com toda variante solta vinda de Calendar/Recap/Task sem checar se já era a mesma empresa — um evento do Google Calendar com `client: "Blomix"` virava uma segunda entrada. Corrigido pra só virar linha nova quando a string não é variante de um nome já conhecido (mesmo critério de fuzzy-match já usado no resto da integração com Pipefy). Afeta toda tela que usa essa lista: Jornada de Onboarding, Revisão Semanal, seleção de cliente em Nova Tarefa/e-mail da Revisão Semanal.
