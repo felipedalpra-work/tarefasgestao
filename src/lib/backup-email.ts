@@ -4,12 +4,12 @@ import { buildExportWorkbookBuffer } from "@/lib/export-to-excel";
 import { sendDailyBackupEmail, sendJobFailureAlertEmail } from "@/lib/email";
 import { log } from "@/lib/logger";
 
-async function alertOwnersOfBackupFailure(squadName: string, errorDetail: string) {
+async function alertOwnersOfBackupFailure(squadId: string, squadName: string, errorDetail: string) {
   try {
     const owners = await prisma.platformOwner.findMany({ select: { user: { select: { email: true } } } });
     const to = owners.map((o) => o.user.email).filter(Boolean);
     if (to.length === 0) return;
-    await sendJobFailureAlertEmail({ to, jobName: "backup-email", squadName, errorDetail });
+    await sendJobFailureAlertEmail({ squadId, to, jobName: "backup-email", squadName, errorDetail });
   } catch (alertErr) {
     // se até o alerta falhar, não tem mais pra onde escalar — só loga
     console.error("[backup-email] falha ao alertar owners:", alertErr);
@@ -36,6 +36,7 @@ export async function sendDailyBackups() {
       const buffer = await buildExportWorkbookBuffer(payload);
 
       await sendDailyBackupEmail({
+        squadId: squad.id,
         to,
         squadName: squad.name,
         dateStr,
@@ -54,7 +55,7 @@ export async function sendDailyBackups() {
       // um squad falhando não pode travar o backup dos outros
       const detail = String(err);
       await log("backup-email", `Erro no backup diário do squad ${squad.name}`, { level: "error", detail, squadId: squad.id });
-      await alertOwnersOfBackupFailure(squad.name, detail);
+      await alertOwnersOfBackupFailure(squad.id, squad.name, detail);
     }
   }
 }

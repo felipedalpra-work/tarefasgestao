@@ -1,23 +1,100 @@
-import { Resend } from "resend";
+import { google } from "googleapis";
+import { prisma } from "./prisma";
+import { getBillingDraftOwnerUserId } from "./settings";
+import { log } from "./logger";
 
-let resend: Resend | null = null;
-function getResend() {
-  if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
-  return resend;
+// Substitui o Resend aqui (sem domínio verificado em resend.com/domains, ele recusa todo
+// envio que não seja pro próprio dono da conta — achado real a partir do erro do backup
+// diário) — passa a mandar pelo Gmail de quem o squad configurou como dono da minuta de
+// cobrança (Configurações), mesma conexão já usada por src/lib/gmail-draft.ts.
+function encodeSubject(subject: string): string {
+  return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
 }
-const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
 
-// Achado real investigando por que o backup diário "sempre funcionava" (log de sucesso
-// todo dia) mas o squad nunca recebia: o SDK do Resend NÃO lança exceção quando a API
-// recusa o envio (domínio não verificado, from inválido, limite de taxa etc.) — devolve
-// { data: null, error: {...} } normalmente, com status 200. Todo `return
-// getResend().emails.send(...)` direto (sem checar `.error`) fazia o código seguir como se
-// tivesse dado certo. Esse wrapper fecha essa lacuna: lança de verdade quando a Resend
-// recusa, pra quem chama (e os logs) saberem a diferença entre "enviado" e "recusado".
-async function sendEmailOrThrow(payload: Parameters<Resend["emails"]["send"]>[0]) {
-  const { data, error } = await getResend().emails.send(payload);
-  if (error) throw new Error(`Resend recusou o envio (${error.name}): ${error.message}`);
-  return data;
+function toBase64Url(value: string): string {
+  return Buffer.from(value, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+// quebra em linhas de 76 colunas (RFC 2045) — alguns parsers de e-mail são exigentes com
+// isso pra base64 de corpo de mensagem, diferente do "raw" da API do Gmail (esse sim
+// precisa ser base64url sem quebra, ver toBase64Url acima)
+function wrapBase64(value: string): string {
+  return value.replace(/.{76}/g, "$&\r\n");
+}
+
+// Conta Google usada pra mandar e-mail "de sistema". Sem dono configurado pro squad, ou com
+// a conta desconectada, cai pra QUALQUER conta Google conectada na plataforma — evita que
+// um alerta cross-squad (pros owners, não importa qual squad falhou) fique sem remetente só
+// porque aquele squad específico não tem dono configurado.
+async function resolveSystemSenderAccount(squadId: string) {
+  const ownerId = await getBillingDraftOwnerUserId(squadId);
+  if (ownerId) {
+    const account = await prisma.account.findFirst({ where: { userId: ownerId, provider: "google" } });
+    if (account?.access_token) return account;
+  }
+  return prisma.account.findFirst({ where: { provider: "google", access_token: { not: null } } });
+}
+
+// Lança em caso de erro (mesmo contrato do antigo sendEmailOrThrow) — quem chama já
+// trata/loga isso.
+export async function sendSystemEmail({
+  squadId,
+  to,
+  subject,
+  html,
+  attachments,
+}: {
+  squadId: string;
+  to: string | string[];
+  subject: string;
+  html: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
+}): Promise<void> {
+  const account = await resolveSystemSenderAccount(squadId);
+  if (!account?.access_token) {
+    throw new Error("Nenhuma conta Google conectada disponível pra enviar e-mail de sistema — configure o dono da minuta em Configurações.");
+  }
+
+  const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+  oauth2.setCredentials({
+    access_token: account.access_token,
+    refresh_token: account.refresh_token ?? undefined,
+  });
+
+  const gmail = google.gmail({ version: "v1", auth: oauth2 });
+  const toList = Array.isArray(to) ? to : [to];
+
+  const headers = [`To: ${toList.join(", ")}`, `Subject: ${encodeSubject(subject)}`, "MIME-Version: 1.0"];
+
+  let mime: string;
+  if (!attachments || attachments.length === 0) {
+    mime = [...headers, `Content-Type: text/html; charset="UTF-8"`, "", html].join("\r\n");
+  } else {
+    const boundary = `boundary_${Buffer.from(String(Math.random())).toString("hex").slice(0, 16)}`;
+    const parts = [
+      `--${boundary}`,
+      `Content-Type: text/html; charset="UTF-8"`,
+      "",
+      html,
+      ...attachments.flatMap((a) => [
+        `--${boundary}`,
+        `Content-Type: ${a.contentType}; name="${a.filename}"`,
+        `Content-Disposition: attachment; filename="${a.filename}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        wrapBase64(a.content.toString("base64")),
+      ]),
+      `--${boundary}--`,
+    ];
+    mime = [...headers, `Content-Type: multipart/mixed; boundary="${boundary}"`, "", ...parts].join("\r\n");
+  }
+
+  await gmail.users.messages.send({ userId: "me", requestBody: { raw: toBase64Url(mime) } });
+  await log("system-email", `E-mail enviado para ${toList.join(", ")}: "${subject}"`);
 }
 
 function baseTemplate(content: string) {
@@ -88,6 +165,7 @@ function baseTemplate(content: string) {
 }
 
 export async function sendNewTaskEmail({
+  squadId,
   to,
   assigneeName,
   taskTitle,
@@ -96,6 +174,7 @@ export async function sendNewTaskEmail({
   dueDate,
   createdBy,
 }: {
+  squadId: string;
   to: string;
   assigneeName: string;
   taskTitle: string;
@@ -160,16 +239,18 @@ export async function sendNewTaskEmail({
     </table>
   `);
 
-  return sendEmailOrThrow({ from: FROM, to, subject: `[O2 Squad] Nova tarefa: ${taskTitle}`, html });
+  return sendSystemEmail({ squadId, to, subject: `[O2 Squad] Nova tarefa: ${taskTitle}`, html });
 }
 
 export async function sendDeadlineAlertEmail({
+  squadId,
   to,
   assigneeName,
   taskTitle,
   dueDate,
   daysLeft,
 }: {
+  squadId: string;
   to: string;
   assigneeName: string;
   taskTitle: string;
@@ -239,10 +320,11 @@ export async function sendDeadlineAlertEmail({
     </table>
   `);
 
-  return sendEmailOrThrow({ from: FROM, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
+  return sendSystemEmail({ squadId, to, subject: `[O2 Squad] ${urgencyTitle}: ${taskTitle}`, html });
 }
 
 export async function sendDailyBackupEmail({
+  squadId,
   to,
   squadName,
   dateStr,
@@ -250,6 +332,7 @@ export async function sendDailyBackupEmail({
   attachment,
   filename,
 }: {
+  squadId: string;
   to: string[];
   squadName: string;
   dateStr: string;
@@ -302,8 +385,8 @@ export async function sendDailyBackupEmail({
     </table>
   `);
 
-  return sendEmailOrThrow({
-    from: FROM,
+  return sendSystemEmail({
+    squadId,
     to,
     subject: `[O2 Squad] Backup diário — ${squadName} — ${dateStr}`,
     html,
@@ -316,11 +399,13 @@ export async function sendDailyBackupEmail({
 // e-mail (não Slack) de propósito: Slack é configurado por squad (bot token
 // próprio), e esse alerta precisa alcançar os owners não importa qual squad falhou.
 export async function sendJobFailureAlertEmail({
+  squadId,
   to,
   jobName,
   squadName,
   errorDetail,
 }: {
+  squadId: string;
   to: string[];
   jobName: string;
   squadName: string;
@@ -355,8 +440,8 @@ export async function sendJobFailureAlertEmail({
     </table>
   `);
 
-  return sendEmailOrThrow({
-    from: FROM,
+  return sendSystemEmail({
+    squadId,
     to,
     subject: `[O2 Squad] ⚠️ Job "${jobName}" falhou — ${squadName}`,
     html,
@@ -364,10 +449,12 @@ export async function sendJobFailureAlertEmail({
 }
 
 export async function sendPasswordResetEmail({
+  squadId,
   to,
   name,
   resetUrl,
 }: {
+  squadId: string;
   to: string;
   name?: string | null;
   resetUrl: string;
@@ -412,7 +499,7 @@ export async function sendPasswordResetEmail({
     </table>
   `);
 
-  return sendEmailOrThrow({ from: FROM, to, subject: "[O2 Squad] Redefinição de senha", html });
+  return sendSystemEmail({ squadId, to, subject: "[O2 Squad] Redefinição de senha", html });
 }
 
 // Monta (sem enviar) o conteúdo de um e-mail de cobrança de pendência do cliente —

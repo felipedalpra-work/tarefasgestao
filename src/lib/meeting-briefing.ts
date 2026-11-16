@@ -1,17 +1,10 @@
 import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
-import { Resend } from "resend";
+import { sendSystemEmail } from "./email";
 import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
 import { getBaseUrl } from "./base-url";
 import { isNotificationEnabled } from "./settings";
-
-let resend: Resend | null = null;
-function getResend() {
-  if (!resend) resend = new Resend(process.env.RESEND_API_KEY);
-  return resend;
-}
-const FROM = process.env.RESEND_FROM || "onboarding@resend.dev";
 
 function briefingTemplate(client: string, meetingDate: string, o2Tasks: any[], clientTasks: any[]) {
   const renderTask = (t: any) => `
@@ -145,8 +138,8 @@ export async function sendMeetingBriefings(): Promise<void> {
     for (const user of users) {
       if (!user.email) continue;
       try {
-        await getResend().emails.send({
-          from: FROM,
+        await sendSystemEmail({
+          squadId: event.squadId,
           to: user.email,
           subject: `[O2 Squad] Reunião amanhã: O2 Inc & ${client}`,
           html,

@@ -29,6 +29,7 @@ async function checkDeadlinesForSquad(squadId: string): Promise<number> {
 
     try {
       await sendDeadlineAlertEmail({
+        squadId,
         to: task.assignee.email,
         assigneeName: task.assignee.name || task.assignee.email,
         taskTitle: task.title,

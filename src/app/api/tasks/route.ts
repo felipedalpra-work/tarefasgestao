@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
 
   if (task.assignee?.email && task.assigneeId !== session.user.id) {
     sendNewTaskEmail({
+      squadId: session.user.squadId,
       to: task.assignee.email,
       assigneeName: task.assignee.name || task.assignee.email,
       taskTitle: task.title,

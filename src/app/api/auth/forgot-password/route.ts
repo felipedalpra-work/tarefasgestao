@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const resetUrl = `${getBaseUrl()}/reset-password?token=${rawToken}`;
 
   try {
-    await sendPasswordResetEmail({ to: user.email, name: user.name, resetUrl });
+    await sendPasswordResetEmail({ squadId: user.squadId, to: user.email, name: user.name, resetUrl });
   } catch (e) {
     await log("auth", "Falha ao enviar email de redefinição de senha", {
       level: "error",
