@@ -304,6 +304,7 @@ model ClientLogin {
   empresa            String // razão social/nome da empresa (distingue quando o cliente tem mais de uma)
   erp                String?
   accessMode         String? // como acessar: login/senha compartilhado, API, acesso remoto…
+  accessUrl          String? // link direto de acesso ao ERP (URL de login) — texto puro, não é segredo
   login              String? // usuário/e-mail de acesso ao ERP — texto puro, não é segredo por si só
   // senha e segredo TOTP NUNCA em texto puro — sempre passam por encryptSecret()
   // (src/lib/credential-crypto.ts, AES-256-GCM) antes de chegar aqui. Ver esse arquivo

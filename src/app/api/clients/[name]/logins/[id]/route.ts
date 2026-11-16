@@ -7,12 +7,13 @@ import { isValidBase32Secret } from "@/lib/totp";
 
 type Params = { params: Promise<{ name: string; id: string }> };
 
-function toPublicShape(login: { id: string; empresa: string; erp: string | null; accessMode: string | null; login: string | null; passwordEncrypted: string | null; otpSecretEncrypted: string | null }) {
+function toPublicShape(login: { id: string; empresa: string; erp: string | null; accessMode: string | null; accessUrl: string | null; login: string | null; passwordEncrypted: string | null; otpSecretEncrypted: string | null }) {
   return {
     id: login.id,
     empresa: login.empresa,
     erp: login.erp,
     accessMode: login.accessMode,
+    accessUrl: login.accessUrl,
     login: login.login,
     hasPassword: !!login.passwordEncrypted,
     hasOtp: !!login.otpSecretEncrypted,
@@ -42,6 +43,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       ...(body.empresa !== undefined && { empresa: body.empresa }),
       ...(body.erp !== undefined && { erp: body.erp || null }),
       ...(body.accessMode !== undefined && { accessMode: body.accessMode || null }),
+      ...(body.accessUrl !== undefined && { accessUrl: body.accessUrl || null }),
       ...(body.login !== undefined && { login: body.login || null }),
       // string vazia REMOVE a senha/OTP guardado (ver botão "remover" na tela) — só
       // recifra quando vier um valor de verdade pra trocar

@@ -15,12 +15,13 @@ type Params = { params: Promise<{ name: string }> };
 // verdade só sai por um pedido explícito (POST .../reveal ou GET .../otp), que fica
 // registrado em log. Isso limita a exposição de segredo a "alguém pediu agora", em vez
 // de estar disponível toda vez que a aba Oxy é aberta.
-function toPublicShape(login: { id: string; client: string; empresa: string; erp: string | null; accessMode: string | null; login: string | null; passwordEncrypted: string | null; otpSecretEncrypted: string | null; createdAt: Date; updatedAt: Date }) {
+function toPublicShape(login: { id: string; client: string; empresa: string; erp: string | null; accessMode: string | null; accessUrl: string | null; login: string | null; passwordEncrypted: string | null; otpSecretEncrypted: string | null; createdAt: Date; updatedAt: Date }) {
   return {
     id: login.id,
     empresa: login.empresa,
     erp: login.erp,
     accessMode: login.accessMode,
+    accessUrl: login.accessUrl,
     login: login.login,
     hasPassword: !!login.passwordEncrypted,
     hasOtp: !!login.otpSecretEncrypted,
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       empresa: body.empresa || "",
       erp: body.erp || null,
       accessMode: body.accessMode || null,
+      accessUrl: body.accessUrl || null,
       login: body.login || null,
       passwordEncrypted: body.password ? encryptSecret(body.password) : null,
       otpSecretEncrypted: body.otpSecret ? encryptSecret(body.otpSecret) : null,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, Copy, KeyRound, RefreshCw, X, Check } from "lucide-react";
+import { Eye, EyeOff, Copy, KeyRound, RefreshCw, X, Check, Link as LinkIcon, ExternalLink } from "lucide-react";
 import { toast } from "./Toaster";
 
 export type ClientLoginData = {
@@ -9,6 +9,7 @@ export type ClientLoginData = {
   empresa: string;
   erp: string | null;
   accessMode: string | null;
+  accessUrl: string | null;
   login: string | null;
   hasPassword: boolean;
   hasOtp: boolean;
@@ -71,6 +72,28 @@ export function ClientLoginRow({
         >
           <X size={14} />
         </button>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <LinkIcon size={13} className="text-ink-faint shrink-0" />
+        <input
+          type="text"
+          defaultValue={login.accessUrl ?? ""}
+          placeholder="Link de acesso (URL de login do ERP)"
+          onBlur={(e) => e.target.value !== (login.accessUrl ?? "") && patch("accessUrl", e.target.value)}
+          className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
+        />
+        {login.accessUrl && (
+          <a
+            href={login.accessUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="p-2 text-ink-faint hover:text-o2-green transition-colors shrink-0"
+            title="Abrir link"
+          >
+            <ExternalLink size={14} />
+          </a>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
