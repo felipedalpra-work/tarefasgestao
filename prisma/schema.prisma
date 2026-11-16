@@ -260,6 +260,9 @@ model ClientNote {
   contacts                  String?
   email                     String? // e-mail(s) do cliente (1+, separados por vírgula/quebra de linha —
   // ver parseEmailList em utils.ts), usado no e-mail de pendências da Revisão Semanal
+  emailTemplate             String? // modelo próprio desse cliente pro e-mail de pendências da
+  // Revisão Semanal (token {{tarefas}}, mesmo formato do modelo padrão do squad em
+  // Setting/getClientEmailTemplate) — null = usa o modelo do squad, que é o fallback de null
   formularioInicial         Json? // snapshot do card de venda ganho no Pipefy (pipe "1.1 Funil de
   // Vendas - CFOaaS") — formato FormularioInicialPipefy (lib/pipefy.ts). Capturado uma vez pelo
   // sync diário (pipefy-sync.ts) e só lido daqui pra frente — não existe mais busca ao vivo no

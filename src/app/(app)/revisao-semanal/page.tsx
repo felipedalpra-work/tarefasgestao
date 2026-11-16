@@ -60,6 +60,7 @@ type ReviewClient = {
   health: string | null;
   oxyStage: string | null;
   email: string | null;
+  emailTemplate: string | null;
   meetings: ReviewMeeting[];
   suggestions: ReviewSuggestion[];
   tasksCompleted: { id: string; title: string; updatedAt: string }[];
@@ -666,6 +667,7 @@ export default function WeeklyReviewPage() {
                 clientEmail={current.email}
                 tasksOpen={current.tasksOpen}
                 emailTemplate={emailTemplate}
+                clientEmailTemplate={current.emailTemplate}
               />
             ) : clientTab === "reunioes" ? (
               <section className="mb-8">

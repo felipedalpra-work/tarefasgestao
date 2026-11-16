@@ -21,6 +21,7 @@ type ClientBucket = {
   health: string | null;
   oxyStage: string | null;
   email: string | null;
+  emailTemplate: string | null;
   meetings: {
     id: string;
     title: string;
@@ -85,7 +86,7 @@ export async function GET() {
   const [names, notes, meetingsThisWeek, oldPendingMeetings, recapSuggestions, externalSuggestions, completedActivity, tasksOpen, users, doneRows] =
     await Promise.all([
       knownClientNames(db, session.user.squadId),
-      db.clientNote.findMany({ select: { client: true, healthStatus: true, oxyStage: true, email: true } }),
+      db.clientNote.findMany({ select: { client: true, healthStatus: true, oxyStage: true, email: true, emailTemplate: true } }),
       db.calendarEvent.findMany({
         where: { startAt: { gte: windowStart, lte: now } },
         select: MEETING_SELECT,
@@ -177,7 +178,7 @@ export async function GET() {
     for (const [key, bucket] of buckets) {
       if (namesMatch(key, name)) return bucket;
     }
-    const b: ClientBucket = { name, health: null, oxyStage: null, email: null, meetings: [], suggestions: [], tasksCompleted: [], tasksOpen: [] };
+    const b: ClientBucket = { name, health: null, oxyStage: null, email: null, emailTemplate: null, meetings: [], suggestions: [], tasksCompleted: [], tasksOpen: [] };
     buckets.set(name, b);
     return b;
   }
@@ -187,7 +188,7 @@ export async function GET() {
 
   for (const note of notes) {
     const b = bucketFor(note.client);
-    if (b) { b.health = note.healthStatus; b.oxyStage = note.oxyStage; b.email = note.email; }
+    if (b) { b.health = note.healthStatus; b.oxyStage = note.oxyStage; b.email = note.email; b.emailTemplate = note.emailTemplate; }
   }
 
   for (const m of [...oldPendingMeetings, ...meetingsThisWeek]) {

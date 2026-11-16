@@ -22,6 +22,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       notes: null,
       contacts: null,
       email: null,
+      emailTemplate: null,
       status: "ativo",
       oxyStage: "nao_iniciado",
       importType: null,
@@ -85,6 +86,7 @@ const FREE_TEXT_FIELDS = [
   "routineWho",
   "routineWhen",
   "diagnosticoIntakePendente",
+  "emailTemplate",
 ] as const;
 const DATE_FIELDS = [
   "onboardingStartAt",

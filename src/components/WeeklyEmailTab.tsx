@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Mail, RefreshCw, Send, AlertTriangle, Link as LinkIcon } from "lucide-react";
+import { Mail, RefreshCw, Send, AlertTriangle, Link as LinkIcon, Eye, EyeOff, Settings2 } from "lucide-react";
 import { toast } from "./Toaster";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { parseEmailList } from "@/lib/utils";
+import { buildWeeklyClientEmailHtml } from "@/lib/email-templates";
 import type { TaskListItem } from "@/types/task";
 
 type EmailTask = TaskListItem & { isNew: boolean };
@@ -32,19 +33,32 @@ export function WeeklyEmailTab({
   clientEmail,
   tasksOpen,
   emailTemplate,
+  clientEmailTemplate,
 }: {
   clientName: string;
   clientEmail: string | null;
   tasksOpen: EmailTask[];
-  emailTemplate: string;
+  emailTemplate: string; // modelo padrão do squad (Configurações) — fallback
+  clientEmailTemplate: string | null; // modelo próprio desse cliente, quando existir — vence o do squad
 }) {
   const clientEmails = parseEmailList(clientEmail);
+  // modelo salvo desse cliente — local porque essa tela não é dona do dado (vem da Revisão
+  // Semanal); atualizado otimisticamente ao salvar/restaurar, sem precisar recarregar a
+  // revisão inteira.
+  const [savedClientTemplate, setSavedClientTemplate] = useState(clientEmailTemplate);
+  const effectiveTemplate = savedClientTemplate ?? emailTemplate;
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(tasksOpen.map((t) => t.id)));
   const [subject, setSubject] = useState(`Pendências em aberto — ${clientName}`);
-  const [bodyText, setBodyText] = useState(() => renderBody(emailTemplate, tasksOpen));
+  const [bodyText, setBodyText] = useState(() => renderBody(effectiveTemplate, tasksOpen));
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const [editingTemplate, setEditingTemplate] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState(effectiveTemplate);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   function toggleTask(id: string) {
     setSelectedIds((prev) => {
@@ -57,8 +71,42 @@ export function WeeklyEmailTab({
 
   function reloadTasksIntoBody() {
     const selected = tasksOpen.filter((t) => selectedIds.has(t.id));
-    setBodyText(renderBody(emailTemplate, selected));
+    setBodyText(renderBody(effectiveTemplate, selected));
     toast("Texto recarregado a partir do modelo", "success");
+  }
+
+  async function saveClientTemplate() {
+    if (!templateDraft.trim()) return;
+    setSavingTemplate(true);
+    const res = await fetch(`/api/clients/${encodeURIComponent(clientName)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emailTemplate: templateDraft }),
+    });
+    setSavingTemplate(false);
+    if (res.ok) {
+      setSavedClientTemplate(templateDraft);
+      toast("Modelo deste cliente salvo", "success");
+    } else {
+      toast("Erro ao salvar o modelo", "error");
+    }
+  }
+
+  async function resetToSquadTemplate() {
+    setSavingTemplate(true);
+    const res = await fetch(`/api/clients/${encodeURIComponent(clientName)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emailTemplate: null }),
+    });
+    setSavingTemplate(false);
+    if (res.ok) {
+      setSavedClientTemplate(null);
+      setTemplateDraft(emailTemplate);
+      toast("Voltou a usar o modelo padrão do squad", "success");
+    } else {
+      toast("Erro ao restaurar o modelo padrão", "error");
+    }
   }
 
   async function handleSend() {
@@ -133,6 +181,52 @@ export function WeeklyEmailTab({
         </div>
       )}
 
+      <div className="border border-surface-3 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setEditingTemplate((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-xs font-medium text-ink-mid hover:text-ink bg-surface-2"
+        >
+          <span className="flex items-center gap-1.5">
+            <Settings2 size={13} /> Editar modelo deste cliente
+            {savedClientTemplate && <span className="text-[10px] bg-o2-green/15 text-o2-green rounded-full px-1.5 py-0.5">personalizado</span>}
+          </span>
+          <span>{editingTemplate ? "▾" : "▸"}</span>
+        </button>
+        {editingTemplate && (
+          <div className="p-3 space-y-2 bg-surface-2/50">
+            <p className="text-xs text-ink-faint">
+              Modelo próprio desse cliente, usado como ponto de partida sempre que a aba E-mail abrir pra ele. O token{" "}
+              <code className="bg-surface px-1 rounded">{"{{tarefas}}"}</code> vira a lista das tarefas marcadas.
+            </p>
+            <AutoGrowTextarea
+              value={templateDraft}
+              onChange={(e) => setTemplateDraft(e.target.value)}
+              rows={6}
+              maxHeight={320}
+              className="w-full bg-surface border border-surface-3 rounded-lg px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-o2-green/50 font-mono"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveClientTemplate}
+                disabled={savingTemplate}
+                className="text-xs font-medium bg-o2-green text-bg px-3 py-1.5 rounded-lg hover:bg-o2-green-bright transition-all disabled:opacity-50"
+              >
+                {savingTemplate ? "Salvando…" : "Salvar modelo deste cliente"}
+              </button>
+              {savedClientTemplate && (
+                <button
+                  onClick={resetToSquadTemplate}
+                  disabled={savingTemplate}
+                  className="text-xs text-ink-mid hover:text-ink"
+                >
+                  Usar modelo padrão do squad
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Assunto</label>
         <input
@@ -144,7 +238,16 @@ export function WeeklyEmailTab({
       </div>
 
       <div>
-        <label className="text-xs font-medium text-ink-mid uppercase tracking-wide block mb-1.5">Corpo do e-mail</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-medium text-ink-mid uppercase tracking-wide">Corpo do e-mail</label>
+          <button
+            onClick={() => setShowPreview((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-ink-mid hover:text-ink"
+          >
+            {showPreview ? <EyeOff size={12} /> : <Eye size={12} />}
+            {showPreview ? "Ocultar pré-visualização" : "Pré-visualizar"}
+          </button>
+        </div>
         <AutoGrowTextarea
           value={bodyText}
           onChange={(e) => setBodyText(e.target.value)}
@@ -152,6 +255,16 @@ export function WeeklyEmailTab({
           maxHeight={480}
           className="w-full bg-surface-2 border border-surface-3 rounded-xl px-4 py-3 text-sm text-ink focus:outline-none focus:border-o2-green/50 font-mono"
         />
+        {showPreview && (
+          <div className="mt-2 border border-surface-3 rounded-xl overflow-hidden bg-white">
+            <iframe
+              title="Pré-visualização do e-mail"
+              srcDoc={buildWeeklyClientEmailHtml({ subject, bodyText })}
+              className="w-full h-[600px]"
+              sandbox=""
+            />
+          </div>
+        )}
       </div>
 
       {!confirming ? (

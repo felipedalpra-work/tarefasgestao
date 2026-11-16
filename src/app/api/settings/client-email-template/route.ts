@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isAdmin } from "@/lib/authz";
 import { getClientEmailTemplate, setClientEmailTemplate } from "@/lib/settings";
-import { DEFAULT_CLIENT_EMAIL_TEMPLATE } from "@/lib/email";
+import { DEFAULT_CLIENT_EMAIL_TEMPLATE } from "@/lib/email-templates";
 
 // Modelo do e-mail de pendências pro cliente, usado pela aba "E-mail" da Revisão Semanal —
 // qualquer membro do squad lê, só admin edita (mesma régua do critério de Temperatura).

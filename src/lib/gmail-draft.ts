@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { log } from "./logger";
-import { buildClientTaskDraftHtml, buildWeeklyClientEmailHtml } from "./email";
+import { buildClientTaskDraftHtml } from "./email";
+import { buildWeeklyClientEmailHtml } from "./email-templates";
 import { getBillingDraftOwnerUserId } from "./settings";
 import { google } from "googleapis";
 
@@ -109,7 +110,7 @@ export async function sendWeeklyClientEmail(
 
     const gmail = google.gmail({ version: "v1", auth: oauth2 });
 
-    const html = buildWeeklyClientEmailHtml({ bodyText });
+    const html = buildWeeklyClientEmailHtml({ subject, bodyText });
 
     const mime = [
       `To: ${clientEmails.join(", ")}`,
