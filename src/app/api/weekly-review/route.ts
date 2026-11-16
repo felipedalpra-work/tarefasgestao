@@ -68,6 +68,11 @@ export async function GET() {
 
   const now = new Date();
   const windowStart = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  // limite de baixo pra "pendentes de outras semanas" — pedido do usuário: sem isso a
+  // lista crescia pra sempre com reunião velha que provavelmente nunca mais vai ser
+  // revisada. Mês calendário corrente (não janela móvel de 30 dias) — reseta na virada do
+  // mês mesmo que ainda não tenha sido revisada, de propósito.
+  const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
 
   const weekKey = currentWeekKey();
 
@@ -86,14 +91,15 @@ export async function GET() {
         select: MEETING_SELECT,
         orderBy: { startAt: "asc" },
       }),
-      // Reuniões de semanas anteriores que ninguém preencheu ainda (sem Temperatura NEM
-      // Próximos Passos — mesmo critério de "pendente" já usado em groupByClient/pipefy.ts,
-      // só que aqui pro histórico de CalendarEvent em vez do Pipefy). Pedido do usuário:
-      // antes só mostrava a semana corrente e reunião atrasada ficava invisível pra sempre;
-      // agora ela aparece aqui até alguém preencher, não tem corte de tempo. Exclui quem já
-      // foi marcado como "não ocorreu" — não tem o que revisar numa reunião que não aconteceu.
+      // Reuniões de semanas anteriores (dentro do mês corrente) que ninguém preencheu ainda
+      // (sem Temperatura NEM Próximos Passos — mesmo critério de "pendente" já usado em
+      // groupByClient/pipefy.ts, só que aqui pro histórico de CalendarEvent em vez do
+      // Pipefy). Pedido do usuário: antes só mostrava a semana corrente e reunião atrasada
+      // ficava invisível pra sempre; agora ela aparece aqui até alguém preencher — mas só
+      // dentro do mês corrente, pra não acumular pra sempre. Exclui quem já foi marcado
+      // como "não ocorreu" — não tem o que revisar numa reunião que não aconteceu.
       db.calendarEvent.findMany({
-        where: { startAt: { lt: windowStart }, temperature: null, nextSteps: null, meetingOccurred: { not: false } },
+        where: { startAt: { gte: startOfCurrentMonth, lt: windowStart }, temperature: null, nextSteps: null, meetingOccurred: { not: false } },
         select: MEETING_SELECT,
         orderBy: { startAt: "asc" },
       }),
