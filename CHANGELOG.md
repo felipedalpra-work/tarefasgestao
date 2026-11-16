@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Marcar reunião como "não ocorreu" — some do backlog de pendentes)
+
+- Achado pelo usuário: a reunião do Zanotti de 22/10, marcada "Não ocorreu" no Pipefy (sem Temperatura/Próximos Passos — nunca teria mesmo, já que não aconteceu), continuava contando como "pendente" tanto no contador da Saúde da Carteira quanto na nova lista de "Pendentes de outras semanas" da Revisão Semanal.
+- Novo campo `CalendarEvent.meetingOccurred`, sincronizado nos dois sentidos com o campo "Status da Reunião" do Pipefy — mesma regra de Temperatura/Próximos Passos/Resumo (Pipefy sempre vence).
+- Checkbox "Essa reunião não ocorreu" no card de reunião (Saúde da Carteira → Temperatura e Revisão Semanal → Reuniões) — marca manualmente quando precisar.
+- `groupByClient`/pipefy.ts: reunião "Não ocorreu" agora conta como resolvida no contador ao vivo do Pipefy, e a lista de pendentes de outras semanas da Revisão Semanal exclui quem já foi marcado como não ocorrido.
+
 ## 2026-11-16 (Resumo da reunião passa a sincronizar nos dois sentidos com o Pipefy)
 
 - Achado pelo usuário: o campo "Resumo (Pipefy)" na aba Temperatura (Saúde da Carteira) só lia do Pipefy — editar ali nunca escrevia de volta, e depois de uma edição local o campo ficava travado nesse valor, ignorando qualquer atualização futura feita direto no Pipefy.
