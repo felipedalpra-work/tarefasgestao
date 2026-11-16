@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (E-mail de pendências: responsável do squad aparece só como "O2")
+
+- Pedido do usuário: o responsável exibido por tarefa não pode mostrar o nome de quem da O2 ficou com ela — o e-mail é enviado pro cliente.
+- `responsibleLabel()` (`WeeklyEmailTab.tsx`) agora só mostra o nome real quando o responsável é o cliente (`isClient`); qualquer responsável interno do squad vira "O2" genérico.
+
 ## 2026-11-16 (E-mail de pendências: mostra responsável em vez de prazo por tarefa)
 
 - Pedido do usuário: trocar o prazo exibido por tarefa (no checklist e no texto do corpo) pelo responsável da tarefa.
