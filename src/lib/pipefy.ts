@@ -16,12 +16,20 @@ function getToken(): string {
   return t;
 }
 
+// Timeout explícito — achado real: a tela do cliente ficava carregando pra sempre quando o
+// Pipefy travava ou demorava demais, porque `fetch` sem `signal` não tem limite nenhum de
+// espera por padrão. 20s é mais que o suficiente pra uma chamada GraphQL normal; estourar
+// isso vira erro de verdade (os `try/catch` best-effort de quem chama já escondem o bloco
+// Pipefy em vez de travar a página inteira).
+const PIPEFY_TIMEOUT_MS = 20_000;
+
 async function gql<T>(query: string): Promise<T> {
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
     cache: "no-store",
+    signal: AbortSignal.timeout(PIPEFY_TIMEOUT_MS),
   });
   const json = await res.json();
   if (json.errors) throw new Error("Pipefy GraphQL: " + JSON.stringify(json.errors));
@@ -269,7 +277,7 @@ const DONE_DATE_LABEL: Record<MilestoneKey, string> = {
   oxy: "Data de Entrega da Oxy",
 };
 
-type OnboardingCard = {
+export type OnboardingCard = {
   client: string; // título do card no Pipefy
   milestone: MilestoneKey;
   phase: OnboardingPhaseKey;

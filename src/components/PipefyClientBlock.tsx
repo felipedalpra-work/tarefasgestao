@@ -1,10 +1,10 @@
-// Bloco somente-leitura com a saúde/reuniões do cliente vindas do Pipefy.
-// Server component — reaproveita o cache de getGustavoMeetings.
+// Bloco somente-leitura com a saúde/reuniões do cliente vindas do Pipefy. Recebe os dados já
+// buscados e filtrados por quem monta a página (antes buscava sozinho aqui dentro, em série
+// com os outros fetches do Pipefy da mesma tela — achado real: página do cliente demorando
+// muito/travando, porque 3 chamadas ao Pipefy rodavam uma depois da outra em vez de em
+// paralelo. Ver src/app/(app)/clientes/[slug]/page.tsx).
 import {
-  getGustavoMeetings,
-  meetingsForClient,
-  getOnboardingCards,
-  onboardingSummaryForClient,
+  type PipefyMeeting,
   type Temperatura,
   type ClientOnboardingSummary,
   type OnboardingMilestoneStatus,
@@ -51,24 +51,15 @@ function MilestonePill({ label, info, fmt }: { label: string; info: OnboardingMi
   );
 }
 
-export async function PipefyClientBlock({ client }: { client: string }) {
-  let meetings;
-  try {
-    meetings = meetingsForClient(await getGustavoMeetings(), client);
-  } catch {
-    return null; // sem token ou falha — não quebra a página do cliente
-  }
+export function PipefyClientBlock({
+  meetings,
+  onboarding,
+}: {
+  meetings: PipefyMeeting[];
+  onboarding: ClientOnboardingSummary | null;
+}) {
   if (!meetings.length) return null;
 
-  // jornada de onboarding (Kick-off/Diagnóstico/Oxy Integrada) + comitê mensal — só pra
-  // controle do squad (leitura), nunca escreve no Pipefy. Best-effort: se falhar, só essa
-  // faixa some, o resto do bloco (já validado acima) continua normal.
-  let onboarding: ClientOnboardingSummary | null = null;
-  try {
-    onboarding = onboardingSummaryForClient(await getOnboardingCards(), client);
-  } catch {
-    onboarding = null;
-  }
   const comiteMensal = meetings.find((m) => /comit/i.test(m.tipo)) ?? null;
 
   const latest = meetings[0];

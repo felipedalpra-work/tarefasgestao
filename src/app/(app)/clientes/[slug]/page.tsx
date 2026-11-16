@@ -7,7 +7,16 @@ import { notFound } from "next/navigation";
 import { ClientTabs } from "./ClientTabs";
 import { PipefyClientBlock } from "@/components/PipefyClientBlock";
 import { DeleteClientButton } from "./DeleteClientButton";
-import { getFormularioInicialCardsPipefy, formularioInicialForClient } from "@/lib/pipefy";
+import {
+  getFormularioInicialCardsPipefy,
+  formularioInicialForClient,
+  getGustavoMeetings,
+  meetingsForClient,
+  getOnboardingCards,
+  onboardingSummaryForClient,
+  type PipefyMeeting,
+  type OnboardingCard,
+} from "@/lib/pipefy";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -23,9 +32,18 @@ export default async function ClientePage({ params }: Props) {
   const session = await auth();
   if (!session?.user?.id) notFound();
 
-  const [data, users] = await Promise.all([
+  // Tudo buscado em paralelo — achado real: a tela do cliente demorava muito (às vezes
+  // travava de vez) porque os 3 fetches do Pipefy (formulário inicial, reuniões/temperatura,
+  // jornada de onboarding) rodavam um depois do outro em vez de ao mesmo tempo, cada um já
+  // sendo uma chamada paginada à API externa. Cada fetch do Pipefy é best-effort — tem
+  // timeout próprio (ver gql() em lib/pipefy.ts) e aqui vira lista vazia em caso de erro, pra
+  // nunca impedir o resto da página (dados do banco) de carregar.
+  const [data, users, gustavoMeetings, onboardingCards, formularioInicialCards] = await Promise.all([
     getClientDetail(session.user.squadId, client),
     getUsers(session.user.squadId),
+    getGustavoMeetings().catch((): PipefyMeeting[] => []),
+    getOnboardingCards().catch((): OnboardingCard[] => []),
+    getFormularioInicialCardsPipefy().catch((): Awaited<ReturnType<typeof getFormularioInicialCardsPipefy>> => []),
   ]);
 
   const { events, recaps, tasks, clientNote, tratativas } = data;
@@ -36,6 +54,9 @@ export default async function ClientePage({ params }: Props) {
 
   const lastMeeting = events.length > 0 ? new Date(events[0].startAt) : null;
 
+  const pipefyMeetings = meetingsForClient(gustavoMeetings, client);
+  const onboarding = onboardingCards.length > 0 ? onboardingSummaryForClient(onboardingCards, client) : null;
+
   // contexto comercial do Pipefy (pipe "1.1 Funil de Vendas - CFOaaS") — buscado aqui, no
   // carregamento da página (server component), e não mais dentro da aba, pra reaproveitar
   // o mesmo cache de 2h de getFormularioInicialCardsPipefy() em vez de fazer uma chamada
@@ -44,7 +65,7 @@ export default async function ClientePage({ params }: Props) {
   // fora do ar não pode impedir a página de carregar.
   let formularioInicial: ReturnType<typeof formularioInicialForClient> = null;
   try {
-    formularioInicial = formularioInicialForClient(await getFormularioInicialCardsPipefy(), client);
+    formularioInicial = formularioInicialForClient(formularioInicialCards, client);
   } catch {}
 
   return (
@@ -76,7 +97,7 @@ export default async function ClientePage({ params }: Props) {
         )}
       </div>
 
-      <PipefyClientBlock client={client} />
+      <PipefyClientBlock meetings={pipefyMeetings} onboarding={onboarding} />
 
       <ClientTabs
         events={events.map((e) => ({ ...e, startAt: new Date(e.startAt).toISOString(), endAt: new Date(e.endAt).toISOString() }))}
