@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (E-mail de pendências: visual da marca O2, modelo por cliente, preview)
+
+- Pedido do usuário: o e-mail de pendências (Revisão Semanal → E-mail) saía com HTML simples, sem identidade visual, e só tinha um modelo único pro squad inteiro.
+- Novo `buildWeeklyClientEmailHtml` (`src/lib/email-templates.ts`) monta o HTML com o padrão visual da O2 já usado em outro fluxo de e-mail (gradiente verde→cinza, logo, frase de marca, tarefas como itens numerados em círculo verde).
+- `ClientNote.emailTemplate`: modelo de e-mail próprio por cliente — vence o modelo padrão do squad quando configurado, editável direto na aba E-mail.
+- Botão "Pré-visualizar" — mostra num iframe exatamente o HTML que seria enviado, com a mesma função usada no envio de verdade (preview e envio nunca divergem).
+
 ## 2026-11-16 (Limita "pendentes de outras semanas" ao mês calendário corrente)
 
 - Pedido do usuário: a lista de reuniões pendentes de revisão de semanas anteriores (Revisão Semanal → Reuniões) não tinha corte de tempo pra trás — reunião velha nunca revisada acumulava pra sempre.
