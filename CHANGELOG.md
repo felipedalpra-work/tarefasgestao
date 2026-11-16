@@ -4,6 +4,17 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-16 (Corrige lentidão/travamento ao abrir a tela do cliente)
+
+- Achado pelo usuário: a tela do cliente demorava muito pra carregar e às vezes travava carregando pra sempre.
+- Causa raiz dupla: `gql()` (chamada ao Pipefy) não tinha timeout — uma chamada travada no Pipefy prendia a tela indefinidamente; e a tela rodava 3 chamadas ao Pipefy em série (uma esperando a outra) em vez de em paralelo.
+- Corrigido: timeout de 20s em toda chamada ao Pipefy; `PipefyClientBlock` virou componente de apresentação (recebe dado já buscado); tudo (banco + os 3 fetches do Pipefy) roda junto num `Promise.all`, cada Pipefy best-effort (erro vira lista vazia, nunca trava o resto da página).
+
+## 2026-11-16 (Troca Resend pelo Gmail em todo e-mail que a plataforma manda pro squad)
+
+- Resend estava sem domínio verificado — recusava todo envio que não fosse pro próprio dono da conta. Afetava nova tarefa atribuída, alerta de prazo, backup diário, aviso de erro de job e redefinição de senha.
+- `sendSystemEmail()` (`src/lib/email.ts`) substitui o transporte Resend pelo Gmail de quem o squad configurou como dono da minuta de cobrança (mesma conexão já usada pelos rascunhos de cobrança), com fallback pra qualquer conta Google conectada na plataforma. Suporta anexo (o `.xlsx` do backup diário). HTML de cada e-mail não mudou, só o mecanismo de envio.
+
 ## 2026-11-16 (Acessos de cliente ganham campo de link direto pro ERP)
 
 - Pedido do usuário: adicionar link de acesso direto ao ERP em cada acesso cadastrado na aba Oxy do cliente.
