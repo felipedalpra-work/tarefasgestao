@@ -361,6 +361,12 @@ export function onboardingSummaryForClient(
       if (estabelecido) return { status: "concluido_sem_data", doneAt: null, responsavel: null };
       return { status: "nao_iniciado", doneAt: null, responsavel: null };
     }
+    // card concluído mas sem a data preenchida no Pipefy (achado real: Captable, Filmstar,
+    // Grupo Bairral, Sciensa, Zanotti... têm o card de "Kick-off"/"Diagnóstico
+    // Financeiro"/"Oxy Integrada" na fase certa, mas o campo de data em si ficou em branco)
+    // — mesmo tratamento visual de "concluido_sem_data" (rótulo "data não registrada"), em
+    // vez de um "concluido" mudo que parece um bug de exibição
+    if (card.phase === "concluido" && !card.doneAt) return { status: "concluido_sem_data", doneAt: null, responsavel: card.responsavel };
     const status = card.phase === "concluido" ? "concluido" : card.phase === "cancelado" ? "cancelado" : "em_andamento";
     return { status, doneAt: card.doneAt, responsavel: card.responsavel };
   };

@@ -20,6 +20,19 @@ export async function resolveClientName(db: SquadPrisma, input: string): Promise
   return partial?.client ?? null;
 }
 
+// Mesmo espírito do matchesClient em src/lib/pipefy.ts — tolera acento/caixa e considera
+// igual quando um nome é "variante curta" do outro (ex.: "Blomix" extraído de um título de
+// evento do Google Calendar vs. "Blomix Serviços de Engenharia" cadastrado em ClientNote).
+function namesLikelySame(a: string, b: string): boolean {
+  const na = normalizeText(a);
+  const nb = normalizeText(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const shorter = na.length <= nb.length ? na : nb;
+  const longer = na.length <= nb.length ? nb : na;
+  return shorter.length >= 3 && longer.includes(shorter);
+}
+
 // Todo nome de cliente conhecido pelo squad — ClientNote é a fonte de verdade de quem
 // está na carteira, mas eventos/recaps/tarefas podem citar um nome que ainda não tem
 // ClientNote. Nome na lista de ignorados (cliente excluído) fica de fora mesmo se ainda
@@ -34,10 +47,19 @@ export async function knownClientNames(db: SquadPrisma, squadId: string): Promis
   ]);
 
   const names = new Set<string>();
+  // nomes de ClientNote entram primeiro, sem filtro — são a fonte de verdade da carteira
+  notes.forEach((n) => {
+    if (n.client && !matchesIgnoredClient(ignored, n.client)) names.add(n.client);
+  });
+  // candidatos soltos (Calendar/Recap/Task) só viram entrada NOVA se não forem variante de
+  // um nome já conhecido — sem isso, achado real: "Blomix" (de um evento do Google Calendar)
+  // virava uma segunda linha ao lado de "Blomix Serviços de Engenharia" em toda tela que usa
+  // essa lista (Jornada de Onboarding, Revisão Semanal, seleção de cliente em Nova Tarefa…)
   const add = (client: string | null) => {
-    if (client && !matchesIgnoredClient(ignored, client)) names.add(client);
+    if (!client || matchesIgnoredClient(ignored, client)) return;
+    if ([...names].some((known) => namesLikelySame(known, client))) return;
+    names.add(client);
   };
-  notes.forEach((n) => add(n.client));
   events.forEach((e) => add(e.client));
   recaps.forEach((r) => add(r.client));
   tasks.forEach((t) => add(t.client));
