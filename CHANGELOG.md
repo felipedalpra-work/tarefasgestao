@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-17 (Remove e-mail de tarefa atribuída e alerta de prazo)
+
+- O job de alerta de prazo mandou 42 e-mails de uma vez pelo Gmail hoje e estourou a cota de "Units per minute per user" da API — consequência da troca do Resend pelo Gmail.
+- Pedido do usuário: em vez de só espaçar os envios, tira o fluxo inteiro — "tarefa atribuída" e "alerta de prazo" não mandam mais e-mail. Notificação in-app (sino) de tarefa atribuída continua normal.
+- Some junto o botão "Verificar prazos" do dashboard (só existia pra disparar esse e-mail) e as duas preferências correspondentes em Configurações → Perfil.
+
 ## 2026-11-17 (E-mail de briefing de reunião entra na preferência por pessoa)
 
 - Pedido do usuário: faltou esse gatilho no painel de e-mails (Configurações → Perfil) — só tinha tarefa atribuída, alerta de prazo e erro de job.
