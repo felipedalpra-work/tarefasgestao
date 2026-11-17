@@ -12,7 +12,7 @@ recorrentes tipo "importação toda terça e sexta às 9h") depende de alguém c
 428 min**, incluindo um buraco de 7 horas de madrugada. Pra sincronizar Gmail isso é
 só atraso; pra um aviso "às 9h" isso quebra a utilidade do recurso.
 
-O resto (Gmail, calendário, alertas de prazo, briefing, digest) continua no GitHub
+O resto (Gmail, calendário, alertas de prazo, briefing) continua no GitHub
 Actions — só o `task-reminders` precisa ser pontual.
 
 ## Configuração (uma vez, no cron-job.org)

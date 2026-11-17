@@ -5,7 +5,6 @@ import { checkDeadlines, checkClientTasksOverdue } from "@/lib/deadline-check";
 import { checkAllReminders, checkAllTaskDueTimes } from "@/lib/reminders";
 import { advanceRecurringTasks } from "@/lib/task-recurrence";
 import { sendMeetingBriefings } from "@/lib/meeting-briefing";
-import { sendWeeklyDigest } from "@/lib/weekly-digest";
 import { sendDailyBackups } from "@/lib/backup-email";
 import { syncAllSquadsPipefy } from "@/lib/pipefy-sync";
 import { log } from "@/lib/logger";
@@ -35,7 +34,6 @@ const JOBS: Record<string, () => Promise<void>> = {
     await syncAllCalendars();
     await sendMeetingBriefings();
   },
-  digest: sendWeeklyDigest,
   // backup diário por e-mail (planilha .xlsx por squad, pros admins) — ver
   // src/lib/backup-email.ts. Existe por causa do episódio de set/2026 (banco
   // bloqueado por quota, backup mais recente disponível com 10 dias).

@@ -12,7 +12,6 @@ export async function register() {
     const { advanceRecurringTasks } = await import("./lib/task-recurrence");
     const { syncAllCalendars } = await import("./lib/calendar-sync");
     const { sendMeetingBriefings } = await import("./lib/meeting-briefing");
-    const { sendWeeklyDigest } = await import("./lib/weekly-digest");
 
     // sincroniza Gmail (Meet_Recap) a cada 5 minutos
     cron.schedule("*/5 * * * *", async () => {
@@ -53,17 +52,10 @@ export async function register() {
       catch (err) { console.error("[cron] meeting briefing:", err); }
     });
 
-    // digest semanal: toda segunda às 8h
-    cron.schedule("0 8 * * 1", async () => {
-      try { await sendWeeklyDigest(); }
-      catch (err) { console.error("[cron] weekly digest:", err); }
-    });
-
     console.log("[cron] ✓ Gmail sync        — a cada 5 min");
     console.log("[cron] ✓ Tarefas recorrentes + hora da tarefa — a cada 5 min");
     console.log("[cron] ✓ Calendar sync     — a cada 30 min");
     console.log("[cron] ✓ Alertas de prazo  — 8h e 17h");
     console.log("[cron] ✓ Briefing reunião  — 18h (para reuniões do dia seguinte)");
-    console.log("[cron] ✓ Digest semanal    — segunda às 8h");
   }
 }

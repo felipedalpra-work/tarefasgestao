@@ -48,7 +48,7 @@ export async function setMeetRecapGmailUserId(squadId: string, userId: string | 
 }
 
 // Secret do webhook n8n (POST /api/webhooks/n8n) — cada squad tem o seu, gerado por
-// nós (não é colado pelo usuário como o token do Slack). A rota do webhook resolve
+// nós (não é colado pelo usuário). A rota do webhook resolve
 // QUAL squad recebeu a chamada olhando pra que squad esse valor pertence — não tem
 // squadId na URL, então trocar o secret é a única forma de "desconectar" um n8n.
 export async function getOrCreateN8nWebhookSecret(squadId: string): Promise<string> {
@@ -228,77 +228,13 @@ export async function removeIgnoredClient(squadId: string, client: string): Prom
   return saveIgnoredClients(squadId, kept);
 }
 
-// Liga/desliga cada tipo de notificação do Slack, por tipo (squad todo, não por pessoa —
-// esse app não tem preferência individual, só um interruptor geral por tipo de aviso).
-// Guardado num JSON só (em vez de uma Setting por tipo) pra dar pra adicionar tipo novo
-// sem precisar de função nova. O default de cada tipo reflete o comportamento de hoje,
-// antes desse painel existir — ligar o painel não muda nada até alguém mexer.
-export const NOTIFICATION_TYPES = [
-  "taskAssigned",
-  "taskCompleted",
-  "taskReminder",
-  "taskDueTime",
-  "commentMention",
-  "tratativaOverdue",
-  "onboardingDelay",
-  "fechamentoIncomplete",
-  "staleRecapSuggestions",
-  "weeklyDigest",
-  "meetingBriefing",
-] as const;
-
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-const NOTIFICATION_PREFS_KEY = "notification_slack_prefs";
-
-const DEFAULT_NOTIFICATION_PREFS: Record<NotificationType, boolean> = {
-  taskAssigned: true,
-  taskCompleted: true,
-  taskReminder: true,
-  taskDueTime: true, // lembrete no horário marcado da tarefa (rotinas recorrentes)
-  commentMention: true,
-  tratativaOverdue: true,
-  onboardingDelay: false, // já era só in-app antes desse painel existir
-  fechamentoIncomplete: false, // desligado a pedido do usuário em 2026-07-30
-  staleRecapSuggestions: false, // já era só in-app antes desse painel existir
-  weeklyDigest: true,
-  meetingBriefing: true,
-};
-
-export async function getNotificationPrefs(squadId: string): Promise<Record<NotificationType, boolean>> {
-  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: NOTIFICATION_PREFS_KEY } } });
-  if (!row) return { ...DEFAULT_NOTIFICATION_PREFS };
-  try {
-    const stored = JSON.parse(row.value) as Partial<Record<NotificationType, boolean>>;
-    return { ...DEFAULT_NOTIFICATION_PREFS, ...stored };
-  } catch {
-    return { ...DEFAULT_NOTIFICATION_PREFS };
-  }
-}
-
-export async function isNotificationEnabled(squadId: string, type: NotificationType): Promise<boolean> {
-  const prefs = await getNotificationPrefs(squadId);
-  return prefs[type];
-}
-
-export async function setNotificationPref(squadId: string, type: NotificationType, enabled: boolean): Promise<Record<NotificationType, boolean>> {
-  const prefs = await getNotificationPrefs(squadId);
-  prefs[type] = enabled;
-  await prisma.setting.upsert({
-    where: { squadId_key: { squadId, key: NOTIFICATION_PREFS_KEY } },
-    update: { value: JSON.stringify(prefs) },
-    create: { squadId, key: NOTIFICATION_PREFS_KEY, value: JSON.stringify(prefs) },
-  });
-  return prefs;
-}
-
-// Liga/desliga cada gatilho de E-MAIL (diferente do painel acima, que é Slack) por
-// PESSOA — não por squad. Cada um decide se quer receber ou não, guardado direto no
-// User (não é um Setting, que é squadId+key — isso aqui é userId). Backup diário fica
-// de fora de propósito (pedido explícito do usuário: é a cópia de segurança, continua
-// obrigatório pra todo admin) e redefinição de senha também (quem recebe foi quem pediu
-// o reset agora mesmo — desligar isso só trancaria a própria conta, sem reduzir ruído
-// nenhum). sem linha = tudo ligado (default, igual já era antes desse painel existir).
+// Liga/desliga cada gatilho de e-mail por PESSOA — não por squad. Cada um decide se
+// quer receber ou não, guardado direto no User (não é um Setting, que é squadId+key —
+// isso aqui é userId). Backup diário fica de fora de propósito (pedido explícito do
+// usuário: é a cópia de segurança, continua obrigatório pra todo admin) e redefinição
+// de senha também (quem recebe foi quem pediu o reset agora mesmo — desligar isso só
+// trancaria a própria conta, sem reduzir ruído nenhum). sem linha = tudo ligado
+// (default, igual já era antes desse painel existir).
 export const EMAIL_TYPES = ["taskAssigned", "taskDeadline", "jobFailureAlert"] as const;
 export type EmailType = (typeof EMAIL_TYPES)[number];
 

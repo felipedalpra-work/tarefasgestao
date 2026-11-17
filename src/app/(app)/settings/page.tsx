@@ -2,33 +2,17 @@
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Send, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck, KeyRound, Trash2, Thermometer } from "lucide-react";
+import { CheckCircle2, Globe, Calendar, Mail, AlertCircle, Save, Sparkles, Copy, RefreshCw, EyeOff, X, Download, ShieldCheck, KeyRound, Trash2, Thermometer } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import { cn } from "@/lib/utils";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 
 type SquadUser = { id: string; name: string | null; email: string; cargo?: string | null; role?: string };
 
-type Tab = "perfil" | "squad" | "slack";
+type Tab = "perfil" | "squad";
 
-// Espelha NOTIFICATION_TYPES/DEFAULT_NOTIFICATION_PREFS de src/lib/settings.ts — duplicado
-// aqui (não importado) porque aquele arquivo puxa o Prisma, que não pode ir pro bundle do client.
-const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
-  taskAssigned: true,
-  taskCompleted: true,
-  taskReminder: true,
-  taskDueTime: true,
-  commentMention: true,
-  tratativaOverdue: true,
-  onboardingDelay: false,
-  fechamentoIncomplete: false,
-  staleRecapSuggestions: false,
-  weeklyDigest: true,
-  meetingBriefing: true,
-};
-
-// Espelha EMAIL_TYPES/DEFAULT_EMAIL_PREFS de src/lib/settings.ts — mesmo motivo do
-// espelho de notificações acima (Prisma não pode ir pro bundle do client).
+// Espelha EMAIL_TYPES/DEFAULT_EMAIL_PREFS de src/lib/settings.ts — duplicado aqui (não
+// importado) porque aquele arquivo puxa o Prisma, que não pode ir pro bundle do client.
 const DEFAULT_EMAIL_PREFS: Record<string, boolean> = {
   taskAssigned: true,
   taskDeadline: true,
@@ -39,35 +23,6 @@ const EMAIL_PREF_ITEMS: { key: string; label: string; desc: string; ownerOnly?: 
   { key: "taskAssigned", label: "Tarefa atribuída", desc: "Quando uma tarefa nova é atribuída a você" },
   { key: "taskDeadline", label: "Alerta de prazo", desc: "Quando uma tarefa sua está vencendo ou já venceu" },
   { key: "jobFailureAlert", label: "Erro de job", desc: "Quando uma rotina automática falha (só chega pra owner da plataforma)", ownerOnly: true },
-];
-
-const NOTIFICATION_GROUPS: { title: string; items: { key: string; label: string; desc: string }[] }[] = [
-  {
-    title: "Tarefas",
-    items: [
-      { key: "taskAssigned", label: "Tarefa atribuída", desc: "Quando uma tarefa nova é atribuída a você" },
-      { key: "taskCompleted", label: "Tarefa concluída", desc: "Parabenizando quem concluiu a tarefa" },
-      { key: "taskReminder", label: "Lembrete manual", desc: "Botão \"Lembrar\" no detalhe da tarefa" },
-      { key: "taskDueTime", label: "Hora da tarefa", desc: "No horário marcado da tarefa (ex: importação toda terça 9h)" },
-      { key: "commentMention", label: "Menção em comentário", desc: "Quando alguém te marca com @nome" },
-    ],
-  },
-  {
-    title: "Lembretes automáticos",
-    items: [
-      { key: "tratativaOverdue", label: "Tratativa vencida", desc: "Prazo previsto de finalização vencido" },
-      { key: "onboardingDelay", label: "Onboarding atrasado", desc: "Marco de onboarding (D+2..D+90) vencido" },
-      { key: "fechamentoIncomplete", label: "Fechamento incompleto", desc: "Checklist do mês ainda pendente" },
-      { key: "staleRecapSuggestions", label: "Sugestões da IA paradas", desc: "Pendente de revisão há mais de 3 dias" },
-    ],
-  },
-  {
-    title: "Resumos",
-    items: [
-      { key: "weeklyDigest", label: "Resumo semanal", desc: "Toda segunda de manhã" },
-      { key: "meetingBriefing", label: "Briefing de reunião", desc: "Um dia antes de reunião com cliente" },
-    ],
-  },
 ];
 
 export default function SettingsPage() {
@@ -85,16 +40,7 @@ export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<"gemini" | "groq">("gemini");
   const [aiProviderSaving, setAiProviderSaving] = useState(false);
 
-  // Slack state
   const [users, setUsers] = useState<SquadUser[]>([]);
-  const [slackToken, setSlackToken] = useState("");
-  const [slackUserIds, setSlackUserIds] = useState<Record<string, string>>({});
-  const [slackConfigured, setSlackConfigured] = useState(false);
-  const [slackSaving, setSlackSaving] = useState(false);
-  const [slackMsg, setSlackMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [testingId, setTestingId] = useState<string | null>(null);
-  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>(DEFAULT_NOTIFICATION_PREFS);
-  const [notifSavingKey, setNotifSavingKey] = useState<string | null>(null);
 
   // Meet Recap suggestions state
   const [meetRecapEnabled, setMeetRecapEnabled] = useState(true);
@@ -157,10 +103,6 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((d) => setEmailPrefs((prev) => ({ ...prev, ...d })));
 
-    fetch("/api/settings/notifications")
-      .then((r) => r.json())
-      .then((d) => setNotificationPrefs((prev) => ({ ...prev, ...d })));
-
     fetch("/api/settings/ignored-clients")
       .then((r) => r.json())
       .then((d) => setIgnoredClients(d.clients ?? []));
@@ -173,24 +115,9 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((d) => setClientEmailTemplate(d.template ?? ""));
 
-    // load squad users + slack settings in parallel
-    Promise.all([
-      fetch("/api/users").then((r) => r.json()),
-      fetch("/api/settings/slack").then((r) => r.json()),
-    ]).then(([usersData, slackData]) => {
-      const list: SquadUser[] = Array.isArray(usersData) ? usersData : usersData.users ?? [];
-      setUsers(list);
-      if (slackData.configured) {
-        setSlackConfigured(true);
-        // token is masked — don't put it in the field so user knows it's saved
-        const ids: Record<string, string> = {};
-        list.forEach((u) => {
-          const key = `slack_user_${u.id}`;
-          if (slackData.settings?.[key]) ids[u.id] = slackData.settings[key];
-        });
-        setSlackUserIds(ids);
-      }
-    });
+    fetch("/api/users")
+      .then((r) => r.json())
+      .then((usersData) => setUsers(Array.isArray(usersData) ? usersData : usersData.users ?? []));
   }, []);
 
   useEffect(() => {
@@ -426,61 +353,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function toggleNotification(key: string, enabled: boolean) {
-    setNotifSavingKey(key);
-    const prev = notificationPrefs[key];
-    setNotificationPrefs((p) => ({ ...p, [key]: enabled }));
-    const res = await fetch("/api/settings/notifications", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: key, enabled }),
-    });
-    setNotifSavingKey(null);
-    if (!res.ok) {
-      setNotificationPrefs((p) => ({ ...p, [key]: prev }));
-      toast("Erro ao salvar", "error");
-    }
-  }
-
-  async function saveSlack() {
-    setSlackSaving(true);
-    setSlackMsg(null);
-    const body: Record<string, string> = {};
-    if (slackToken) body["slack_bot_token"] = slackToken;
-    users.forEach((u) => {
-      if (slackUserIds[u.id]) body[`slack_user_${u.id}`] = slackUserIds[u.id];
-    });
-    const res = await fetch("/api/settings/slack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setSlackSaving(false);
-    if (res.ok) {
-      setSlackConfigured(true);
-      setSlackToken("");
-      setSlackMsg({ type: "ok", text: "Configurações salvas com sucesso!" });
-    } else {
-      setSlackMsg({ type: "err", text: "Erro ao salvar. Tente novamente." });
-    }
-  }
-
-  async function testSlack(userId: string) {
-    const tokenToUse = slackToken;
-    const slackId = slackUserIds[userId];
-    if (!slackId) { setSlackMsg({ type: "err", text: "Informe o Slack User ID para testar." }); return; }
-    if (!tokenToUse && !slackConfigured) { setSlackMsg({ type: "err", text: "Salve o token primeiro antes de testar." }); return; }
-    setTestingId(userId);
-    setSlackMsg(null);
-    const body: Record<string, string> = { slackUserId: slackId };
-    if (tokenToUse) body.botToken = tokenToUse;
-    else {
-      // fetch real token from server side — re-use PUT with just slackUserId, server reads token from DB
-      // we pass botToken empty and server falls back to DB token
-      body.botToken = "";
-    }
-    const res = await fetch("/api/settings/slack", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setTestingId(null);
-    const data = await res.json();
-    setSlackMsg(data.ok ? { type: "ok", text: "Mensagem de teste enviada no Slack!" } : { type: "err", text: data.error || "Falha ao enviar. Verifique as configurações." });
-  }
-
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto">
       <div className="mb-6">
@@ -506,15 +378,6 @@ export default function SettingsPage() {
           )}
         >
           Squad
-        </button>
-        <button
-          onClick={() => setTab("slack")}
-          className={cn(
-            "text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
-            tab === "slack" ? "bg-o2-green/15 text-o2-green" : "bg-surface-2 text-ink-mid hover:text-ink"
-          )}
-        >
-          Slack
         </button>
       </div>
 
@@ -973,125 +836,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {tab === "slack" && (
-        <div className="bg-surface border border-surface-3 rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">Integração Slack</h2>
-            {slackConfigured && <CheckCircle2 size={14} className="text-o2-green" />}
-          </div>
-          <p className="text-xs text-ink-mid mb-6">
-            Envie notificações automáticas no Slack quando uma tarefa for criada e atribuída.
-          </p>
-
-          {!isAdmin && (
-            <p className="text-xs text-ink-faint bg-surface-2 rounded-lg px-3 py-2 mb-5">Só admin do squad pode configurar o Slack — abaixo é só visualização.</p>
-          )}
-
-          {/* Bot Token */}
-          <div className="mb-5">
-            <label className="block text-xs text-ink-mid mb-1.5">Bot Token</label>
-            <input
-              type="password"
-              placeholder={slackConfigured ? "••••••••••••• (salvo — cole para atualizar)" : "xoxb-00000000000-..."}
-              value={slackToken}
-              disabled={!isAdmin}
-              onChange={(e) => setSlackToken(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
-            />
-            <p className="text-xs text-ink-faint mt-1">
-              Crie em <span className="text-o2-green/70">api.slack.com/apps</span> → OAuth &amp; Permissions → Bot Token Scopes: <code className="text-ink-mid">chat:write</code>
-            </p>
-          </div>
-
-          {/* Slack User IDs per member */}
-          <div className="mb-5">
-            <label className="block text-xs text-ink-mid mb-2.5">Slack User ID por membro</label>
-            <div className="space-y-2.5">
-              {users.length === 0 ? (
-                <div className="h-8 bg-surface-2 rounded-lg animate-pulse" />
-              ) : users.map((u) => (
-                <div key={u.id} className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-full bg-o2-green/20 flex items-center justify-center text-o2-green text-xs font-bold shrink-0">
-                    {(u.name || u.email)[0].toUpperCase()}
-                  </div>
-                  <span className="text-sm text-ink-soft w-28 shrink-0 truncate">{u.name || u.email}</span>
-                  <input
-                    type="text"
-                    placeholder="U0XXXXXXXXX"
-                    value={slackUserIds[u.id] || ""}
-                    disabled={!isAdmin}
-                    onChange={(e) => setSlackUserIds((prev) => ({ ...prev, [u.id]: e.target.value }))}
-                    className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
-                  />
-                  <button
-                    onClick={() => testSlack(u.id)}
-                    disabled={!isAdmin || testingId === u.id || !slackUserIds[u.id]}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs bg-surface-2 border border-border text-ink-mid rounded-lg hover:border-o2-green/50 hover:text-o2-green disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-                  >
-                    <Send size={12} />
-                    {testingId === u.id ? "..." : "Testar"}
-                  </button>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-ink-faint mt-2">
-              Para encontrar o User ID: perfil do usuário no Slack → ⋯ → Copiar ID do membro
-            </p>
-          </div>
-
-          {/* Feedback message */}
-          {slackMsg && (
-            <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-xl mb-4 ${slackMsg.type === "ok" ? "text-o2-green bg-o2-green/10" : "text-red-400 bg-red-400/10"}`}>
-              {slackMsg.type === "ok" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-              {slackMsg.text}
-            </div>
-          )}
-
-          {/* Notificações por tipo */}
-          <div className="border-t border-surface-3 pt-5 mb-5">
-            <h3 className="text-xs font-semibold text-ink-mid uppercase tracking-wide mb-1">Notificações por tipo</h3>
-            <p className="text-xs text-ink-faint mb-4">
-              Desative o que não quiser mais receber no Slack. A notificação in-app (sino) continua normalmente — isso só liga/desliga a mensagem no Slack.
-            </p>
-            <div className="space-y-5">
-              {NOTIFICATION_GROUPS.map((group) => (
-                <div key={group.title}>
-                  <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest mb-2">{group.title}</p>
-                  <div className="space-y-1.5">
-                    {group.items.map((item) => (
-                      <label key={item.key} className={cn("flex items-center gap-3 bg-surface-2 rounded-lg px-3 py-2.5", isAdmin ? "cursor-pointer" : "cursor-not-allowed opacity-70")}>
-                        <input
-                          type="checkbox"
-                          checked={notificationPrefs[item.key]}
-                          disabled={!isAdmin || notifSavingKey === item.key}
-                          onChange={(e) => toggleNotification(item.key, e.target.checked)}
-                          className="accent-o2-green"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-ink">{item.label}</p>
-                          <p className="text-[10px] text-ink-dim">{item.desc}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Save button */}
-          {isAdmin && (
-            <button
-              onClick={saveSlack}
-              disabled={slackSaving || (!slackToken && !slackConfigured && Object.keys(slackUserIds).length === 0)}
-              className="w-full flex items-center justify-center gap-2 bg-o2-green text-bg font-bold py-3 px-4 rounded-xl hover:bg-o2-green-bright transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save size={16} />
-              {slackSaving ? "Salvando..." : "Salvar configurações Slack"}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

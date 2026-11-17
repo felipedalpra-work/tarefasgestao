@@ -4,7 +4,6 @@ import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { sendNewTaskEmail } from "@/lib/email";
 import { isEmailEnabled } from "@/lib/settings";
-import { notifyTaskAssigned } from "@/lib/slack";
 import { firstOccurrence, isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
 import { brtNow } from "@/lib/utils";
 import { normalizeAssignees, syncTaskAssignees } from "@/lib/task-assignees";
@@ -159,20 +158,6 @@ export async function POST(req: NextRequest) {
           : undefined
       )
       .catch((e) => console.error("[email] erro ao enviar:", e));
-  }
-
-  if (task.assigneeId) {
-    notifyTaskAssigned({
-      squadId: session.user.squadId,
-      assigneeDbId: task.assigneeId,
-      taskId: task.id,
-      taskTitle: task.title,
-      taskDescription: task.description,
-      priority: task.priority,
-      dueDate: task.dueDate,
-      createdBy: task.createdBy?.name || null,
-      client: task.client,
-    }).catch((e) => console.error("[slack] erro ao notificar:", e));
   }
 
   const created = await db.task.findUnique({ where: { id: task.id }, include: TASK_INCLUDE });

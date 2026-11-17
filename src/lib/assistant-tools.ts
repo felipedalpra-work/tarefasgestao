@@ -14,7 +14,6 @@ import {
 } from "./assistant-actions";
 import { resolveClientName, knownClientNames } from "./client-resolve";
 import { removeIgnoredClient } from "./settings";
-import { notifyTaskReminder } from "./slack";
 
 const PRIORITIES_OK = ["high", "medium", "low"];
 
@@ -934,31 +933,6 @@ async function marcarItemChecklist(squadId: string, args: { title?: string; item
   return { marcado: true, tarefa: alvo.task.title, item: hits[0].title, feito: done };
 }
 
-// Dispara o mesmo lembrete no Slack que o botão "Lembrar" do painel da tarefa.
-async function enviarLembrete(squadId: string, args: { title?: string }, ctx: ToolContext) {
-  const alvo = await resolveTarget(squadId, args.title || "");
-  if (!alvo.ok) return alvo;
-
-  const db = forSquad(squadId);
-  const task = await db.task.findUnique({ where: { id: alvo.task.id } });
-  if (!task) return { erro: "A tarefa não existe mais." };
-  if (!task.assigneeId) return { erro: `"${task.title}" não tem responsável — não tem pra quem lembrar.` };
-
-  const result = await notifyTaskReminder({
-    squadId,
-    assigneeDbId: task.assigneeId,
-    taskId: task.id,
-    taskTitle: task.title,
-    taskDescription: task.description,
-    priority: task.priority,
-    dueDate: task.dueDate,
-    client: task.client,
-    requestedBy: ctx.userName,
-  });
-  if (!result.ok) return { erro: result.error };
-  return { lembrete: true, tarefa: task.title };
-}
-
 // ---------------------------------------------------------------------------
 // TRATATIVA — abrir é confirmação-gated (mexe no funil que o squad usa pra reportar
 // churn/recuperação), assim como alterar uma já aberta.
@@ -1363,18 +1337,6 @@ export const ASSISTANT_TOOLS: Groq.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "enviar_lembrete",
-      description: "Dispara no Slack, agora, o mesmo lembrete do botão 'Lembrar' da tarefa, pro responsável dela. Executa direto, sem confirmação.",
-      parameters: {
-        type: "object",
-        properties: { title: { type: "string", description: "Título ou parte do título da tarefa" } },
-        required: ["title"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "registrar_tratativa",
       description:
         "Prepara a abertura de uma tratativa nova com um cliente (preventiva ou reativa) — NÃO cria na hora, fica pendente com botão Confirmar no chat, porque alimenta o funil de churn/recuperação que o squad reporta.",
@@ -1527,8 +1489,6 @@ export async function runTool(
       return anexarLinkTarefa(squadId, args);
     case "marcar_item_checklist":
       return marcarItemChecklist(squadId, args);
-    case "enviar_lembrete":
-      return enviarLembrete(squadId, args, ctx);
     case "registrar_tratativa":
       return registrarTratativa(squadId, args, ctx);
     case "alterar_tratativa":

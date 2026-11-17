@@ -19,7 +19,7 @@ type Tab = "org" | "membros" | "convites" | "permissoes";
 // se uma ação nova virar admin-only.
 const ADMIN_ONLY = [
   "Convidar, remover e promover/rebaixar membro do squad",
-  "Configurar Slack (bot token, notificações), Meet Recap Gmail, Minuta de cobrança e secret do n8n",
+  "Configurar Meet Recap Gmail, Minuta de cobrança e secret do n8n",
   "Excluir um cliente (ação irreversível — apaga tudo ligado a ele)",
   "Pausar, reativar ou rodar uma automação agora",
 ];
@@ -36,7 +36,6 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
 
   const [tab, setTab] = useState<Tab>("org");
   const [users, setUsers] = useState<SquadMember[]>(initialUsers);
-  const [slackConfigured, setSlackConfigured] = useState(false);
 
   // Organograma (só visualização)
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -45,20 +44,14 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
   const [cargoDrafts, setCargoDrafts] = useState<Record<string, string>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member", slackUserId: "" });
+  const [newMember, setNewMember] = useState({ name: "", email: "", cargo: "", role: "member" });
   const [addingMember, setAddingMember] = useState(false);
-  const [lastInvite, setLastInvite] = useState<{ email: string; url: string; slackSent: boolean } | null>(null);
+  const [lastInvite, setLastInvite] = useState<{ email: string; url: string } | null>(null);
 
   // Convites (histórico)
   const [invites, setInvites] = useState<Invite[]>([]);
   const [invitesLoaded, setInvitesLoaded] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/settings/slack")
-      .then((r) => r.json())
-      .then((d) => setSlackConfigured(!!d.configured));
-  }, []);
 
   useEffect(() => {
     if (!isAdmin || tab !== "convites" || invitesLoaded) return;
@@ -84,7 +77,7 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
     if (res.ok) {
       const data = await res.json();
       navigator.clipboard.writeText(data.inviteUrl);
-      toast(data.slackSent ? "Convite reenviado no Slack (link também copiado)" : "Convite reenviado — link copiado", "success");
+      toast("Convite reenviado — link copiado", "success");
       const refreshed = await fetch("/api/invites").then((r) => r.json());
       setInvites(Array.isArray(refreshed) ? refreshed : []);
     } else {
@@ -150,11 +143,11 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
     });
     setAddingMember(false);
     if (res.ok) {
-      const { inviteUrl, slackSent, ...created } = await res.json();
+      const { inviteUrl, ...created } = await res.json();
       setUsers((prev) => [...prev, created]);
-      setLastInvite({ email: created.email, url: inviteUrl, slackSent });
-      setNewMember({ name: "", email: "", cargo: "", role: "member", slackUserId: "" });
-      toast(slackSent ? "Membro adicionado e convite enviado no Slack" : "Membro adicionado — copie o link de convite abaixo", "success");
+      setLastInvite({ email: created.email, url: inviteUrl });
+      setNewMember({ name: "", email: "", cargo: "", role: "member" });
+      toast("Membro adicionado — copie o link de convite abaixo", "success");
     } else {
       const data = await res.json().catch(() => ({}));
       toast(data.error || "Erro ao adicionar membro", "error");
@@ -354,15 +347,6 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
                   onChange={(e) => setNewMember((prev) => ({ ...prev, cargo: e.target.value }))}
                   className="flex-1 min-w-24 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
                 />
-                {slackConfigured && (
-                  <input
-                    type="text"
-                    placeholder="Slack ID (p/ mandar convite)"
-                    value={newMember.slackUserId}
-                    onChange={(e) => setNewMember((prev) => ({ ...prev, slackUserId: e.target.value }))}
-                    className="w-44 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-                  />
-                )}
                 <select
                   value={newMember.role}
                   onChange={(e) => setNewMember((prev) => ({ ...prev, role: e.target.value }))}
@@ -380,16 +364,10 @@ export function EquipeClient({ initialUsers }: { initialUsers: SquadMember[] }) 
                   {addingMember ? "..." : "Adicionar"}
                 </button>
               </div>
-              {slackConfigured && (
-                <p className="text-xs text-ink-faint mt-1.5">Informando o Slack ID, o convite já é mandado por DM assim que a pessoa for adicionada.</p>
-              )}
-
               {lastInvite && (
                 <div className="mt-3 bg-surface-2 rounded-lg px-4 py-3">
                   <p className="text-xs text-ink-mid mb-2">
-                    {lastInvite.slackSent
-                      ? <>Convite enviado por DM no Slack pra <strong className="text-ink-soft">{lastInvite.email}</strong>. Se quiser, também dá pra mandar o link direto:</>
-                      : <>Copie o link abaixo e envie pra <strong className="text-ink-soft">{lastInvite.email}</strong> por onde preferir (Slack, WhatsApp etc.):</>}
+                    Copie o link abaixo e envie pra <strong className="text-ink-soft">{lastInvite.email}</strong> por onde preferir (WhatsApp, e-mail etc.):
                   </p>
                   <div className="flex items-center gap-2">
                     <input

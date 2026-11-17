@@ -12,7 +12,7 @@ const TYPING_DELAY_MS = 550;
 
 type Props = { needsOnboarding: boolean; squadName: string; isAdmin: boolean };
 
-type StepKey = "welcome" | "tasks" | "clients" | "recaps" | "team" | "assistant" | "google" | "slack" | "done";
+type StepKey = "welcome" | "tasks" | "clients" | "recaps" | "team" | "assistant" | "google" | "done";
 
 // Roteiro do tour — texto fixo (não chama IA de verdade), só o estilo de
 // apresentação (balões de chat, "digitando…") imita o assistente de verdade
@@ -28,18 +28,13 @@ const SCRIPT: Record<StepKey, { icon: React.ElementType; title: string; route: s
   team: { icon: Users, title: "Equipe", route: "/equipe" },
   assistant: { icon: LogoIcon, title: "Assistente de IA", route: null },
   google: { icon: Globe, title: "Conta Google", route: "/settings" },
-  slack: { icon: Users, title: "Slack", route: "/settings" },
   done: { icon: CheckCircle2, title: "Tudo pronto", route: "/dashboard" },
 };
 
 // Wizard curto no 1o login — sempre pulável, nunca bloqueia o resto do app.
-// Passos de squad-wide (Slack) só aparecem pro admin (só ele configura isso —
-// ver a sub-aba Permissões em /equipe).
 export function OnboardingGate({ needsOnboarding, squadName, isAdmin }: Props) {
   const router = useRouter();
-  const steps: StepKey[] = isAdmin
-    ? ["welcome", "tasks", "clients", "recaps", "team", "assistant", "google", "slack", "done"]
-    : ["welcome", "tasks", "clients", "recaps", "team", "assistant", "google", "done"];
+  const steps: StepKey[] = ["welcome", "tasks", "clients", "recaps", "team", "assistant", "google", "done"];
 
   const [dismissed, setDismissed] = useState(false);
   const [step, setStep] = useState(() => {
@@ -50,9 +45,6 @@ export function OnboardingGate({ needsOnboarding, squadName, isAdmin }: Props) {
   const [typing, setTyping] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
-  const [slackToken, setSlackToken] = useState("");
-  const [slackSaving, setSlackSaving] = useState(false);
-  const [slackSaved, setSlackSaved] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const current = steps[step];
@@ -98,18 +90,6 @@ export function OnboardingGate({ needsOnboarding, squadName, isAdmin }: Props) {
   async function connectGoogle() {
     localStorage.setItem(STORAGE_KEY, String(step));
     await signIn("google", { callbackUrl: window.location.href });
-  }
-
-  async function saveSlackToken() {
-    if (!slackToken.trim()) { goTo(step + 1); return; }
-    setSlackSaving(true);
-    const res = await fetch("/api/settings/slack", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slack_bot_token: slackToken.trim() }),
-    });
-    setSlackSaving(false);
-    if (res.ok) { setSlackSaved(true); goTo(step + 1); }
   }
 
   function renderBubbleBody(key: StepKey) {
@@ -172,22 +152,6 @@ export function OnboardingGate({ needsOnboarding, squadName, isAdmin }: Props) {
                 Conectar conta Google
               </button>
             )}
-          </div>
-        );
-      case "slack":
-        return (
-          <div>
-            <p className="text-xs text-ink-mid leading-relaxed mb-3">
-              Opcional — cole o Bot Token do Slack do squad pra receber avisos de tarefa por lá (dá pra mapear cada pessoa depois, aqui mesmo em Configurações → Slack).
-            </p>
-            <input
-              type="password"
-              placeholder="xoxb-00000000000-... (opcional)"
-              value={slackToken}
-              onChange={(e) => setSlackToken(e.target.value)}
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50"
-            />
-            {slackSaved && <p className="text-xs text-o2-green mt-2">Token salvo!</p>}
           </div>
         );
       case "done":
@@ -263,14 +227,6 @@ export function OnboardingGate({ needsOnboarding, squadName, isAdmin }: Props) {
               className="text-xs font-bold text-bg bg-o2-green px-4 py-2 rounded-lg hover:bg-o2-green-bright transition-all ml-auto"
             >
               {isAdmin ? "Convidar time" : "Começar a usar"}
-            </button>
-          ) : current === "slack" ? (
-            <button
-              onClick={saveSlackToken}
-              disabled={slackSaving || typing}
-              className="text-xs font-medium text-o2-green hover:underline disabled:opacity-50"
-            >
-              {slackSaving ? "Salvando..." : slackToken.trim() ? "Salvar e continuar →" : "Pular →"}
             </button>
           ) : (
             <button onClick={() => goTo(step + 1)} disabled={typing} className="text-xs font-medium text-o2-green hover:underline disabled:opacity-50">

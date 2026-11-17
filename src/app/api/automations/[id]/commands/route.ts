@@ -11,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 // listagem como "pausada"); a tarefa fica na fila (AutomationCommand) pra uma
 // tarefa agendada do Claude (bridge de comandos) buscar, aplicar o efeito real
 // no agendador do lado dela (ex: desabilitar o cron), e marcar como concluída.
-// Controle operacional de squad (mesmo nível de Slack/n8n/Meet Recap) — admin-only.
+// Controle operacional de squad (mesmo nível de n8n/Meet Recap) — admin-only.
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

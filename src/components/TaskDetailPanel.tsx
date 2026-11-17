@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   X, Send, MessageSquare, Calendar, User, Tag, Building2, Clock, CheckCircle2,
-  Circle, AlertCircle, Trash2, Pencil, Check, ListChecks, Link2, Plus, History, Repeat, Video, Bell, Users,
+  Circle, AlertCircle, Trash2, Pencil, Check, ListChecks, Link2, Plus, History, Repeat, Video, Users,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -66,7 +66,6 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
   const [sending, setSending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [sendingReminder, setSendingReminder] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMenu, setStatusMenu] = useState(false);
@@ -87,7 +86,6 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
     setText("");
     setConfirmDelete(false);
     setDeleting(false);
-    setSendingReminder(false);
     setEditing(false);
     setStatusMenu(false);
     setShowLinkInput(false);
@@ -208,19 +206,6 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
       setActivity(null);
     } else {
       toast("Erro ao marcar a parte", "error");
-    }
-  }
-
-  async function sendReminder() {
-    if (!task || sendingReminder) return;
-    setSendingReminder(true);
-    const res = await fetch(`/api/tasks/${task.id}/remind`, { method: "POST" });
-    setSendingReminder(false);
-    if (res.ok) {
-      toast("Lembrete enviado no Slack", "success");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      toast(data.error || "Erro ao enviar lembrete", "error");
     }
   }
 
@@ -530,17 +515,6 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
               {responsibles.length > 0 && (
                 <MetaRow icon={joint ? Users : User} label={joint ? "Responsáveis" : "Responsável"}>
                   <span className="text-xs text-ink-soft truncate">{describeResponsibles(responsibles)}</span>
-                  {task.assignee && (
-                    <button
-                      onClick={sendReminder}
-                      disabled={sendingReminder}
-                      className="ml-auto flex items-center gap-1 text-xs text-ink-faint hover:text-o2-green transition-colors disabled:opacity-50 shrink-0"
-                      title={joint ? "Enviar lembrete no Slack pro dono da tarefa" : "Enviar lembrete no Slack pra essa pessoa"}
-                    >
-                      <Bell size={12} />
-                      {sendingReminder ? "Enviando…" : "Lembrar"}
-                    </button>
-                  )}
                 </MetaRow>
               )}
               {task.client && (
@@ -792,7 +766,7 @@ export function TaskDetailPanel({ task, onClose, onStatusChange, onDeleted, onUp
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitComment(e as unknown as React.FormEvent); } }}
-                  placeholder="Escreva um comentário… @nome menciona no Slack"
+                  placeholder="Escreva um comentário… @nome notifica a pessoa"
                   rows={2}
                   className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2.5 text-xs text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 resize-none pr-10"
                 />

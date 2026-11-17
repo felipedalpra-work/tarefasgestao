@@ -4,10 +4,10 @@ import { getMeetRecapGmailUserId } from "./settings";
 import { getGroq, GROQ_MODEL } from "./groq";
 import { generateJsonWithGemini } from "./gemini";
 
-// Convenção da chave: mesmo truque já usado pelo Slack (src/lib/slack.ts,
-// "slack_user_<id>") pra guardar um valor por usuário dentro da tabela
-// Setting (que é só por squad, sem coluna userId própria) — só que aqui é
-// self-service (o próprio usuário mexe só na própria linha, sem admin no meio).
+// Convenção da chave ("gemini_api_key_user_<id>") pra guardar um valor por
+// usuário dentro da tabela Setting (que é só por squad, sem coluna userId
+// própria) — self-service (o próprio usuário mexe só na própria linha, sem
+// admin no meio).
 export function geminiKeySettingKey(userId: string): string {
   return `gemini_api_key_user_${userId}`;
 }

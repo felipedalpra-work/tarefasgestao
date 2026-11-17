@@ -403,9 +403,7 @@ export async function sendDailyBackupEmail({
 }
 
 // Alerta pros owners da plataforma (cross-squad) quando um job crítico falha de
-// verdade — hoje só o backup diário usa isso (src/lib/backup-email.ts). Vai por
-// e-mail (não Slack) de propósito: Slack é configurado por squad (bot token
-// próprio), e esse alerta precisa alcançar os owners não importa qual squad falhou.
+// verdade — hoje só o backup diário usa isso (src/lib/backup-email.ts).
 export async function sendJobFailureAlertEmail({
   squadId,
   to,

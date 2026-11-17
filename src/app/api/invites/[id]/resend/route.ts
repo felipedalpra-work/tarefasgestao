@@ -3,7 +3,6 @@ import crypto from "crypto";
 import { auth } from "@/lib/auth";
 import { isAdmin } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { getSlackConfig, sendSlackDM } from "@/lib/slack";
 import { getBaseUrl } from "@/lib/base-url";
 
 const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,8 +10,8 @@ const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 type Params = { params: Promise<{ id: string }> };
 
 // Gera um token novo pro mesmo convite (invalida o anterior) — pra quem ainda
-// não aceitou (pendente ou expirado). Reenvia por Slack automaticamente se já
-// existir um Slack User ID salvo pra essa pessoa.
+// não aceitou (pendente ou expirado). O link volta na resposta pra copiar/repassar
+// por qualquer canal.
 export async function POST(_req: Request, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,22 +34,5 @@ export async function POST(_req: Request, { params }: Params) {
   });
   const inviteUrl = `${getBaseUrl()}/reset-password?token=${rawToken}`;
 
-  let slackSent = false;
-  const invitedUser = await prisma.user.findUnique({ where: { email: invite.email } });
-  if (invitedUser) {
-    const config = await getSlackConfig(session.user.squadId);
-    const slackUserId = config?.userMap[invitedUser.id];
-    if (config && slackUserId) {
-      const squad = await prisma.squad.findUnique({ where: { id: session.user.squadId }, select: { name: true } });
-      const lines = [
-        `👋 *Convite reenviado — squad ${squad?.name || "O2"}*`,
-        `<${inviteUrl}|Criar senha e entrar →>`,
-        "",
-        `Esse link expira em 7 dias. Também dá pra entrar direto com o Google usando o e-mail ${invite.email}.`,
-      ].join("\n");
-      slackSent = await sendSlackDM(slackUserId, config.botToken, lines);
-    }
-  }
-
-  return NextResponse.json({ inviteUrl, slackSent });
+  return NextResponse.json({ inviteUrl });
 }

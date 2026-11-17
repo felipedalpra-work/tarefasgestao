@@ -1,4 +1,4 @@
-// URL base da plataforma para links em emails, Slack, etc.
+// URL base da plataforma para links em e-mails etc.
 // Configure APP_URL no .env quando rodar fora do localhost.
 // Se ninguém configurar, cai nas variáveis que a própria Vercel injeta automaticamente
 // em todo deploy — assim o link ainda funciona em produção mesmo sem configuração manual

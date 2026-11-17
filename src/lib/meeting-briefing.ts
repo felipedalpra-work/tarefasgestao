@@ -1,10 +1,7 @@
 import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
 import { sendSystemEmail } from "./email";
-import { getSlackConfig, sendSlackDM } from "./slack";
 import { log } from "./logger";
-import { getBaseUrl } from "./base-url";
-import { isNotificationEnabled } from "./settings";
 
 function briefingTemplate(client: string, meetingDate: string, o2Tasks: any[], clientTasks: any[]) {
   const renderTask = (t: any) => `
@@ -154,36 +151,6 @@ export async function sendMeetingBriefings(): Promise<void> {
           detail: String(err),
         });
         console.error(`[briefing] erro ao enviar para ${user.email}:`, err);
-      }
-    }
-
-    // Slack briefing
-    const slackConfig = (await isNotificationEnabled(event.squadId, "meetingBriefing")) ? await getSlackConfig(event.squadId) : null;
-    if (slackConfig) {
-      const slackLines = [
-        `📅 *Reunião amanhã: O2 Inc & ${client}*`,
-        `🕐 ${meetingDate}`,
-        "",
-      ];
-      if (o2Tasks.length > 0) {
-        slackLines.push("*✅ O que a O2 precisa entregar:*");
-        o2Tasks.slice(0, 5).forEach(t => slackLines.push(`• ${t.title}${t.assignee?.name ? ` _(${t.assignee.name})_` : ""}`));
-        if (o2Tasks.length > 5) slackLines.push(`  _…e mais ${o2Tasks.length - 5}_`);
-      } else {
-        slackLines.push("*✅ O que a O2 precisa entregar:* _nenhuma entrega pendente_");
-      }
-      slackLines.push("");
-      if (clientTasks.length > 0) {
-        slackLines.push(`*📥 O que ${client} precisa entregar:*`);
-        clientTasks.slice(0, 5).forEach(t => slackLines.push(`• ${t.title}`));
-      } else {
-        slackLines.push(`*📥 O que ${client} precisa entregar:* _nenhuma entrega pendente_`);
-      }
-      slackLines.push("", `<${getBaseUrl()}/clientes/${encodeURIComponent(client)}|Ver pasta do cliente →>`);
-
-      const slackMsg = slackLines.join("\n");
-      for (const slackUserId of Object.values(slackConfig.userMap)) {
-        await sendSlackDM(slackUserId, slackConfig.botToken, slackMsg).catch(console.error);
       }
     }
 

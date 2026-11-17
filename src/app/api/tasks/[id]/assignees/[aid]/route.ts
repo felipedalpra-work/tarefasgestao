@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
-import { notifyTaskCompleted } from "@/lib/slack";
 import { spawnNextOccurrence } from "@/lib/task-recurrence";
 import { brtNow } from "@/lib/utils";
 
@@ -74,13 +73,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await prisma.taskActivity.create({
       data: { taskId: id, userName: null, type: "status", detail: "Todas as partes concluídas → tarefa concluída" },
     }).catch((e) => console.error("[activity]", e));
-
-    await notifyTaskCompleted({
-      squadId: session.user.squadId,
-      userDbId: session.user.id,
-      taskTitle: row.task.title,
-      client: row.task.client,
-    }).catch((e) => console.error("[slack]", e));
 
     // Fechar pela última parte é uma conclusão como qualquer outra: a série recorrente
     // precisa gerar a próxima ocorrência aqui também, senão a rotina morre calada quando

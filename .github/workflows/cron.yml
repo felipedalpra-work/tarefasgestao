@@ -12,7 +12,6 @@ on:
     - cron: "0 11 * * *"   # deadlines — 8h BRT
     - cron: "0 20 * * *"   # deadlines — 17h BRT
     - cron: "0 21 * * *"   # briefing — 18h BRT
-    - cron: "0 11 * * 1"   # digest — segunda 8h BRT
     - cron: "0 6 * * *"    # backup-email — 3h BRT, fora do horário de uso
     - cron: "0 12 * * *"   # pipefy-sync — 9h BRT
     - cron: "0 23 * * *"   # gmail-sync — 20h BRT (1x/dia, pedido do usuário — antes era a
@@ -24,7 +23,7 @@ on:
         description: "Job pra rodar manualmente"
         required: true
         type: choice
-        options: [gmail-sync, calendar-sync, task-reminders, deadlines, briefing, digest, backup-email, pipefy-sync]
+        options: [gmail-sync, calendar-sync, task-reminders, deadlines, briefing, backup-email, pipefy-sync]
 
 jobs:
   run:
@@ -42,7 +41,6 @@ jobs:
               "0 11 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
               "0 20 * * *")   echo "jobs=deadlines" >> "$GITHUB_OUTPUT" ;;
               "0 21 * * *")   echo "jobs=briefing" >> "$GITHUB_OUTPUT" ;;
-              "0 11 * * 1")   echo "jobs=digest" >> "$GITHUB_OUTPUT" ;;
               "0 6 * * *")    echo "jobs=backup-email" >> "$GITHUB_OUTPUT" ;;
               "0 12 * * *")   echo "jobs=pipefy-sync" >> "$GITHUB_OUTPUT" ;;
               "0 23 * * *")   echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;

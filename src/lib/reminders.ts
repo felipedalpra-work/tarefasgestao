@@ -1,7 +1,5 @@
 import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
-import { notifyUser } from "./slack";
-import { isNotificationEnabled } from "./settings";
 import { brtNow, timeToMinutes } from "./utils";
 import { describeRecurrence } from "./recurrence";
 
@@ -16,21 +14,17 @@ async function alreadyNotifiedToday(type: string, link: string): Promise<boolean
   return !!existing;
 }
 
-// sendSlack: normalmente vem de isNotificationEnabled(tipo) — a notificação in-app (sino)
-// acontece sempre; o Slack é o canal que dá pra desligar por tipo em Configurações.
-async function broadcast(squadId: string, users: { id: string }[], type: string, message: string, link: string, sendSlack: boolean) {
+async function broadcast(squadId: string, users: { id: string }[], type: string, message: string, link: string) {
   if (await alreadyNotifiedToday(type, link)) return;
   const db = forSquad(squadId);
   for (const u of users) {
     await db.notification.create({ data: { squadId, userId: u.id, type, message, link } });
-    if (sendSlack) await notifyUser(squadId, u.id, message).catch(() => {});
   }
 }
 
-async function notifyOne(squadId: string, userId: string, type: string, message: string, link: string, sendSlack: boolean) {
+async function notifyOne(squadId: string, userId: string, type: string, message: string, link: string) {
   if (await alreadyNotifiedToday(type, link)) return;
   await forSquad(squadId).notification.create({ data: { squadId, userId, type, message, link } });
-  if (sendSlack) await notifyUser(squadId, userId, message).catch(() => {});
 }
 
 const MILESTONES = [
@@ -62,7 +56,7 @@ export async function checkOnboardingDelays(squadId: string): Promise<number> {
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `⏰ Onboarding atrasado: "${m.label}" de ${c.client} venceu em ${target.toLocaleDateString("pt-BR")}`;
-      await broadcast(squadId, users, `onboarding_atraso_${m.key}`, message, link, await isNotificationEnabled(squadId, "onboardingDelay"));
+      await broadcast(squadId, users, `onboarding_atraso_${m.key}`, message, link);
       alerted++;
     }
   }
@@ -79,14 +73,13 @@ export async function checkTratativasOverdue(squadId: string): Promise<number> {
     db.user.findMany({ select: { id: true } }),
   ]);
 
-  const tratativaSlackEnabled = await isNotificationEnabled(squadId, "tratativaOverdue");
   for (const t of tratativas) {
     const link = `/tratativas`;
     const message = `⚠️ Tratativa com prazo vencido: "${t.motivo}" (${t.client}) — previsto pra ${new Date(t.dataPrevistaFinalizacao!).toLocaleDateString("pt-BR")}`;
     if (t.responsavelId) {
-      await notifyOne(squadId, t.responsavelId, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
+      await notifyOne(squadId, t.responsavelId, `tratativa_atraso_${t.id}`, message, link);
     } else {
-      await broadcast(squadId, users, `tratativa_atraso_${t.id}`, message, link, tratativaSlackEnabled);
+      await broadcast(squadId, users, `tratativa_atraso_${t.id}`, message, link);
     }
   }
   return tratativas.length;
@@ -123,7 +116,7 @@ export async function checkFechamentoIncompleto(squadId: string): Promise<number
 
       const link = `/clientes/${encodeURIComponent(c.client)}`;
       const message = `📋 Fechamento de ${String(p.month).padStart(2, "0")}/${p.year} de ${c.client} está incompleto`;
-      await broadcast(squadId, users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link, await isNotificationEnabled(squadId, "fechamentoIncomplete"));
+      await broadcast(squadId, users, `fechamento_incompleto_${c.client}_${p.year}_${p.month}`, message, link);
       alerted++;
     }
   }
@@ -143,7 +136,7 @@ export async function checkStaleRecapSuggestions(squadId: string): Promise<numbe
   if (count === 0) return 0;
 
   const message = `🤖 ${count} sugestão(ões) da IA aguardando revisão há mais de 3 dias`;
-  await broadcast(squadId, users, "recap_pendente", message, "/sugestoes-ia", await isNotificationEnabled(squadId, "staleRecapSuggestions"));
+  await broadcast(squadId, users, "recap_pendente", message, "/sugestoes-ia");
   return count;
 }
 
@@ -172,7 +165,6 @@ export async function checkTaskDueTimes(squadId: string): Promise<number> {
     },
   });
 
-  const slackEnabled = await isNotificationEnabled(squadId, "taskDueTime");
   let notified = 0;
 
   for (const task of tasks) {
@@ -184,7 +176,7 @@ export async function checkTaskDueTimes(squadId: string): Promise<number> {
     const userId = task.assigneeId ?? task.createdById;
     const repeat = describeRecurrence(task.recurrence, task.recurrenceWeekdays);
     const message = `⏰ ${task.dueTime} — hora de: ${task.title}${task.client ? ` (${task.client})` : ""}${repeat ? ` · ${repeat}` : ""}`;
-    await notifyOne(squadId, userId, `task_hora_${task.id}`, message, `/tasks?task=${task.id}`, slackEnabled);
+    await notifyOne(squadId, userId, `task_hora_${task.id}`, message, `/tasks?task=${task.id}`);
     notified++;
   }
 

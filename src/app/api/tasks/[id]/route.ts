@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { recordTaskChanges } from "@/lib/activity";
-import { notifyTaskCompleted } from "@/lib/slack";
 import { isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
 import { spawnNextOccurrence } from "@/lib/task-recurrence";
 import { brtNow } from "@/lib/utils";
@@ -170,16 +169,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         link: `/tasks?task=${task.id}`,
       },
     }).catch((e) => console.error("[notification]", e));
-  }
-
-  // parabeniza no Slack quem concluiu a tarefa
-  if (body.status === "done" && before.status !== "done" && session.user?.id) {
-    await notifyTaskCompleted({
-      squadId: session.user.squadId,
-      userDbId: session.user.id,
-      taskTitle: task.title,
-      client: task.client,
-    }).catch((e) => console.error("[slack]", e));
   }
 
   // Recorrência: ao concluir, cria a próxima ocorrência. O `recurrenceSpawned` do
