@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
 import { sendDeadlineAlertEmail } from "./email";
 import { createClientTaskDraft } from "./gmail-draft";
+import { isEmailEnabled } from "./settings";
 
 async function checkDeadlinesForSquad(squadId: string): Promise<number> {
   const db = forSquad(squadId);
@@ -16,13 +17,14 @@ async function checkDeadlinesForSquad(squadId: string): Promise<number> {
       dueDate: { not: null, lte: in2days },
     },
     include: {
-      assignee: { select: { name: true, email: true } },
+      assignee: { select: { id: true, name: true, email: true } },
     },
   });
 
   let sent = 0;
   for (const task of tasks) {
     if (!task.assignee?.email || !task.dueDate) continue;
+    if (!(await isEmailEnabled(task.assignee.id, "taskDeadline"))) continue;
 
     const diffMs = new Date(task.dueDate).getTime() - now.getTime();
     const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));

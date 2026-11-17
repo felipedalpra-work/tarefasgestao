@@ -31,6 +31,7 @@ model User {
   password              String?
   cargo                 String?
   onboardingCompletedAt DateTime? // null = ainda não viu/concluiu o onboarding animado no 1o login
+  emailPrefs            Json? // preferência pessoal por gatilho de e-mail (nova tarefa, prazo, erro de job) — sem linha = tudo ligado (default)
   squad                 Squad                @relation(fields: [squadId], references: [id])
   accounts              Account[]
   sessions              Session[]

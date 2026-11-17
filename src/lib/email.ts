@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { prisma } from "./prisma";
-import { getBillingDraftOwnerUserId } from "./settings";
+import { getBillingDraftOwnerUserId, getSystemEmailSenderUserId } from "./settings";
 import { log } from "./logger";
 
 // Substitui o Resend aqui (sem domínio verificado em resend.com/domains, ele recusa todo
@@ -26,11 +26,19 @@ function wrapBase64(value: string): string {
   return value.replace(/.{76}/g, "$&\r\n");
 }
 
-// Conta Google usada pra mandar e-mail "de sistema". Sem dono configurado pro squad, ou com
-// a conta desconectada, cai pra QUALQUER conta Google conectada na plataforma — evita que
-// um alerta cross-squad (pros owners, não importa qual squad falhou) fique sem remetente só
-// porque aquele squad específico não tem dono configurado.
+// Conta Google usada pra mandar e-mail "de sistema". Ordem: remetente configurado em
+// Configurações → Squad (getSystemEmailSenderUserId) → dono da minuta de cobrança (fallback
+// histórico, de antes desse remetente dedicado existir) → QUALQUER conta Google conectada
+// na plataforma. Esse último nível evita que um alerta cross-squad (pros owners, não importa
+// qual squad falhou) fique sem remetente só porque aquele squad específico não configurou
+// nada — e o nível do meio mantém quem já estava mandando pela conta do dono da minuta sem
+// precisar reconfigurar nada no dia do deploy.
 async function resolveSystemSenderAccount(squadId: string) {
+  const senderId = await getSystemEmailSenderUserId(squadId);
+  if (senderId) {
+    const account = await prisma.account.findFirst({ where: { userId: senderId, provider: "google" } });
+    if (account?.access_token) return account;
+  }
   const ownerId = await getBillingDraftOwnerUserId(squadId);
   if (ownerId) {
     const account = await prisma.account.findFirst({ where: { userId: ownerId, provider: "google" } });

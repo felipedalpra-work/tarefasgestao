@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
 import { sendNewTaskEmail } from "@/lib/email";
+import { isEmailEnabled } from "@/lib/settings";
 import { notifyTaskAssigned } from "@/lib/slack";
 import { firstOccurrence, isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
 import { brtNow } from "@/lib/utils";
@@ -141,17 +142,23 @@ export async function POST(req: NextRequest) {
 
   revalidateTag("tasks", "max");
 
-  if (task.assignee?.email && task.assigneeId !== session.user.id) {
-    sendNewTaskEmail({
-      squadId: session.user.squadId,
-      to: task.assignee.email,
-      assigneeName: task.assignee.name || task.assignee.email,
-      taskTitle: task.title,
-      taskDescription: task.description,
-      priority: task.priority,
-      dueDate: task.dueDate,
-      createdBy: task.createdBy?.name || "Alguém do squad",
-    }).catch((e) => console.error("[email] erro ao enviar:", e));
+  if (task.assignee?.email && task.assigneeId && task.assigneeId !== session.user.id) {
+    isEmailEnabled(task.assigneeId, "taskAssigned")
+      .then((enabled) =>
+        enabled
+          ? sendNewTaskEmail({
+              squadId: session.user.squadId,
+              to: task.assignee!.email,
+              assigneeName: task.assignee!.name || task.assignee!.email,
+              taskTitle: task.title,
+              taskDescription: task.description,
+              priority: task.priority,
+              dueDate: task.dueDate,
+              createdBy: task.createdBy?.name || "Alguém do squad",
+            })
+          : undefined
+      )
+      .catch((e) => console.error("[email] erro ao enviar:", e));
   }
 
   if (task.assigneeId) {

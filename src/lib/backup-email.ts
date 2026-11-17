@@ -2,12 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { buildSquadExport } from "@/lib/squad-export";
 import { buildExportWorkbookBuffer } from "@/lib/export-to-excel";
 import { sendDailyBackupEmail, sendJobFailureAlertEmail } from "@/lib/email";
+import { isEmailEnabled } from "@/lib/settings";
 import { log } from "@/lib/logger";
 
 async function alertOwnersOfBackupFailure(squadId: string, squadName: string, errorDetail: string) {
   try {
-    const owners = await prisma.platformOwner.findMany({ select: { user: { select: { email: true } } } });
-    const to = owners.map((o) => o.user.email).filter(Boolean);
+    const owners = await prisma.platformOwner.findMany({ select: { user: { select: { id: true, email: true } } } });
+    const enabled = await Promise.all(owners.map((o) => isEmailEnabled(o.user.id, "jobFailureAlert")));
+    const to = owners.filter((_, i) => enabled[i]).map((o) => o.user.email).filter(Boolean);
     if (to.length === 0) return;
     await sendJobFailureAlertEmail({ squadId, to, jobName: "backup-email", squadName, errorDetail });
   } catch (alertErr) {

@@ -27,6 +27,20 @@ const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
   meetingBriefing: true,
 };
 
+// Espelha EMAIL_TYPES/DEFAULT_EMAIL_PREFS de src/lib/settings.ts — mesmo motivo do
+// espelho de notificações acima (Prisma não pode ir pro bundle do client).
+const DEFAULT_EMAIL_PREFS: Record<string, boolean> = {
+  taskAssigned: true,
+  taskDeadline: true,
+  jobFailureAlert: true,
+};
+
+const EMAIL_PREF_ITEMS: { key: string; label: string; desc: string; ownerOnly?: boolean }[] = [
+  { key: "taskAssigned", label: "Tarefa atribuída", desc: "Quando uma tarefa nova é atribuída a você" },
+  { key: "taskDeadline", label: "Alerta de prazo", desc: "Quando uma tarefa sua está vencendo ou já venceu" },
+  { key: "jobFailureAlert", label: "Erro de job", desc: "Quando uma rotina automática falha (só chega pra owner da plataforma)", ownerOnly: true },
+];
+
 const NOTIFICATION_GROUPS: { title: string; items: { key: string; label: string; desc: string }[] }[] = [
   {
     title: "Tarefas",
@@ -105,6 +119,14 @@ export default function SettingsPage() {
   const [billingDraftOwnerId, setBillingDraftOwnerId] = useState<string | null>(null);
   const [billingDraftSaving, setBillingDraftSaving] = useState(false);
 
+  // Remetente dos e-mails de sistema (tarefa nova, prazo, backup, erro de job) state
+  const [emailSenderId, setEmailSenderId] = useState<string | null>(null);
+  const [emailSenderSaving, setEmailSenderSaving] = useState(false);
+
+  // Preferência pessoal por gatilho de e-mail (própria conta, não do squad) state
+  const [emailPrefs, setEmailPrefs] = useState<Record<string, boolean>>(DEFAULT_EMAIL_PREFS);
+  const [emailPrefSavingKey, setEmailPrefSavingKey] = useState<string | null>(null);
+
   // Clientes ignorados (empresa que aparece na agenda mas não é da carteira) state
   const [ignoredClients, setIgnoredClients] = useState<string[]>([]);
   const [unignoring, setUnignoring] = useState<string | null>(null);
@@ -126,6 +148,14 @@ export default function SettingsPage() {
     fetch("/api/settings/billing-draft")
       .then((r) => r.json())
       .then((d) => setBillingDraftOwnerId(d.ownerUserId ?? null));
+
+    fetch("/api/settings/email-sender")
+      .then((r) => r.json())
+      .then((d) => setEmailSenderId(d.senderUserId ?? null));
+
+    fetch("/api/settings/email-prefs")
+      .then((r) => r.json())
+      .then((d) => setEmailPrefs((prev) => ({ ...prev, ...d })));
 
     fetch("/api/settings/notifications")
       .then((r) => r.json())
@@ -281,6 +311,40 @@ export default function SettingsPage() {
       toast(ownerUserId ? "Dono da minuta de cobrança atualizado" : "Minuta de cobrança desativada", "success");
     } else {
       setBillingDraftOwnerId(prev);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function saveEmailSender(senderUserId: string | null) {
+    setEmailSenderSaving(true);
+    const prev = emailSenderId;
+    setEmailSenderId(senderUserId);
+    const res = await fetch("/api/settings/email-sender", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ senderUserId }),
+    });
+    setEmailSenderSaving(false);
+    if (res.ok) {
+      toast(senderUserId ? "Remetente dos e-mails atualizado" : "Voltou ao remetente padrão", "success");
+    } else {
+      setEmailSenderId(prev);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function toggleEmailPref(key: string, enabled: boolean) {
+    setEmailPrefSavingKey(key);
+    const prev = emailPrefs[key];
+    setEmailPrefs((p) => ({ ...p, [key]: enabled }));
+    const res = await fetch("/api/settings/email-prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: key, enabled }),
+    });
+    setEmailPrefSavingKey(null);
+    if (!res.ok) {
+      setEmailPrefs((p) => ({ ...p, [key]: prev }));
       toast("Erro ao salvar", "error");
     }
   }
@@ -517,6 +581,33 @@ export default function SettingsPage() {
             )}
           </div>
 
+          {/* Preferências de e-mail (pessoal) */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">E-mails que você recebe</h2>
+            <p className="text-xs text-ink-mid mb-4">
+              Liga/desliga cada tipo de e-mail só pra você — não afeta o resto do squad. O backup diário e a
+              redefinição de senha não têm essa opção: o backup é obrigatório pra todo admin, e a redefinição só
+              chega quando você mesmo pede.
+            </p>
+            <div className="space-y-1.5">
+              {EMAIL_PREF_ITEMS.filter((item) => !item.ownerOnly || session?.user?.isOwner).map((item) => (
+                <label key={item.key} className="flex items-center gap-3 bg-surface-2 rounded-lg px-4 py-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={emailPrefs[item.key] ?? true}
+                    disabled={emailPrefSavingKey === item.key}
+                    onChange={(e) => toggleEmailPref(item.key, e.target.checked)}
+                    className="accent-o2-green"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-ink">{item.label}</p>
+                    <p className="text-xs text-ink-dim">{item.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Gemini pessoal (self-service) */}
           <div className="bg-surface border border-surface-3 rounded-xl p-6">
             <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">IA pessoal (Gemini)</h2>
@@ -656,6 +747,29 @@ export default function SettingsPage() {
               className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
             >
               <option value="">Desligado</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name || u.email}</option>
+              ))}
+            </select>
+            {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
+          </div>
+
+          {/* Remetente dos e-mails de sistema */}
+          <div className="bg-surface border border-surface-3 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Remetente dos e-mails</h2>
+            <p className="text-xs text-ink-mid mb-4">
+              Conta Google que assina os e-mails de tarefa nova, alerta de prazo, backup diário e erro de job — todos saem
+              por ela. Sem ninguém selecionado aqui, usa o dono da minuta de cobrança e, sem isso também, qualquer conta
+              conectada na plataforma. Quando existir um e-mail corporativo só da plataforma, basta selecionar essa conta
+              aqui assim que ela conectar o Google — não precisa de nada além disso.
+            </p>
+            <select
+              value={emailSenderId ?? ""}
+              disabled={emailSenderSaving || !isAdmin}
+              onChange={(e) => saveEmailSender(e.target.value || null)}
+              className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+            >
+              <option value="">Padrão (dono da minuta de cobrança)</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.name || u.email}</option>
               ))}

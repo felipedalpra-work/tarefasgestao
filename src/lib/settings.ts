@@ -9,6 +9,7 @@ const BILLING_DRAFT_OWNER_KEY = "billing_draft_owner_user_id";
 const TEMPERATURE_PROMPT_KEY = "pipefy_temperature_prompt";
 const TEMPERATURE_PROMPT_DISMISSED_KEY = "pipefy_temperature_prompt_dismissed";
 const CLIENT_EMAIL_TEMPLATE_KEY = "weekly_client_email_template";
+const SYSTEM_EMAIL_SENDER_KEY = "system_email_sender_user_id";
 
 // Sem linha na tabela Setting = ligado (comportamento histórico, antes de existir esse flag)
 export async function isMeetRecapSuggestionsEnabled(squadId: string): Promise<boolean> {
@@ -144,6 +145,32 @@ export async function setClientEmailTemplate(squadId: string, template: string):
   });
 }
 
+// Quem manda os e-mails "de sistema" (tarefa nova, alerta de prazo, backup, erro de job) —
+// ver resolveSystemSenderAccount em src/lib/email.ts. Separado do dono da minuta de
+// cobrança (billing draft, acima): esse aqui é sobre QUEM assina o e-mail que sai pro
+// squad inteiro, aquele é sobre o rascunho de cobrança pro cliente — são recursos
+// diferentes mesmo reaproveitando a mesma conta Google por padrão hoje. Pensado também
+// pra já poder apontar pra um e-mail corporativo só da plataforma assim que esse usuário
+// existir e conectar o Google — sem precisar de código novo quando esse dia chegar.
+// null/sem linha = cai no fallback de resolveSystemSenderAccount (dono da minuta, depois
+// qualquer conta conectada).
+export async function getSystemEmailSenderUserId(squadId: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: SYSTEM_EMAIL_SENDER_KEY } } });
+  return row?.value || null;
+}
+
+export async function setSystemEmailSenderUserId(squadId: string, userId: string | null): Promise<void> {
+  if (!userId) {
+    await prisma.setting.deleteMany({ where: { squadId, key: SYSTEM_EMAIL_SENDER_KEY } });
+    return;
+  }
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: SYSTEM_EMAIL_SENDER_KEY } },
+    update: { value: userId },
+    create: { squadId, key: SYSTEM_EMAIL_SENDER_KEY, value: userId },
+  });
+}
+
 // Empresas que aparecem na agenda de alguém do squad mas NÃO são da carteira.
 // "Cliente" não é entidade própria, é uma string — e uma das fontes dela é o Google
 // Calendar: todo evento "O2 Inc & <Nome> | ..." na agenda de quem conectou a conta vira
@@ -262,5 +289,39 @@ export async function setNotificationPref(squadId: string, type: NotificationTyp
     update: { value: JSON.stringify(prefs) },
     create: { squadId, key: NOTIFICATION_PREFS_KEY, value: JSON.stringify(prefs) },
   });
+  return prefs;
+}
+
+// Liga/desliga cada gatilho de E-MAIL (diferente do painel acima, que é Slack) por
+// PESSOA — não por squad. Cada um decide se quer receber ou não, guardado direto no
+// User (não é um Setting, que é squadId+key — isso aqui é userId). Backup diário fica
+// de fora de propósito (pedido explícito do usuário: é a cópia de segurança, continua
+// obrigatório pra todo admin) e redefinição de senha também (quem recebe foi quem pediu
+// o reset agora mesmo — desligar isso só trancaria a própria conta, sem reduzir ruído
+// nenhum). sem linha = tudo ligado (default, igual já era antes desse painel existir).
+export const EMAIL_TYPES = ["taskAssigned", "taskDeadline", "jobFailureAlert"] as const;
+export type EmailType = (typeof EMAIL_TYPES)[number];
+
+const DEFAULT_EMAIL_PREFS: Record<EmailType, boolean> = {
+  taskAssigned: true,
+  taskDeadline: true,
+  jobFailureAlert: true,
+};
+
+export async function getEmailPrefs(userId: string): Promise<Record<EmailType, boolean>> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { emailPrefs: true } });
+  const stored = (user?.emailPrefs as Partial<Record<EmailType, boolean>> | null) ?? null;
+  return { ...DEFAULT_EMAIL_PREFS, ...stored };
+}
+
+export async function isEmailEnabled(userId: string, type: EmailType): Promise<boolean> {
+  const prefs = await getEmailPrefs(userId);
+  return prefs[type];
+}
+
+export async function setEmailPref(userId: string, type: EmailType, enabled: boolean): Promise<Record<EmailType, boolean>> {
+  const prefs = await getEmailPrefs(userId);
+  prefs[type] = enabled;
+  await prisma.user.update({ where: { id: userId }, data: { emailPrefs: prefs } });
   return prefs;
 }
