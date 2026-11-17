@@ -14,9 +14,10 @@ on:
     - cron: "0 21 * * *"   # briefing — 18h BRT
     - cron: "0 6 * * *"    # backup-email — 3h BRT, fora do horário de uso
     - cron: "0 12 * * *"   # pipefy-sync — 9h BRT
-    - cron: "0 23 * * *"   # gmail-sync — 20h BRT (1x/dia, pedido do usuário — antes era a
-    # cada 5 min; extração automática por IA religada em 2026-11-06 já cobre o dia todo
-    # num ciclo só, sem precisar rodar com tanta frequência)
+    - cron: "0 * * * *"    # gmail-sync — de hora em hora. Era 1x/dia (0 23 * * *), mas o
+    # agendamento do GitHub Actions pulou esse horário em 16/11/2026 e a tentativa seguinte
+    # falhou — sumiu o Meet Recap do dia inteiro sem ninguém notar. De hora em hora dá muito
+    # mais chance de alguma execução pegar o e-mail do dia, mesmo com falha/pulo ocasional.
   workflow_dispatch:
     inputs:
       job:
@@ -43,7 +44,7 @@ jobs:
               "0 21 * * *")   echo "jobs=briefing" >> "$GITHUB_OUTPUT" ;;
               "0 6 * * *")    echo "jobs=backup-email" >> "$GITHUB_OUTPUT" ;;
               "0 12 * * *")   echo "jobs=pipefy-sync" >> "$GITHUB_OUTPUT" ;;
-              "0 23 * * *")   echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
+              "0 * * * *")    echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
               *) echo "jobs=gmail-sync" >> "$GITHUB_OUTPUT" ;;
             esac
           fi

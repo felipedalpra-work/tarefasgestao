@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { syncAllUsers } from "@/lib/gmail-sync";
 import { syncAllCalendars } from "@/lib/calendar-sync";
 import { checkClientTasksOverdue } from "@/lib/deadline-check";
@@ -7,9 +8,33 @@ import { advanceRecurringTasks } from "@/lib/task-recurrence";
 import { sendMeetingBriefings } from "@/lib/meeting-briefing";
 import { sendDailyBackups } from "@/lib/backup-email";
 import { syncAllSquadsPipefy } from "@/lib/pipefy-sync";
+import { sendJobFailureAlertEmail } from "@/lib/email";
+import { isEmailEnabled } from "@/lib/settings";
 import { log } from "@/lib/logger";
 
 type Params = { params: Promise<{ job: string }> };
+
+// Antes só o backup diário avisava os owners quando falhava (src/lib/backup-email.ts);
+// os outros jobs só deixavam um registro em Log que ninguém olhava — foi assim que o
+// gmail-sync falhou silenciosamente em 2026-11-16 e sumiu o Meet Recap do dia inteiro
+// pra todo mundo sem ninguém perceber. Agora qualquer job que caia aqui no catch avisa
+// também. squadId é só pra resolver o remetente do e-mail (ver resolveSystemSenderAccount
+// em src/lib/email.ts) — esses jobs rodam pra todos os squads, não tem um squad "dono".
+async function alertOwnersOfJobFailure(jobName: string, errorDetail: string): Promise<void> {
+  try {
+    const [owners, squad] = await Promise.all([
+      prisma.platformOwner.findMany({ select: { user: { select: { id: true, email: true } } } }),
+      prisma.squad.findFirst({ select: { id: true } }),
+    ]);
+    if (!squad) return;
+    const enabled = await Promise.all(owners.map((o) => isEmailEnabled(o.user.id, "jobFailureAlert")));
+    const to = owners.filter((_, i) => enabled[i]).map((o) => o.user.email).filter(Boolean);
+    if (to.length === 0) return;
+    await sendJobFailureAlertEmail({ squadId: squad.id, to, jobName, squadName: "Todos os squads", errorDetail });
+  } catch (alertErr) {
+    console.error("[cron] falha ao alertar owners:", alertErr);
+  }
+}
 
 // "backup-email" monta uma planilha por squad (várias idas ao banco em
 // sequência) — no plano padrão da Vercel o default de 10s não é suficiente
@@ -70,7 +95,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     await run();
     return NextResponse.json({ ok: true, job });
   } catch (err) {
-    await log("cron", `Erro no job "${job}"`, { level: "error", detail: String(err) });
-    return NextResponse.json({ ok: false, job, error: String(err) }, { status: 500 });
+    const detail = String(err);
+    await log("cron", `Erro no job "${job}"`, { level: "error", detail });
+    await alertOwnersOfJobFailure(job, detail);
+    return NextResponse.json({ ok: false, job, error: detail }, { status: 500 });
   }
 }
