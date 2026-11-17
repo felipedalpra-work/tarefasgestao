@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getAllTasks, getUsers, getClientsOverview } from "@/lib/queries";
 import { UserAvatar } from "@/components/UserAvatar";
-import { DeadlineCheckButton } from "@/components/DeadlineCheckButton";
 import { format, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckCircle2, Clock, AlertCircle, Circle, TrendingUp, BarChart2, Building2, Flame, ArrowRight } from "lucide-react";
@@ -66,16 +65,13 @@ export default async function DashboardPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-ink">
-            Olá, {session?.user?.name?.split(" ")[0]} 👋
-          </h1>
-          <p className="text-ink-mid mt-1 text-sm">
-            {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
-          </p>
-        </div>
-        <DeadlineCheckButton />
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-ink">
+          Olá, {session?.user?.name?.split(" ")[0]} 👋
+        </h1>
+        <p className="text-ink-mid mt-1 text-sm">
+          {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        </p>
       </div>
 
       {/* Compact stats row */}

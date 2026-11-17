@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { forSquad } from "@/lib/tenant-prisma";
 import { revalidateTag } from "next/cache";
-import { sendNewTaskEmail } from "@/lib/email";
-import { isEmailEnabled } from "@/lib/settings";
 import { firstOccurrence, isValidRecurrence, isValidTime, normalizeWeekdays } from "@/lib/recurrence";
 import { brtNow } from "@/lib/utils";
 import { normalizeAssignees, syncTaskAssignees } from "@/lib/task-assignees";
@@ -140,25 +138,6 @@ export async function POST(req: NextRequest) {
   }
 
   revalidateTag("tasks", "max");
-
-  if (task.assignee?.email && task.assigneeId && task.assigneeId !== session.user.id) {
-    isEmailEnabled(task.assigneeId, "taskAssigned")
-      .then((enabled) =>
-        enabled
-          ? sendNewTaskEmail({
-              squadId: session.user.squadId,
-              to: task.assignee!.email,
-              assigneeName: task.assignee!.name || task.assignee!.email,
-              taskTitle: task.title,
-              taskDescription: task.description,
-              priority: task.priority,
-              dueDate: task.dueDate,
-              createdBy: task.createdBy?.name || "Alguém do squad",
-            })
-          : undefined
-      )
-      .catch((e) => console.error("[email] erro ao enviar:", e));
-  }
 
   const created = await db.task.findUnique({ where: { id: task.id }, include: TASK_INCLUDE });
   return NextResponse.json(created ?? task, { status: 201 });

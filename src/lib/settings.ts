@@ -234,13 +234,13 @@ export async function removeIgnoredClient(squadId: string, client: string): Prom
 // usuário: é a cópia de segurança, continua obrigatório pra todo admin) e redefinição
 // de senha também (quem recebe foi quem pediu o reset agora mesmo — desligar isso só
 // trancaria a própria conta, sem reduzir ruído nenhum). sem linha = tudo ligado
-// (default, igual já era antes desse painel existir).
-export const EMAIL_TYPES = ["taskAssigned", "taskDeadline", "jobFailureAlert", "meetingBriefing"] as const;
+// (default, igual já era antes desse painel existir). "Tarefa atribuída" e "alerta de
+// prazo" por e-mail foram removidos (2026-11-17): o envio pelo Gmail estourava a cota
+// de "Units per minute per user" da API quando várias tarefas venciam juntas.
+export const EMAIL_TYPES = ["jobFailureAlert", "meetingBriefing"] as const;
 export type EmailType = (typeof EMAIL_TYPES)[number];
 
 const DEFAULT_EMAIL_PREFS: Record<EmailType, boolean> = {
-  taskAssigned: true,
-  taskDeadline: true,
   jobFailureAlert: true,
   meetingBriefing: true,
 };

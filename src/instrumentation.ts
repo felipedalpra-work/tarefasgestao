@@ -7,7 +7,6 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs" && !process.env.VERCEL) {
     const { default: cron } = await import("node-cron");
     const { syncAllUsers } = await import("./lib/gmail-sync");
-    const { checkDeadlines } = await import("./lib/deadline-check");
     const { checkAllReminders, checkAllTaskDueTimes } = await import("./lib/reminders");
     const { advanceRecurringTasks } = await import("./lib/task-recurrence");
     const { syncAllCalendars } = await import("./lib/calendar-sync");
@@ -32,15 +31,15 @@ export async function register() {
       catch (err) { console.error("[cron] calendar sync:", err); }
     });
 
-    // alertas de prazo (tarefas, onboarding, tratativas, fechamento, sugestões da IA): 8h e 17h
+    // lembretes automáticos (onboarding, tratativas, fechamento, sugestões da IA): 8h e 17h
     cron.schedule("0 8 * * *", async () => {
-      try { await checkDeadlines(); await checkAllReminders(); }
-      catch (err) { console.error("[cron] deadline check 8h:", err); }
+      try { await checkAllReminders(); }
+      catch (err) { console.error("[cron] reminders 8h:", err); }
     });
 
     cron.schedule("0 17 * * *", async () => {
-      try { await checkDeadlines(); await checkAllReminders(); }
-      catch (err) { console.error("[cron] deadline check 17h:", err); }
+      try { await checkAllReminders(); }
+      catch (err) { console.error("[cron] reminders 17h:", err); }
     });
 
     // briefing de reunião: todo dia às 18h (avisa sobre reuniões do dia seguinte)
@@ -55,7 +54,7 @@ export async function register() {
     console.log("[cron] ✓ Gmail sync        — a cada 5 min");
     console.log("[cron] ✓ Tarefas recorrentes + hora da tarefa — a cada 5 min");
     console.log("[cron] ✓ Calendar sync     — a cada 30 min");
-    console.log("[cron] ✓ Alertas de prazo  — 8h e 17h");
+    console.log("[cron] ✓ Lembretes automáticos — 8h e 17h");
     console.log("[cron] ✓ Briefing reunião  — 18h (para reuniões do dia seguinte)");
   }
 }
