@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { forSquad } from "./tenant-prisma";
 import { sendSystemEmail } from "./email";
+import { isEmailEnabled } from "./settings";
 import { log } from "./logger";
 
 function briefingTemplate(client: string, meetingDate: string, o2Tasks: any[], clientTasks: any[]) {
@@ -131,9 +132,10 @@ export async function sendMeetingBriefings(): Promise<void> {
 
     const html = briefingTemplate(client, meetingDate, o2Tasks, clientTasks);
 
-    // envia para todos os membros do squad
+    // envia para todos os membros do squad que não desligaram esse aviso
     for (const user of users) {
       if (!user.email) continue;
+      if (!(await isEmailEnabled(user.id, "meetingBriefing"))) continue;
       try {
         await sendSystemEmail({
           squadId: event.squadId,

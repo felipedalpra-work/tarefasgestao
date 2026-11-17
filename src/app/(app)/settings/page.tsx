@@ -17,11 +17,13 @@ const DEFAULT_EMAIL_PREFS: Record<string, boolean> = {
   taskAssigned: true,
   taskDeadline: true,
   jobFailureAlert: true,
+  meetingBriefing: true,
 };
 
 const EMAIL_PREF_ITEMS: { key: string; label: string; desc: string; ownerOnly?: boolean }[] = [
   { key: "taskAssigned", label: "Tarefa atribuída", desc: "Quando uma tarefa nova é atribuída a você" },
   { key: "taskDeadline", label: "Alerta de prazo", desc: "Quando uma tarefa sua está vencendo ou já venceu" },
+  { key: "meetingBriefing", label: "Briefing de reunião", desc: "Um dia antes de uma reunião com cliente" },
   { key: "jobFailureAlert", label: "Erro de job", desc: "Quando uma rotina automática falha (só chega pra owner da plataforma)", ownerOnly: true },
 ];
 

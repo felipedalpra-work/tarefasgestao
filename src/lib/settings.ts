@@ -235,13 +235,14 @@ export async function removeIgnoredClient(squadId: string, client: string): Prom
 // de senha também (quem recebe foi quem pediu o reset agora mesmo — desligar isso só
 // trancaria a própria conta, sem reduzir ruído nenhum). sem linha = tudo ligado
 // (default, igual já era antes desse painel existir).
-export const EMAIL_TYPES = ["taskAssigned", "taskDeadline", "jobFailureAlert"] as const;
+export const EMAIL_TYPES = ["taskAssigned", "taskDeadline", "jobFailureAlert", "meetingBriefing"] as const;
 export type EmailType = (typeof EMAIL_TYPES)[number];
 
 const DEFAULT_EMAIL_PREFS: Record<EmailType, boolean> = {
   taskAssigned: true,
   taskDeadline: true,
   jobFailureAlert: true,
+  meetingBriefing: true,
 };
 
 export async function getEmailPrefs(userId: string): Promise<Record<EmailType, boolean>> {
