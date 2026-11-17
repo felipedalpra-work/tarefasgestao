@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-17 (Remove o fluxo de envio de mensagens no Slack)
+
+- Pedido do usuário: o squad não usa os avisos do Slack.
+- Remove a integração inteira: bot token + mapeamento de Slack User ID (Configurações → Slack), notificação por tipo via Slack, convite de membro por DM, passo de Slack no onboarding guiado, e o botão/ação "Lembrar" (só existia pra mandar lembrete no Slack).
+- O que não dependia de Slack continua igual: notificação in-app (sino), e-mail de briefing de reunião, e convite de membro (agora só pelo link pra copiar/repassar).
+
 ## 2026-11-17 (E-mails do squad: preferência pessoal por gatilho + remetente configurável)
 
 - Pedido do usuário: a troca do Resend pelo Gmail funcionou, mas tem gente no squad que não quer receber todo e-mail de notificação, e o remetente estava fixo no dono da minuta de cobrança.
