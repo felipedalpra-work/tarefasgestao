@@ -4,6 +4,12 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-17 (E-mails do squad: preferência pessoal por gatilho + remetente configurável)
+
+- Pedido do usuário: a troca do Resend pelo Gmail funcionou, mas tem gente no squad que não quer receber todo e-mail de notificação, e o remetente estava fixo no dono da minuta de cobrança.
+- Configurações → Perfil: cada pessoa liga/desliga, pra si mesma, o e-mail de tarefa atribuída, alerta de prazo e erro de job (`User.emailPrefs`). Backup diário continua obrigatório; redefinição de senha não entra na lista (só chega quando a própria pessoa pede).
+- Configurações → Squad: novo seletor de remetente dos e-mails de sistema, independente do dono da minuta de cobrança — hoje dá pra trocar pra Tainara, por exemplo, e mais pra frente dá pra apontar pro e-mail corporativo da plataforma assim que essa conta existir e conectar o Google.
+
 ## 2026-11-16 (E-mail de pendências: responsável do squad aparece só como "O2")
 
 - Pedido do usuário: o responsável exibido por tarefa não pode mostrar o nome de quem da O2 ficou com ela — o e-mail é enviado pro cliente.
