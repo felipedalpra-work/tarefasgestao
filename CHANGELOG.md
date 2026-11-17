@@ -4,6 +4,13 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-17 (Corrige sumiço de Meet Recap: gmail-sync de hora em hora + alerta de falha de cron)
+
+- Usuário reportou reunião da Blomix (terça) e do Zé do Flor (segunda) sem aparecer nos Meet Recaps.
+- Causa raiz: gmail-sync rodava só 1x/dia (20h BRT); o agendamento do GitHub Actions pulou esse horário inteiro em 16/11, e a tentativa seguinte falhou — sem ninguém avisado, o recap do dia sumiu sem ninguém notar.
+- gmail-sync passa a rodar de hora em hora em vez de 1x/dia, reduzindo muito a chance de um pulo/falha do GitHub Actions apagar o dia inteiro.
+- Generaliza o alerta por e-mail de falha de job: antes só o backup diário avisava os owners quando falhava; agora qualquer job que caia no catch do `/api/cron/[job]` avisa também.
+
 ## 2026-11-17 (Remove e-mail de tarefa atribuída e alerta de prazo)
 
 - O job de alerta de prazo mandou 42 e-mails de uma vez pelo Gmail hoje e estourou a cota de "Units per minute per user" da API — consequência da troca do Resend pelo Gmail.
