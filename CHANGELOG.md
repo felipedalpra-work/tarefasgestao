@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-17 (E-mail de briefing de reunião entra na preferência por pessoa)
+
+- Pedido do usuário: faltou esse gatilho no painel de e-mails (Configurações → Perfil) — só tinha tarefa atribuída, alerta de prazo e erro de job.
+- Briefing do dia anterior a reunião com cliente (`meetingBriefing`) agora também é opcional por pessoa.
+
 ## 2026-11-17 (Remove o fluxo de envio de mensagens no Slack)
 
 - Pedido do usuário: o squad não usa os avisos do Slack.
