@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-18 (Alias de envio no remetente dos e-mails)
+
+- `tarefas.squad@o2inc.com.br` é um alias "Enviar como" vinculado à conta de outra pessoa, sem login/caixa própria — não dava pra "conectar o Google" com ele como o remetente dedicado exigia.
+- Configurações → Squad separa agora quem autentica o envio (conta de verdade já conectada) de qual endereço aparece no campo De — funciona com qualquer alias já verificado em "Enviar como" no Gmail dessa conta.
+
 ## 2026-11-18 (Botão "Enviar teste" pro remetente de e-mails do sistema)
 
 - Trocar o remetente em Configurações → Squad era "fé em Deus": só dava pra saber se funcionou esperando o próximo e-mail de sistema de verdade (ou pior, descobrindo que caiu de volta no fallback errado).
