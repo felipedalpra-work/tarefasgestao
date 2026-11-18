@@ -4,6 +4,11 @@ Registro manual de mudanças relevantes neste projeto (não é um repositório g
 
 Formato de cada entrada: `## AAAA-MM-DD` seguido de bullets curtos descrevendo o que mudou e por quê (quando não for óbvio).
 
+## 2026-11-18 (Botão "Enviar teste" pro remetente de e-mails do sistema)
+
+- Trocar o remetente em Configurações → Squad era "fé em Deus": só dava pra saber se funcionou esperando o próximo e-mail de sistema de verdade (ou pior, descobrindo que caiu de volta no fallback errado).
+- Botão "Enviar teste" ao lado do seletor dispara um e-mail de teste pro squad inteiro, pela conta configurada no momento, pra confirmar na hora.
+
 ## 2026-11-17 (Corrige sumiço de Meet Recap: gmail-sync de hora em hora + alerta de falha de cron)
 
 - Usuário reportou reunião da Blomix (terça) e do Zé do Flor (segunda) sem aparecer nos Meet Recaps.
