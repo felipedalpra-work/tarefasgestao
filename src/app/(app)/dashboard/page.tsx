@@ -143,7 +143,7 @@ export default async function DashboardPage() {
               {format(now, "EEEE, dd 'de' MMMM", { locale: ptBR })}
             </p>
             <h1 className="mt-2 text-2xl md:text-3xl font-bold text-ink tracking-tight">
-              {greeting}, {firstName} ✌️
+              {greeting}, {firstName} 👋
             </h1>
             <p className="mt-2 text-sm text-ink-mid">
               Você tem <span className="text-ink font-semibold">{openCount}</span> tarefa{openCount !== 1 ? "s" : ""} em aberto
