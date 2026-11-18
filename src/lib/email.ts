@@ -295,6 +295,46 @@ export async function sendJobFailureAlertEmail({
   });
 }
 
+// Confirma, na hora, que o remetente configurado em Configurações → Squad está
+// mandando de verdade — sem isso, trocar o remetente é um "fé em Deus": só se sabia
+// que funcionou (ou que caiu no fallback errado) esperando o próximo e-mail de
+// sistema de verdade. Manda pra quem pediu o teste (requestedByEmail) e pro resto
+// do squad (to), tudo num envio só.
+export async function sendTestEmail({
+  squadId,
+  to,
+  requestedByName,
+}: {
+  squadId: string;
+  to: string[];
+  requestedByName: string;
+}) {
+  const html = baseTemplate(`
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td>
+          <div style="width:36px;height:36px;background-color:#6BF16920;border-radius:8px;display:inline-block;text-align:center;line-height:36px;margin-bottom:16px;">
+            <span style="font-size:18px;">✉️</span>
+          </div>
+          <h1 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f0f0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">E-mail de teste</h1>
+          <p style="margin:0;font-size:14px;color:#888888;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Disparado por <strong style="color:#cccccc;">${requestedByName}</strong> pra confirmar o remetente configurado em Configurações → Squad.</p>
+        </td>
+      </tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background-color:#161616;border-radius:8px;padding:14px 16px;">
+          <p style="margin:0;font-size:13px;color:#888888;line-height:1.6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+            Se você recebeu este e-mail, o remetente está funcionando — confira em "De:" quem mandou.
+          </p>
+        </td>
+      </tr>
+    </table>
+  `);
+
+  return sendSystemEmail({ squadId, to, subject: "[O2 Squad] E-mail de teste", html });
+}
+
 export async function sendPasswordResetEmail({
   squadId,
   to,

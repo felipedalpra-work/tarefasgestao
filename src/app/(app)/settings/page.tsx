@@ -66,6 +66,7 @@ export default function SettingsPage() {
   // Remetente dos e-mails de sistema (tarefa nova, prazo, backup, erro de job) state
   const [emailSenderId, setEmailSenderId] = useState<string | null>(null);
   const [emailSenderSaving, setEmailSenderSaving] = useState(false);
+  const [emailSenderTesting, setEmailSenderTesting] = useState(false);
 
   // Preferência pessoal por gatilho de e-mail (própria conta, não do squad) state
   const [emailPrefs, setEmailPrefs] = useState<Record<string, boolean>>(DEFAULT_EMAIL_PREFS);
@@ -255,6 +256,18 @@ export default function SettingsPage() {
     } else {
       setEmailSenderId(prev);
       toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function testEmailSender() {
+    setEmailSenderTesting(true);
+    const res = await fetch("/api/settings/email-sender/test", { method: "POST" });
+    setEmailSenderTesting(false);
+    if (res.ok) {
+      toast("E-mail de teste enviado — confira a caixa de entrada do squad", "success");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || "Erro ao enviar teste", "error");
     }
   }
 
@@ -619,22 +632,35 @@ export default function SettingsPage() {
           <div className="bg-surface border border-surface-3 rounded-xl p-6">
             <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Remetente dos e-mails</h2>
             <p className="text-xs text-ink-mid mb-4">
-              Conta Google que assina os e-mails de tarefa nova, alerta de prazo, backup diário e erro de job — todos saem
-              por ela. Sem ninguém selecionado aqui, usa o dono da minuta de cobrança e, sem isso também, qualquer conta
-              conectada na plataforma. Quando existir um e-mail corporativo só da plataforma, basta selecionar essa conta
-              aqui assim que ela conectar o Google — não precisa de nada além disso.
+              Conta Google que assina os e-mails de backup diário, erro de job e briefing de reunião — todos saem por
+              ela. Sem ninguém selecionado aqui, usa o dono da minuta de cobrança e, sem isso também, qualquer conta
+              conectada na plataforma. Pra selecionar um e-mail corporativo da plataforma aqui, alguém precisa logar
+              nele pelo menos uma vez e conectar o Google em Configurações → Perfil antes — senão não aparece com um
+              token válido e o envio cai de volta no remetente padrão sem avisar.
             </p>
-            <select
-              value={emailSenderId ?? ""}
-              disabled={emailSenderSaving || !isAdmin}
-              onChange={(e) => saveEmailSender(e.target.value || null)}
-              className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
-            >
-              <option value="">Padrão (dono da minuta de cobrança)</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name || u.email}</option>
-              ))}
-            </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={emailSenderId ?? ""}
+                disabled={emailSenderSaving || !isAdmin}
+                onChange={(e) => saveEmailSender(e.target.value || null)}
+                className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+              >
+                <option value="">Padrão (dono da minuta de cobrança)</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                ))}
+              </select>
+              {isAdmin && (
+                <button
+                  onClick={testEmailSender}
+                  disabled={emailSenderTesting}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs bg-surface-2 border border-border text-ink-mid rounded-lg hover:border-o2-green/50 hover:text-o2-green disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                >
+                  <Mail size={12} />
+                  {emailSenderTesting ? "Enviando..." : "Enviar teste"}
+                </button>
+              )}
+            </div>
             {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
           </div>
 
