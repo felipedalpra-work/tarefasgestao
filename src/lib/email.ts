@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import { prisma } from "./prisma";
-import { getBillingDraftOwnerUserId, getSystemEmailSenderUserId } from "./settings";
+import { getBillingDraftOwnerUserId, getSystemEmailSenderUserId, getSystemEmailSenderAlias } from "./settings";
 import { log } from "./logger";
 
 // Substitui o Resend aqui (sem domínio verificado em resend.com/domains, ele recusa todo
@@ -66,6 +66,7 @@ export async function sendSystemEmail({
   if (!account?.access_token) {
     throw new Error("Nenhuma conta Google conectada disponível pra enviar e-mail de sistema — configure o dono da minuta em Configurações.");
   }
+  const alias = await getSystemEmailSenderAlias(squadId);
 
   const oauth2 = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
   oauth2.setCredentials({
@@ -76,7 +77,12 @@ export async function sendSystemEmail({
   const gmail = google.gmail({ version: "v1", auth: oauth2 });
   const toList = Array.isArray(to) ? to : [to];
 
-  const headers = [`To: ${toList.join(", ")}`, `Subject: ${encodeSubject(subject)}`, "MIME-Version: 1.0"];
+  const headers = [
+    ...(alias ? [`From: "O2 Squad" <${alias}>`] : []),
+    `To: ${toList.join(", ")}`,
+    `Subject: ${encodeSubject(subject)}`,
+    "MIME-Version: 1.0",
+  ];
 
   let mime: string;
   if (!attachments || attachments.length === 0) {

@@ -10,6 +10,7 @@ const TEMPERATURE_PROMPT_KEY = "pipefy_temperature_prompt";
 const TEMPERATURE_PROMPT_DISMISSED_KEY = "pipefy_temperature_prompt_dismissed";
 const CLIENT_EMAIL_TEMPLATE_KEY = "weekly_client_email_template";
 const SYSTEM_EMAIL_SENDER_KEY = "system_email_sender_user_id";
+const SYSTEM_EMAIL_SENDER_ALIAS_KEY = "system_email_sender_alias";
 
 // Sem linha na tabela Setting = ligado (comportamento histórico, antes de existir esse flag)
 export async function isMeetRecapSuggestionsEnabled(squadId: string): Promise<boolean> {
@@ -168,6 +169,32 @@ export async function setSystemEmailSenderUserId(squadId: string, userId: string
     where: { squadId_key: { squadId, key: SYSTEM_EMAIL_SENDER_KEY } },
     update: { value: userId },
     create: { squadId, key: SYSTEM_EMAIL_SENDER_KEY, value: userId },
+  });
+}
+
+// "From" alternativo (alias de envio) pra usar no lugar do e-mail de verdade da conta
+// Google que autentica o envio (resolveSystemSenderAccount) — caso real que motivou
+// isso: um e-mail "tarefas.squad@o2inc.com.br" que é máscara (sem caixa própria, sem
+// login possível), configurado no Workspace como "Enviar como" na conta de alguém que
+// JÁ está conectada na plataforma. O Gmail só aceita um From assim se esse alias
+// estiver verificado em "Configurações → Contas e importação → Enviar como" na conta
+// que autentica — sem isso, a própria API do Gmail recusa o envio (erro vira visível
+// no botão "Enviar teste"). null/sem linha = manda com o remetente de verdade da conta
+// (comportamento histórico, sem alias).
+export async function getSystemEmailSenderAlias(squadId: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { squadId_key: { squadId, key: SYSTEM_EMAIL_SENDER_ALIAS_KEY } } });
+  return row?.value || null;
+}
+
+export async function setSystemEmailSenderAlias(squadId: string, alias: string | null): Promise<void> {
+  if (!alias) {
+    await prisma.setting.deleteMany({ where: { squadId, key: SYSTEM_EMAIL_SENDER_ALIAS_KEY } });
+    return;
+  }
+  await prisma.setting.upsert({
+    where: { squadId_key: { squadId, key: SYSTEM_EMAIL_SENDER_ALIAS_KEY } },
+    update: { value: alias },
+    create: { squadId, key: SYSTEM_EMAIL_SENDER_ALIAS_KEY, value: alias },
   });
 }
 

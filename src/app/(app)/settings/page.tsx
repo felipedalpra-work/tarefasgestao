@@ -67,6 +67,9 @@ export default function SettingsPage() {
   const [emailSenderId, setEmailSenderId] = useState<string | null>(null);
   const [emailSenderSaving, setEmailSenderSaving] = useState(false);
   const [emailSenderTesting, setEmailSenderTesting] = useState(false);
+  const [emailSenderAlias, setEmailSenderAlias] = useState("");
+  const [emailSenderAliasSaved, setEmailSenderAliasSaved] = useState("");
+  const [emailSenderAliasSaving, setEmailSenderAliasSaving] = useState(false);
 
   // Preferência pessoal por gatilho de e-mail (própria conta, não do squad) state
   const [emailPrefs, setEmailPrefs] = useState<Record<string, boolean>>(DEFAULT_EMAIL_PREFS);
@@ -96,7 +99,11 @@ export default function SettingsPage() {
 
     fetch("/api/settings/email-sender")
       .then((r) => r.json())
-      .then((d) => setEmailSenderId(d.senderUserId ?? null));
+      .then((d) => {
+        setEmailSenderId(d.senderUserId ?? null);
+        setEmailSenderAlias(d.alias ?? "");
+        setEmailSenderAliasSaved(d.alias ?? "");
+      });
 
     fetch("/api/settings/email-prefs")
       .then((r) => r.json())
@@ -255,6 +262,23 @@ export default function SettingsPage() {
       toast(senderUserId ? "Remetente dos e-mails atualizado" : "Voltou ao remetente padrão", "success");
     } else {
       setEmailSenderId(prev);
+      toast("Erro ao salvar", "error");
+    }
+  }
+
+  async function saveEmailSenderAlias() {
+    setEmailSenderAliasSaving(true);
+    const alias = emailSenderAlias.trim();
+    const res = await fetch("/api/settings/email-sender", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alias: alias || null }),
+    });
+    setEmailSenderAliasSaving(false);
+    if (res.ok) {
+      setEmailSenderAliasSaved(alias);
+      toast(alias ? "Alias de envio salvo" : "Alias de envio removido", "success");
+    } else {
       toast("Erro ao salvar", "error");
     }
   }
@@ -632,13 +656,13 @@ export default function SettingsPage() {
           <div className="bg-surface border border-surface-3 rounded-xl p-6">
             <h2 className="text-sm font-semibold text-ink uppercase tracking-wide mb-2">Remetente dos e-mails</h2>
             <p className="text-xs text-ink-mid mb-4">
-              Conta Google que assina os e-mails de backup diário, erro de job e briefing de reunião — todos saem por
-              ela. Sem ninguém selecionado aqui, usa o dono da minuta de cobrança e, sem isso também, qualquer conta
-              conectada na plataforma. Pra selecionar um e-mail corporativo da plataforma aqui, alguém precisa logar
-              nele pelo menos uma vez e conectar o Google em Configurações → Perfil antes — senão não aparece com um
-              token válido e o envio cai de volta no remetente padrão sem avisar.
+              Conta Google que autentica o envio dos e-mails de backup diário, erro de job e briefing de reunião.
+              Sem ninguém selecionado aqui, usa o dono da minuta de cobrança e, sem isso também, qualquer conta
+              conectada na plataforma. Pra selecionar uma conta aqui, ela precisa logar na plataforma pelo menos uma
+              vez e conectar o Google em Configurações → Perfil antes — senão não aparece com um token válido e o
+              envio cai de volta no remetente padrão sem avisar.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 mb-5">
               <select
                 value={emailSenderId ?? ""}
                 disabled={emailSenderSaving || !isAdmin}
@@ -660,6 +684,36 @@ export default function SettingsPage() {
                   {emailSenderTesting ? "Enviando..." : "Enviar teste"}
                 </button>
               )}
+            </div>
+
+            <div className="border-t border-surface-3 pt-4">
+              <label className="block text-xs text-ink-mid mb-1.5">Enviar como (alias)</label>
+              <p className="text-xs text-ink-faint mb-2.5">
+                Quando o e-mail que deve assinar é uma máscara sem caixa própria (ex: um alias &ldquo;Enviar como&rdquo; do
+                Workspace vinculado à conta acima), coloque o endereço aqui — o e-mail sai autenticado pela conta
+                selecionada em cima, mas com esse endereço no campo De. Só funciona se esse alias já estiver
+                verificado em &ldquo;Enviar como&rdquo; nas configurações do Gmail dessa conta; senão o Gmail recusa o envio.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="email"
+                  placeholder="tarefas.squad@o2inc.com.br"
+                  value={emailSenderAlias}
+                  disabled={emailSenderAliasSaving || !isAdmin}
+                  onChange={(e) => setEmailSenderAlias(e.target.value)}
+                  className="w-full sm:w-72 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-ghost focus:outline-none focus:border-o2-green/50 disabled:opacity-60"
+                />
+                {isAdmin && (
+                  <button
+                    onClick={saveEmailSenderAlias}
+                    disabled={emailSenderAliasSaving || emailSenderAlias.trim() === emailSenderAliasSaved}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs bg-o2-green/10 text-o2-green rounded-lg hover:bg-o2-green/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                  >
+                    <Save size={12} />
+                    {emailSenderAliasSaving ? "Salvando..." : "Salvar"}
+                  </button>
+                )}
+              </div>
             </div>
             {!isAdmin && <p className="text-xs text-ink-faint mt-2">Só admin do squad pode alterar.</p>}
           </div>
