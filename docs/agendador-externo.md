@@ -23,7 +23,7 @@ Actions — só o `task-reminders` precisa ser pontual.
    - **URL** — copiar com o `https://` e sem barra no fim:
 
      ```
-     https://tarefasgestao-zeta.vercel.app/api/cron/task-reminders
+     https://tarefasgestao-liard.vercel.app/api/cron/task-reminders
      ```
 
      Sem o `https://`, o serviço assume `http://` e leva **308** (o Vercel redireciona
@@ -50,7 +50,7 @@ Actions — só o `task-reminders` precisa ser pontual.
    de mandar o secret na URL:
 
    ```
-   https://tarefasgestao-zeta.vercel.app/api/cron/task-reminders?key=<CRON_SECRET>
+   https://tarefasgestao-liard.vercel.app/api/cron/task-reminders?key=<CRON_SECRET>
    ```
 
    Funciona igual, mas o secret aparece no histórico/log do serviço — usar só nesse

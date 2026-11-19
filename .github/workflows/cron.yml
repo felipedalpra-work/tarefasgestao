@@ -51,7 +51,7 @@ jobs:
 
       - name: Chama /api/cron (${{ steps.pick.outputs.jobs }})
         env:
-          APP_URL: https://tarefasgestao-zeta.vercel.app
+          APP_URL: https://tarefasgestao-liard.vercel.app
         run: |
           failed=0
           for job in ${{ steps.pick.outputs.jobs }}; do
